@@ -2,6 +2,8 @@ from pathlib import Path
 
 from streamlit.testing.v1 import AppTest
 
+from llm.mock_provider import DEFAULT_MOCK_PAYLOAD
+
 APP_PATH = Path(__file__).resolve().parents[1] / "app.py"
 
 
@@ -27,7 +29,7 @@ def test_quote_control_stays_unavailable():
     assert at.title[0].value == "Deep Trekker 業務支援AI"
 
 
-def test_analyze_button_shows_pending_message_without_results():
+def test_analyze_button_shows_mock_results():
     at = _start_app()
     at.button(key="open_technical_case").click().run()
 
@@ -36,9 +38,16 @@ def test_analyze_button_shows_pending_message_without_results():
     at.text_area(key="input_customer_inquiry").set_value("直径300mmの管を点検したい。")
     at.button(key="analyze_inquiry").click().run()
 
-    assert at.info[0].value == "AI解析機能は次のSTEPで接続します"
-    assert "まだ解析結果はありません" in [text.value for text in at.text]
-    assert at.json.len == 0
+    visible_text = [item.value for item in at.text] + [item.value for item in at.markdown]
+    warning_text = [item.value for item in at.warning]
+
+    assert "現在は開発用Mock解析を使用しています" in warning_text
+    assert DEFAULT_MOCK_PAYLOAD["case_summary"] in visible_text
+    assert "管内点検" in " ".join(visible_text)
+    assert "点検する管の内径と管種を教えてください。" in " ".join(visible_text)
+    assert at.json.len == 1
+    assert at.expander[0].label == "解析データを確認"
+    assert at.error.len == 0
 
 
 def test_back_button_returns_to_home():
