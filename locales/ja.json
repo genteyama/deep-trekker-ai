@@ -2,6 +2,8 @@
   "app_title": "Deep Trekker 業務支援AI",
   "app_description": "Deep Trekker / PipeTrekkerの営業・技術・見積業務を支援します。",
   "menu_label": "メニュー",
+  "coming_soon": "準備中",
+  "back_to_home": "トップへ戻る",
   "agents": {
     "technical_case": {
       "name": "営業・技術受付AI",
@@ -10,6 +12,30 @@
     "quote_control": {
       "name": "見積・価格管理AI",
       "description": "価格確認、構成チェック、見積試算を支援"
+    }
+  },
+  "pages": {
+    "technical_case": {
+      "title": "営業・技術受付AI",
+      "internal_name": "Technical Case Agent",
+      "description": "顧客からの問い合わせ内容を整理し、顧客への確認事項・メーカーへの確認事項を整理します。",
+      "section_case_info": "案件基本情報",
+      "case_name": "案件名",
+      "customer_name": "顧客名",
+      "end_user_name": "End User",
+      "end_user_hint": "空欄でも構いません",
+      "section_inquiry": "顧客問い合わせ",
+      "inquiry_label": "顧客問い合わせ内容",
+      "analyze_button": "問い合わせを解析する",
+      "analyze_pending_message": "AI解析機能は次のSTEPで接続します",
+      "section_results": "解析結果",
+      "section_summary": "案件概要",
+      "section_requirements": "抽出した要件",
+      "section_customer_checks": "顧客への確認が必要",
+      "section_manufacturer_checks": "メーカーへの確認が必要",
+      "section_technical_questions": "技術質問",
+      "section_unconfirmed": "未確認事項",
+      "no_results": "まだ解析結果はありません"
     }
   }
 }

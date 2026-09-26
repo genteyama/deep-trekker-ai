@@ -2,6 +2,8 @@
   "app_title": "Deep Trekker Operations Support AI",
   "app_description": "Supports sales, technical, and quoting work for Deep Trekker / PipeTrekker.",
   "menu_label": "Menu",
+  "coming_soon": "Coming soon",
+  "back_to_home": "Back to home",
   "agents": {
     "technical_case": {
       "name": "Sales & Technical Intake AI",
@@ -10,6 +12,30 @@
     "quote_control": {
       "name": "Quote & Pricing AI",
       "description": "Supports price checks, configuration review, and quote estimates"
+    }
+  },
+  "pages": {
+    "technical_case": {
+      "title": "Sales & Technical Intake AI",
+      "internal_name": "Technical Case Agent",
+      "description": "Organizes customer inquiries and prepares confirmation items for the customer and the manufacturer.",
+      "section_case_info": "Case information",
+      "case_name": "Case name",
+      "customer_name": "Customer name",
+      "end_user_name": "End User",
+      "end_user_hint": "This field can be left blank",
+      "section_inquiry": "Customer inquiry",
+      "inquiry_label": "Customer inquiry details",
+      "analyze_button": "Analyze inquiry",
+      "analyze_pending_message": "AI analysis will be connected in the next step",
+      "section_results": "Analysis results",
+      "section_summary": "Case summary",
+      "section_requirements": "Extracted requirements",
+      "section_customer_checks": "Customer confirmation needed",
+      "section_manufacturer_checks": "Manufacturer confirmation needed",
+      "section_technical_questions": "Technical questions",
+      "section_unconfirmed": "Unconfirmed items",
+      "no_results": "No analysis results yet"
     }
   }
 }
