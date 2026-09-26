@@ -9,6 +9,9 @@ env/
 # Environment variables
 .env
 
+# Tests
+.pytest_cache/
+
 # Streamlit
 .streamlit/secrets.toml
 
