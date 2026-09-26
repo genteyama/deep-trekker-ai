@@ -1,0 +1,15 @@
+{
+  "app_title": "Deep Trekker Operations Support AI",
+  "app_description": "Supports sales, technical, and quoting work for Deep Trekker / PipeTrekker.",
+  "menu_label": "Menu",
+  "agents": {
+    "technical_case": {
+      "name": "Sales & Technical Intake AI",
+      "description": "Supports technical inquiries, requirement gathering, and manufacturer confirmation"
+    },
+    "quote_control": {
+      "name": "Quote & Pricing AI",
+      "description": "Supports price checks, configuration review, and quote estimates"
+    }
+  }
+}
