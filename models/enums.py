@@ -67,3 +67,12 @@ class ValidationSeverity(str, Enum):
     BLOCKER = "BLOCKER"
     WARNING = "WARNING"
     INFO = "INFO"
+
+
+class PriceBookDiffType(str, Enum):
+    NEW_SKU = "NEW_SKU"
+    PRICE_CHANGED = "PRICE_CHANGED"
+    DESCRIPTION_CHANGED = "DESCRIPTION_CHANGED"
+    NOTES_CHANGED = "NOTES_CHANGED"
+    REMOVED_SKU = "REMOVED_SKU"
+    UNCHANGED = "UNCHANGED"

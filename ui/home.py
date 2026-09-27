@@ -1,6 +1,6 @@
 import streamlit as st
 
-from ui.navigation import PAGE_TECHNICAL_CASE, set_current_page
+from ui.navigation import PAGE_QUOTE_CONTROL, PAGE_TECHNICAL_CASE, set_current_page
 
 
 def render_home(texts: dict) -> None:
@@ -26,11 +26,12 @@ def render_home(texts: dict) -> None:
         st.write(technical_case["description"])
 
     with right_column:
-        st.button(
+        if st.button(
             quote_control["name"],
             key="open_quote_control",
             use_container_width=True,
-            disabled=True,
-        )
+        ):
+            set_current_page(PAGE_QUOTE_CONTROL)
+            st.rerun()
         st.write(quote_control["description"])
-        st.caption(texts["coming_soon"])
+        st.caption(texts["pages"]["quote_control"]["internal_name"])

@@ -21,12 +21,22 @@ def test_home_opens_technical_case_page():
     assert "まだ解析結果はありません" in [text.value for text in at.text]
 
 
-def test_quote_control_stays_unavailable():
+def test_home_opens_quote_control_page():
     at = _start_app()
     quote_button = at.button(key="open_quote_control")
 
-    assert quote_button.disabled is True
-    assert at.title[0].value == "Deep Trekker 業務支援AI"
+    assert quote_button.disabled is False
+    quote_button.click().run()
+
+    visible_text = [item.value for item in at.text] + [item.value for item in at.markdown]
+    caption_text = [item.value for item in at.caption]
+
+    assert at.title[0].value == "見積・価格管理AI"
+    assert "Quote & Price Control Agent" in caption_text
+    assert "価格表・SKU管理" in [item.value for item in at.subheader] + visible_text
+    assert "まだ価格表は読み込んでいません。" in [item.value for item in at.text]
+    assert any(button.label == "価格表を読み込む" for button in at.button)
+    assert not any("正式" in (button.label or "") and "反映" in (button.label or "") for button in at.button)
 
 
 def test_analyze_button_shows_mock_results():
@@ -122,6 +132,28 @@ def test_human_can_register_technical_fact_from_applied_answer():
     assert board_item.registered_facts[0].scope.value == "CASE_ONLY"
     assert board_item.registered_facts[0].confidence.value != "MANUFACTURER_CONFIRMED"
     assert "登録済み技術情報" in " ".join(visible_text)
+
+
+def test_quote_control_shows_import_and_diff_without_apply():
+    from agents.quote_control_agent import diff_price_books, import_price_book
+    from tests.price_book_fixtures import previous_master_book, valid_price_book
+
+    at = _start_app()
+    at.button(key="open_quote_control").click().run()
+
+    incoming = import_price_book(valid_price_book(), source_price_book="DT40", version="2026-09")
+    previous = import_price_book(previous_master_book(), source_price_book="previous")
+    at.session_state["price_book_import"] = incoming
+    at.session_state["price_book_diff"] = diff_price_books(previous.items, incoming.items)
+    at.run()
+
+    visible_text = [item.value for item in at.text] + [item.value for item in at.markdown]
+    assert "読込SKU数: 6" in visible_text
+    assert "読込Sheet数: 5" in visible_text
+    assert "新規SKU" in " ".join(visible_text)
+    assert "価格変更" in " ".join(visible_text)
+    assert "削除候補" in " ".join(visible_text)
+    assert not any("正式" in (button.label or "") and "反映" in (button.label or "") for button in at.button)
 
 
 def test_back_button_returns_to_home():

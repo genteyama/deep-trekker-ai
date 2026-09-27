@@ -10,7 +10,7 @@
       "description": "Supports technical inquiries, requirement gathering, and manufacturer confirmation"
     },
     "quote_control": {
-      "name": "Quote & Pricing AI",
+      "name": "Quote & Price Control Agent",
       "description": "Supports price checks, configuration review, and quote estimates"
     }
   },
@@ -113,6 +113,51 @@
         "AI_EXTRACTED_UNVERIFIED": "AI extracted, unverified"
       },
       "registered_facts_label": "Registered technical facts"
+    },
+    "quote_control": {
+      "title": "Quote & Price Control Agent",
+      "internal_name": "Quote & Price Control Agent",
+      "agent_code": "quote_control_agent",
+      "description": "Supports price checks, configuration review, and quote estimates.",
+      "section_sku_master": "Price book and SKU management",
+      "section_sku_master_description": "Load Deep Trekker manufacturer price books by SKU and review price, description, and notes changes.",
+      "price_book_name_label": "Price book name",
+      "version_label": "Version",
+      "upload_label": "Price book file (.xlsx)",
+      "previous_master_label": "Previous SKU master (optional)",
+      "previous_master_hint": "Upload only when comparing. This does not apply changes to the official master.",
+      "import_button": "Load price book",
+      "import_no_file": "Select an Excel file (.xlsx).",
+      "import_error": "The price book could not be loaded.",
+      "no_import": "No price book has been loaded yet.",
+      "no_skus": "No SKUs were loaded.",
+      "no_value": "No value",
+      "summary_label": "Import result",
+      "summary_price_book": "Price book",
+      "summary_version": "Version",
+      "summary_sheets": "Sheets loaded",
+      "summary_skus": "SKUs loaded",
+      "summary_warnings": "Warnings",
+      "summary_errors": "Errors",
+      "sku_list_label": "SKU list",
+      "column_sku": "SKU",
+      "column_description": "Description",
+      "column_msrp": "MSRP",
+      "column_dealer_price": "Dealer Price",
+      "column_dealer_rate": "Dealer Rate",
+      "column_source_sheet": "Source Sheet",
+      "column_notes": "Notes",
+      "diff_label": "Difference from previous master",
+      "no_previous_master": "No previous master is available, so differences are not shown.",
+      "diff_not_applied": "This screen is for review only. The official SKU master is not updated yet.",
+      "diff_types": {
+        "NEW_SKU": "New SKU",
+        "PRICE_CHANGED": "Price changed",
+        "DESCRIPTION_CHANGED": "Description changed",
+        "NOTES_CHANGED": "Notes changed",
+        "REMOVED_SKU": "Removal candidate",
+        "UNCHANGED": "Unchanged"
+      }
     }
   }
 }

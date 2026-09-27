@@ -6,7 +6,8 @@ from dotenv import load_dotenv
 import streamlit as st
 
 from ui.home import render_home
-from ui.navigation import PAGE_TECHNICAL_CASE, get_current_page, init_navigation
+from ui.navigation import PAGE_QUOTE_CONTROL, PAGE_TECHNICAL_CASE, get_current_page, init_navigation
+from ui.quote_control import render_quote_control
 from ui.technical_case import render_technical_case
 
 load_dotenv()
@@ -37,6 +38,8 @@ def main() -> None:
     current_page = get_current_page()
     if current_page == PAGE_TECHNICAL_CASE:
         render_technical_case(texts)
+    elif current_page == PAGE_QUOTE_CONTROL:
+        render_quote_control(texts)
     else:
         render_home(texts)
 

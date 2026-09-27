@@ -7,6 +7,7 @@ from models.enums import (
     FactConfidence,
     FactScope,
     MatchConfidence,
+    PriceBookDiffType,
     QuestionStatus,
     QuestionTarget,
     RecommendationOrigin,
@@ -194,6 +195,54 @@ class SupplierQuote(BaseModel):
     total_usd: Optional[float] = None
     lead_time: Optional[str] = None
     source_file: Optional[str] = None
+
+
+class PriceBookIssue(BaseModel):
+    severity: ValidationSeverity
+    code: str
+    message: str
+    sku: Optional[str] = None
+    source_sheet: Optional[str] = None
+    details: Optional[str] = None
+
+
+class PriceBookSheetSummary(BaseModel):
+    sheet_name: str
+    product_family: Optional[str] = None
+    model: Optional[str] = None
+    item_count: int = 0
+    header_found: bool = False
+
+
+class PriceBookImportResult(BaseModel):
+    source_price_book: Optional[str] = None
+    version: Optional[str] = None
+    imported_at: Optional[datetime] = None
+    sheets: list[PriceBookSheetSummary] = Field(default_factory=list)
+    items: list[SKU] = Field(default_factory=list)
+    warnings: list[PriceBookIssue] = Field(default_factory=list)
+    errors: list[PriceBookIssue] = Field(default_factory=list)
+    infos: list[PriceBookIssue] = Field(default_factory=list)
+
+
+class PriceBookDiffItem(BaseModel):
+    sku: str
+    change_types: list[PriceBookDiffType] = Field(default_factory=list)
+    old_msrp: Optional[float] = None
+    new_msrp: Optional[float] = None
+    old_dealer_price: Optional[float] = None
+    new_dealer_price: Optional[float] = None
+    old_description: Optional[str] = None
+    new_description: Optional[str] = None
+    old_notes: Optional[str] = None
+    new_notes: Optional[str] = None
+
+
+class PriceBookDiff(BaseModel):
+    items: list[PriceBookDiffItem] = Field(default_factory=list)
+
+    def count(self, change_type: PriceBookDiffType) -> int:
+        return sum(1 for item in self.items if change_type in item.change_types)
 
 
 class ValidationResult(BaseModel):

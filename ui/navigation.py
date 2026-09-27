@@ -2,6 +2,7 @@ import streamlit as st
 
 PAGE_HOME = "home"
 PAGE_TECHNICAL_CASE = "technical_case"
+PAGE_QUOTE_CONTROL = "quote_control"
 SESSION_CURRENT_PAGE = "current_page"
 
 

@@ -113,6 +113,51 @@
         "AI_EXTRACTED_UNVERIFIED": "AI抽出・未確認"
       },
       "registered_facts_label": "登録済み技術情報"
+    },
+    "quote_control": {
+      "title": "見積・価格管理AI",
+      "internal_name": "Quote & Price Control Agent",
+      "agent_code": "quote_control_agent",
+      "description": "価格確認、構成チェック、見積試算を支援します。",
+      "section_sku_master": "価格表・SKU管理",
+      "section_sku_master_description": "Deep Trekkerメーカー価格表をSKU単位で読み込み、価格・説明・Notesの変更を確認します。",
+      "price_book_name_label": "価格表名",
+      "version_label": "バージョン",
+      "upload_label": "価格表ファイル（.xlsx）",
+      "previous_master_label": "前回SKUマスター（任意）",
+      "previous_master_hint": "比較する場合のみアップロードしてください。正式反映はしません。",
+      "import_button": "価格表を読み込む",
+      "import_no_file": "Excelファイル（.xlsx）を選択してください。",
+      "import_error": "価格表を読み込めませんでした。",
+      "no_import": "まだ価格表は読み込んでいません。",
+      "no_skus": "読み込めたSKUはありません。",
+      "no_value": "値なし",
+      "summary_label": "読込結果",
+      "summary_price_book": "価格表名",
+      "summary_version": "バージョン",
+      "summary_sheets": "読込Sheet数",
+      "summary_skus": "読込SKU数",
+      "summary_warnings": "Warning数",
+      "summary_errors": "Error数",
+      "sku_list_label": "SKU一覧",
+      "column_sku": "SKU",
+      "column_description": "Description",
+      "column_msrp": "MSRP",
+      "column_dealer_price": "Dealer Price",
+      "column_dealer_rate": "Dealer Rate",
+      "column_source_sheet": "Source Sheet",
+      "column_notes": "Notes",
+      "diff_label": "前回マスターとの差分",
+      "no_previous_master": "前回マスターがないため、差分は表示しません。",
+      "diff_not_applied": "この画面は確認用です。正式SKUマスターへはまだ反映しません。",
+      "diff_types": {
+        "NEW_SKU": "新規SKU",
+        "PRICE_CHANGED": "価格変更",
+        "DESCRIPTION_CHANGED": "説明変更",
+        "NOTES_CHANGED": "Notes変更",
+        "REMOVED_SKU": "削除候補",
+        "UNCHANGED": "変更なし"
+      }
     }
   }
 }
