@@ -1,10 +1,14 @@
+from datetime import date, datetime
+
 from openpyxl import load_workbook
 import csv
 import pytest
 
 from agents.quote_builder import apply_final_price, apply_presentation_mode, apply_shipping_final_price
+from agents.quote_dates import format_quote_date, parse_quote_date
 from agents.quote_export import (
     CUSTOMER_FORBIDDEN_TERMS,
+    EXCEL_DATE_NUMBER_FORMAT,
     QuoteExportError,
     approved_remark_texts,
     build_export_bundle,
@@ -287,8 +291,16 @@ def test_formal_spaceone_requires_dates_and_uses_issuer_snapshot(tmp_path):
 
     assert snapshot.issue_date == "2026-09-26"
     assert snapshot.valid_until == "2026-10-31"
-    assert "2026-09-26" in values
-    assert "2026-10-31" in values
+    assert isinstance(sheet["B9"].value, (date, datetime))
+    assert isinstance(sheet["B10"].value, (date, datetime))
+    assert parse_quote_date(sheet["B9"].value) == date(2026, 9, 26)
+    assert parse_quote_date(sheet["B10"].value) == date(2026, 10, 31)
+    assert sheet["B9"].number_format.lower() == EXCEL_DATE_NUMBER_FORMAT
+    assert sheet["B10"].number_format.lower() == EXCEL_DATE_NUMBER_FORMAT
+    assert format_quote_date(sheet["B9"].value) == "2026/09/26"
+    assert format_quote_date(sheet["B10"].value) == "2026/10/31"
+    assert "2026-09-26" not in values
+    assert "2026-10-31" not in values
     assert snapshot.issuer_snapshot.company_name in values
     assert snapshot.issuer_snapshot.address in values
     assert current_company["company_name"] not in values
@@ -350,6 +362,39 @@ def test_empty_snapshot_remarks_do_not_add_historical_text(tmp_path):
     assert historical not in values
     assert "輸送時保険料は代金に含む。" not in values
     assert 7876000 in values
+
+
+def test_spaceone_excel_dates_are_excel_date_cells_not_iso_strings(tmp_path):
+    snapshot = _photon_snapshot()
+    original_issue = snapshot.issue_date
+    original_valid = snapshot.valid_until
+    original_total = snapshot.total_jpy
+    _, path = export_spaceone_quote_excel(
+        snapshot,
+        output_dir=tmp_path,
+        official_quote_number="8195",
+        purpose=ExportPurpose.FORMAL,
+    )
+    sheet = load_workbook(path)["見積書"]
+    values = [cell.value for row in sheet.iter_rows() for cell in row]
+
+    assert original_issue == "2026-09-26"
+    assert original_valid == "2026-10-31"
+    assert snapshot.issue_date == original_issue
+    assert snapshot.valid_until == original_valid
+    assert isinstance(sheet["B9"].value, (date, datetime))
+    assert isinstance(sheet["B10"].value, (date, datetime))
+    assert parse_quote_date(sheet["B9"].value) == date(2026, 9, 26)
+    assert parse_quote_date(sheet["B10"].value) == date(2026, 10, 31)
+    assert sheet["B9"].number_format == "yyyy/mm/dd"
+    assert sheet["B10"].number_format == "yyyy/mm/dd"
+    assert format_quote_date(sheet["B9"].value) == "2026/09/26"
+    assert format_quote_date(sheet["B10"].value) == "2026/10/31"
+    assert "2026-09-26" not in values
+    assert "2026-10-31" not in values
+    assert 7876000 in values
+    assert snapshot.total_jpy == 7876000
+    assert original_total == 7876000
 
 
 def test_unique_output_path_does_not_overwrite(tmp_path):

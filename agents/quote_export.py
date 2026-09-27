@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Optional
 import csv
@@ -12,6 +12,7 @@ from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.page import PageMargins
 
 from agents.quote_approval import generate_quote_outputs
+from agents.quote_dates import parse_quote_date
 from models import (
     ApprovedQuoteExportBundle,
     ApprovedQuoteSnapshot,
@@ -55,6 +56,7 @@ CUSTOMER_FORBIDDEN_TERMS = (
     "Supplier Quote",
 )
 _UNSAFE_FILENAME = re.compile(r"[^A-Za-z0-9._-]+")
+EXCEL_DATE_NUMBER_FORMAT = "yyyy/mm/dd"
 
 
 class QuoteExportError(ValueError):
@@ -664,9 +666,9 @@ def _write_spaceone_quote_sheet(
     sheet["A8"] = "見積番号"
     sheet["B8"] = quote_number
     sheet["A9"] = "発行日"
-    sheet["B9"] = payload.issue_date or snapshot.issue_date
+    _write_excel_date(sheet["B9"], payload.issue_date or snapshot.issue_date)
     sheet["A10"] = "有効期限"
-    sheet["B10"] = payload.valid_until or snapshot.valid_until
+    _write_excel_date(sheet["B10"], payload.valid_until or snapshot.valid_until)
     sheet["A12"] = "御見積金額"
     sheet["B12"] = snapshot.total_jpy
     sheet["B12"].number_format = '"¥"#,##0'
@@ -776,8 +778,10 @@ def _validate_spaceone_excel(
     if purpose == ExportPurpose.FORMAL and bundle.official_quote_number not in flat:
         raise QuoteExportError("Formal SpaceOne quote Excel must contain the official quote number.")
     if purpose == ExportPurpose.FORMAL:
-        if snapshot.issue_date not in flat or snapshot.valid_until not in flat:
-            raise QuoteExportError("Formal SpaceOne quote Excel must contain issue_date and valid_until.")
+        if not _excel_date_cell_matches(sheet["B9"], snapshot.issue_date):
+            raise QuoteExportError("Formal SpaceOne quote Excel must contain issue_date as yyyy/mm/dd.")
+        if not _excel_date_cell_matches(sheet["B10"], snapshot.valid_until):
+            raise QuoteExportError("Formal SpaceOne quote Excel must contain valid_until as yyyy/mm/dd.")
         if snapshot.issuer_snapshot and snapshot.issuer_snapshot.company_name not in flat:
             raise QuoteExportError("Formal SpaceOne quote Excel must use the issuer snapshot.")
     for remark in approved_remark_texts(snapshot):
@@ -864,6 +868,25 @@ def _clean_optional(value: Optional[str]) -> Optional[str]:
         return None
     cleaned = value.strip()
     return cleaned or None
+
+
+def _write_excel_date(cell, value) -> None:
+    parsed = parse_quote_date(value)
+    cell.value = parsed
+    if parsed is not None:
+        cell.number_format = EXCEL_DATE_NUMBER_FORMAT
+
+
+def _excel_date_cell_matches(cell, expected) -> bool:
+    actual = parse_quote_date(cell.value)
+    wanted = parse_quote_date(expected)
+    if actual is None or wanted is None:
+        return False
+    if actual != wanted:
+        return False
+    if not isinstance(cell.value, (date, datetime)):
+        return False
+    return (cell.number_format or "").lower() == EXCEL_DATE_NUMBER_FORMAT
 
 
 def _cell_text(value: Optional[str]) -> str:
