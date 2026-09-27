@@ -1,0 +1,35 @@
+{
+  "dealer_update_september_2026": {
+    "snapshot_id": "dealer-update-2026-09-shipping",
+    "source_type": "DEALER_UPDATE_SNAPSHOT",
+    "as_of": "2026-09-18",
+    "is_permanent": false,
+    "notes": "September 2026 Dealer Update snapshot. Not a permanent rate.",
+    "rates": [
+      {
+        "shipping_type": "LARGE_BOX",
+        "destination_region": "GLOBAL",
+        "rate_usd": 2922.15
+      },
+      {
+        "shipping_type": "SMALL_BOX",
+        "destination_region": "GLOBAL",
+        "rate_usd": 1356.0
+      }
+    ]
+  },
+  "supplier_quote_ihi": {
+    "snapshot_id": "ihi-supplier-quote-shipping",
+    "source_type": "SUPPLIER_QUOTE",
+    "as_of": "2026-09-25",
+    "is_permanent": false,
+    "notes": "IHI Supplier Quote Large Box unit price. Kept separate from 2922.15.",
+    "rates": [
+      {
+        "shipping_type": "LARGE_BOX",
+        "destination_region": "GLOBAL",
+        "rate_usd": 2922.0
+      }
+    ]
+  }
+}

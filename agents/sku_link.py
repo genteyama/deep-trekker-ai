@@ -93,6 +93,7 @@ def create_quote_price_snapshot(
     price_book_version: Optional[str] = None,
     source_reference: Optional[str] = None,
     captured_at: Optional[datetime] = None,
+    exchange_rate: Optional[float] = None,
 ) -> QuotePriceSnapshot:
     current = get_current_manufacturer_values(sku, price_book_candidates, price_book_version=price_book_version)
     return QuotePriceSnapshot(
@@ -102,6 +103,7 @@ def create_quote_price_snapshot(
         price_book_version=price_book_version,
         manufacturer_msrp_usd=current.msrp_usd if current else None,
         manufacturer_dealer_price_usd=current.dealer_price_usd if current else None,
+        exchange_rate=exchange_rate,
         captured_at=captured_at or datetime.now(timezone.utc),
         source_reference=source_reference,
     )

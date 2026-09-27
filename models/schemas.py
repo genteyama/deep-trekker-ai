@@ -11,7 +11,12 @@ from models.enums import (
     LinkStatus,
     MatchConfidence,
     MatchStatus,
+    CostBasis,
+    DomesticShippingMode,
     HistoricalComparisonStatus,
+    InsuranceMode,
+    QuoteAdjustmentType,
+    ScenarioCompleteness,
     PriceBasis,
     PriceBookDiffType,
     PricingFormulaType,
@@ -781,6 +786,7 @@ class QuotePriceSnapshot(BaseModel):
     price_book_version: Optional[str] = None
     manufacturer_msrp_usd: Optional[float] = None
     manufacturer_dealer_price_usd: Optional[float] = None
+    exchange_rate: Optional[float] = None
     captured_at: Optional[datetime] = None
     source_reference: Optional[str] = None
 
@@ -813,6 +819,145 @@ class ManualLinkResult(BaseModel):
     accepted: bool
     message: str
     preview: SkuLinkPreview
+
+
+class LandedCostPolicyCandidate(BaseModel):
+    landed_cost_policy_candidate_id: str
+    policy_name: Optional[str] = None
+    import_tax_rate: Optional[float] = None
+    import_tax_basis: CostBasis = CostBasis.REVIEW_REQUIRED
+    insurance_mode: InsuranceMode = InsuranceMode.NONE
+    insurance_rate: Optional[float] = None
+    insurance_basis: CostBasis = CostBasis.REVIEW_REQUIRED
+    domestic_shipping_mode: DomesticShippingMode = DomesticShippingMode.REVIEW_REQUIRED
+    domestic_shipping_jpy: Optional[float] = None
+    shipping_markup_multiplier: Optional[float] = None
+    rounding_method: RoundingMethod = RoundingMethod.ROUNDING_UNKNOWN
+    rounding_unit: Optional[float] = None
+    source_formula_refs: list[str] = Field(default_factory=list)
+    status: PricingPolicyStatus = PricingPolicyStatus.CANDIDATE
+    confidence: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class LandedCostShippingLine(BaseModel):
+    shipping_type: Optional[ShippingType] = None
+    quantity: Optional[int] = None
+    rate_usd: Optional[float] = None
+    exchange_rate: Optional[float] = None
+    cost_jpy: Optional[float] = None
+    sales_markup_multiplier: Optional[float] = None
+    sales_price_candidate_jpy: Optional[float] = None
+    source_type: Optional[str] = None
+    source_reference: Optional[str] = None
+    rule_status: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class ProductCostLine(BaseModel):
+    sku: Optional[str] = None
+    description: Optional[str] = None
+    quantity: int = 1
+    dealer_price_usd: Optional[float] = None
+    msrp_usd: Optional[float] = None
+    exchange_rate: Optional[float] = None
+    dealer_cost_jpy: Optional[float] = None
+    import_tax_jpy: Optional[float] = None
+    insurance_jpy: Optional[float] = None
+    domestic_shipping_jpy: Optional[float] = None
+    landed_cost_jpy: Optional[float] = None
+    standard_sales_price_jpy: Optional[float] = None
+    manufacturer_price_snapshot: Optional[QuotePriceSnapshot] = None
+    warnings: list[str] = Field(default_factory=list)
+
+
+class QuoteAdjustment(BaseModel):
+    adjustment_id: str
+    line_id: Optional[str] = None
+    adjustment_type: QuoteAdjustmentType = QuoteAdjustmentType.MANUAL
+    amount_jpy: Optional[float] = None
+    reason: Optional[str] = None
+    entered_by: Optional[str] = None
+    entered_at: Optional[datetime] = None
+    source_reference: Optional[str] = None
+
+
+class LandedCostScenario(BaseModel):
+    scenario_id: str
+    case_id: Optional[str] = None
+    name: Optional[str] = None
+    exchange_rate: Optional[float] = None
+    product_lines: list[ProductCostLine] = Field(default_factory=list)
+    shipping_lines: list[LandedCostShippingLine] = Field(default_factory=list)
+    insurance_input: Optional[InsuranceMode] = None
+    import_tax_policy: Optional[LandedCostPolicyCandidate] = None
+    domestic_shipping_policy: Optional[LandedCostPolicyCandidate] = None
+    calculation_policy: Optional[LandedCostPolicyCandidate] = None
+    captured_at: Optional[datetime] = None
+    source_references: list[str] = Field(default_factory=list)
+    unresolved_components: list[str] = Field(default_factory=list)
+    adjustments: list[QuoteAdjustment] = Field(default_factory=list)
+    status: ScenarioCompleteness = ScenarioCompleteness.INCOMPLETE
+    warnings: list[str] = Field(default_factory=list)
+
+
+class QuoteEconomicsComparison(BaseModel):
+    configuration_name: Optional[str] = None
+    quote_number: Optional[str] = None
+    product_sales_calculated_jpy: Optional[float] = None
+    product_sales_historical_jpy: Optional[float] = None
+    product_sales_difference_jpy: Optional[float] = None
+    shipping_sales_calculated_jpy: Optional[float] = None
+    shipping_sales_historical_jpy: Optional[float] = None
+    shipping_sales_difference_jpy: Optional[float] = None
+    total_sales_calculated_jpy: Optional[float] = None
+    total_sales_historical_jpy: Optional[float] = None
+    total_sales_difference_jpy: Optional[float] = None
+    landed_cost_jpy: Optional[float] = None
+    gross_profit_jpy: Optional[float] = None
+    gross_margin_rate: Optional[float] = None
+    status: ScenarioCompleteness = ScenarioCompleteness.INCOMPLETE
+    notes: Optional[str] = None
+
+
+class QuoteCalcCellAudit(BaseModel):
+    sheet: str
+    cell: str
+    formula: Optional[str] = None
+    displayed_value: Optional[float] = None
+    notes: Optional[str] = None
+
+
+class QuoteCalcAudit(BaseModel):
+    source_path: Optional[str] = None
+    cells: list[QuoteCalcCellAudit] = Field(default_factory=list)
+    observed_import_tax_rate: Optional[float] = None
+    observed_import_tax_basis: CostBasis = CostBasis.REVIEW_REQUIRED
+    observed_insurance_rate: Optional[float] = None
+    observed_insurance_mode: InsuranceMode = InsuranceMode.NONE
+    observed_insurance_basis: CostBasis = CostBasis.REVIEW_REQUIRED
+    observed_shipping_markup: Optional[float] = None
+    domestic_observations: list[str] = Field(default_factory=list)
+    sheet_differences: list[str] = Field(default_factory=list)
+    known_rule_checks: list[str] = Field(default_factory=list)
+    policy_candidate: Optional[LandedCostPolicyCandidate] = None
+
+
+class QuoteEconomicsResult(BaseModel):
+    scenario_id: str
+    product_sales_total_jpy: Optional[float] = None
+    shipping_sales_total_jpy: Optional[float] = None
+    total_sales_ex_tax_jpy: Optional[float] = None
+    product_landed_cost_total_jpy: Optional[float] = None
+    shipping_cost_total_jpy: Optional[float] = None
+    other_cost_total_jpy: Optional[float] = None
+    total_landed_cost_jpy: Optional[float] = None
+    gross_profit_jpy: Optional[float] = None
+    gross_margin_rate: Optional[float] = None
+    status: ScenarioCompleteness = ScenarioCompleteness.INCOMPLETE
+    warnings: list[str] = Field(default_factory=list)
+    comparisons: list[HistoricalPriceComparison] = Field(default_factory=list)
+    economics_comparison: Optional[QuoteEconomicsComparison] = None
 
 
 class CostScenario(BaseModel):

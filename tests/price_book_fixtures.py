@@ -402,6 +402,101 @@ def spaceone_master_book() -> BytesIO:
     return buffer
 
 
+def quote_calc_formula_book() -> BytesIO:
+    workbook = Workbook()
+    ihi = workbook.active
+    ihi.title = "20260926_IHI検査計測"
+    ihi["A1"] = "SKU"
+    ihi["F1"] = "売価"
+    ihi["G1"] = "仕入小計"
+    ihi["H1"] = "卸値円"
+    ihi["I1"] = "輸入税"
+    ihi["J1"] = "国内送料"
+    ihi["K1"] = "輸送保険"
+    ihi["A2"] = "9701-MAG-4K"
+    ihi["C2"] = 1
+    ihi["H2"] = 3614574
+    ihi["I2"] = "=H2*0.1"
+    ihi["J2"] = 10000
+    ihi["K2"] = "=H2*0.03"
+    ihi["G2"] = "=SUM(H2:K2)"
+    ihi["A3"] = "9735"
+    ihi["H3"] = 1231650
+    ihi["I3"] = "=H3*0.1"
+    ihi["K3"] = "=H3*0.03"
+    ihi["G3"] = "=SUM(H3:K3)"
+    ihi["A4"] = "5608"
+    ihi["H4"] = 1776160
+    ihi["I4"] = "=H4*0.1"
+    ihi["K4"] = "=H4*0.03"
+    ihi["G4"] = "=SUM(H4:K4)"
+    ihi["A5"] = "2604"
+    ihi["H5"] = 174114
+    ihi["I5"] = "=H5*0.1"
+    ihi["K5"] = "=H5*0.03"
+    ihi["G5"] = "=SUM(H5:K5)"
+    ihi["A6"] = "国際輸送費（DTの120%）"
+    ihi["C6"] = 2
+    ihi["F6"] = 1192176
+    ihi["G6"] = 993480
+    ihi["A8"] = "9680-BASE"
+    ihi["H8"] = 1773882
+    ihi["I8"] = "=H8*0.1"
+    ihi["J8"] = 10000
+    ihi["K8"] = "=H8*0.03"
+    ihi["G8"] = "=SUM(H8:K8)"
+    ihi["A9"] = "8459"
+    ihi["H9"] = 80274
+    ihi["I9"] = "=H9*0.1"
+    ihi["K9"] = "=H9*0.03"
+    ihi["G9"] = "=SUM(H9:K9)"
+    ihi["A10"] = "5608"
+    ihi["H10"] = 1776160
+    ihi["I10"] = "=H10*0.1"
+    ihi["K10"] = "=H10*0.03"
+    ihi["G10"] = "=SUM(H10:K10)"
+    ihi["A11"] = "7851-PHOTON"
+    ihi["H11"] = 178092
+    ihi["I11"] = "=H11*0.1"
+    ihi["K11"] = "=H11*0.03"
+    ihi["G11"] = "=SUM(H11:K11)"
+    ihi["A12"] = "国際輸送費（DTの120%）"
+    ihi["F12"] = 872712
+    ihi["G12"] = 727260
+
+    actio = workbook.create_sheet("アクティオ")
+    actio["A1"] = "SKU"
+    actio["J1"] = "国内送料"
+    actio["A2"] = "ITEM-A"
+    actio["H2"] = 100000
+    actio["I2"] = "=H2*0.1"
+    actio["J2"] = 10000
+    actio["K2"] = "=H2*0.03"
+    actio["G2"] = "=SUM(H2:K2)"
+    actio["A3"] = "ITEM-B"
+    actio["H3"] = 200000
+    actio["I3"] = "=H3*0.1"
+    actio["J3"] = 10000
+    actio["K3"] = "=H3*0.03"
+    actio["G3"] = "=SUM(H3:K3)"
+    actio["A4"] = "国際輸送費（DTの120%）"
+    actio["F4"] = "=G4*1.2"
+    actio["G4"] = 50000
+
+    original = workbook.create_sheet("原本")
+    original["A1"] = "SKU"
+    original["A2"] = "ITEM-C"
+    original["H2"] = 100000
+    original["I2"] = "=H2*0.1"
+    original["K2"] = "=H2*0.03"
+    original["G2"] = "=SUM(H2:K2)"
+
+    buffer = BytesIO()
+    workbook.save(buffer)
+    buffer.seek(0)
+    return buffer
+
+
 def write_fixture_files(directory: Path = FIXTURE_DIR) -> dict:
     directory.mkdir(parents=True, exist_ok=True)
     files = {

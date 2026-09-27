@@ -4,7 +4,18 @@ from typing import Optional
 import streamlit as st
 from openpyxl.utils.exceptions import InvalidFileException
 
-from agents.master_reconciliation import reconcile_spaceone_master
+from agents.landed_cost import (
+    build_ihi_landed_cost_scenario,
+    build_shipping_line,
+    calculate_landed_cost_scenario,
+    compare_quote_economics,
+    ihi_historical_sales_totals,
+    policy_from_inputs,
+    resolve_ihi_dealer_values,
+    september_dealer_update_shipping_rate,
+    supplier_quote_shipping_rate,
+)
+from agents.master_reconciliation import collect_manufacturer_candidates, reconcile_spaceone_master
 from agents.quote_control_agent import SkuMasterStore, diff_price_books, import_price_book
 from agents.pricing_policy import (
     build_exchange_rate_scenario,
@@ -17,7 +28,14 @@ from agents.pricing_policy import (
 from agents.sku_link import build_sku_link_preview, try_manual_link
 from agents.supplier_quote_validation import load_official_manufacturer_price_books, validate_supplier_quote
 from data.golden_cases.loader import IHI_QUOTE_001, load_quote_golden_case
-from models import RequiredConfigurationItem, SupplierQuote
+from models import (
+    DomesticShippingMode,
+    InsuranceMode,
+    RequiredConfigurationItem,
+    ShippingType,
+    SupplierQuote,
+)
+from parsers.quote_calc_parser import extract_quote_calc_audit, locate_quote_calc_workbook
 from agents.update_inbox_agent import UpdateInboxStore, create_manual_candidate, organize_pasted_update
 from models import (
     LinkStatus,
@@ -91,6 +109,8 @@ def render_quote_control(texts: dict) -> None:
     _render_spaceone_reconciliation(page)
     st.divider()
     _render_pricing_policy(page)
+    st.divider()
+    _render_landed_cost(page)
     st.divider()
     _render_update_inbox(page)
     _render_golden_quote_cases(page)
@@ -549,6 +569,7 @@ def _render_golden_quote_cases(page: dict) -> None:
         st.write(f"{page['golden_lead_time']}: {photon.get('lead_time_note')}")
         _render_supplier_quote_validation(page, case)
         _render_ihi_pricing_comparison(page, case)
+        _render_ihi_landed_cost_cases(page, case)
 
 
 def _render_supplier_quote_validation(page: dict, case: dict) -> None:
@@ -647,6 +668,341 @@ def _render_ihi_pricing_comparison(page: dict, case: dict) -> None:
             for item in rows
         ]
     )
+
+
+def _render_landed_cost(page: dict) -> None:
+    st.subheader(page["section_landed_cost"])
+    st.write(page["section_landed_cost_description"])
+    st.caption(page["landed_cost_not_applied"])
+    st.caption(page["import_tax_basis_caption"])
+    st.caption(page["domestic_shipping_caption"])
+    rate_text = st.text_input(page["exchange_rate_label"], key="input_landed_exchange_rate")
+    tax_text = st.text_input(page["import_tax_rate_label"], key="input_landed_import_tax")
+    insurance_labels = page["insurance_modes"]
+    insurance_mode = st.selectbox(
+        page["insurance_mode_label"],
+        options=list(insurance_labels.keys()),
+        format_func=lambda key: insurance_labels[key],
+        key="input_landed_insurance_mode",
+    )
+    insurance_rate_text = st.text_input(page["insurance_rate_label"], key="input_landed_insurance_rate")
+    domestic_text = st.text_input(page["domestic_shipping_label"], key="input_landed_domestic")
+    snapshot_labels = page["shipping_snapshots"]
+    snapshot_key = st.selectbox(
+        page["shipping_snapshot_label"],
+        options=list(snapshot_labels.keys()),
+        format_func=lambda key: snapshot_labels[key],
+        key="input_landed_shipping_snapshot",
+    )
+    large_qty_text = st.text_input(page["large_box_qty_label"], key="input_landed_large_qty")
+    small_qty_text = st.text_input(page["small_box_qty_label"], key="input_landed_small_qty")
+    if st.button(page["landed_calc_button"], key="estimate_landed_cost"):
+        parsed = _parse_landed_inputs(page, rate_text, tax_text, insurance_rate_text, domestic_text, large_qty_text, small_qty_text)
+        if parsed is None:
+            return
+        preview = st.session_state.get(SESSION_SKU_LINKS)
+        sales = st.session_state.get(SESSION_SALES_CANDIDATES) or []
+        product_inputs = _product_inputs_from_preview(preview)
+        if not product_inputs:
+            st.warning(page["landed_no_products"])
+            return
+        extracted_markup = _extracted_shipping_markup()
+        policy = policy_from_inputs(
+            import_tax_rate=parsed["tax_rate"],
+            insurance_mode=InsuranceMode(insurance_mode),
+            insurance_rate=parsed["insurance_rate"],
+            shipping_markup_multiplier=extracted_markup,
+            domestic_shipping_jpy=parsed["domestic"],
+            domestic_shipping_mode=DomesticShippingMode.MANUAL if parsed["domestic"] is not None else DomesticShippingMode.REVIEW_REQUIRED,
+        )
+        shipping_lines = _shipping_lines_from_inputs(snapshot_key, parsed, policy)
+        scenario, economics = calculate_landed_cost_scenario(
+            scenario_id="ui-landed-cost",
+            case_id=None,
+            name="UI landed cost",
+            exchange_rate=parsed["rate"],
+            policy=policy,
+            product_inputs=product_inputs,
+            shipping_lines=shipping_lines,
+            sales_candidates=sales,
+            insurance_mode=InsuranceMode(insurance_mode),
+            domestic_shipping_jpy=parsed["domestic"],
+        )
+        st.session_state["landed_cost_result"] = (scenario, economics)
+    result = st.session_state.get("landed_cost_result")
+    if result:
+        _render_landed_cost_result(page, *result)
+
+
+def _render_ihi_landed_cost_cases(page: dict, case: dict) -> None:
+    st.markdown(f"**{page['ihi_mag_landed_label']} / {page['ihi_photon_landed_label']}**")
+    st.caption(page["ihi_landed_hint"])
+    rate_text = st.text_input(page["exchange_rate_label"], key="input_ihi_landed_rate")
+    if st.button(page["ihi_mag_landed_button"], key="estimate_ihi_mag_landed"):
+        st.session_state["ihi_mag_landed"] = _run_ihi_landed(page, case, "MAG", rate_text)
+    if st.button(page["ihi_photon_landed_button"], key="estimate_ihi_photon_landed"):
+        st.session_state["ihi_photon_landed"] = _run_ihi_landed(page, case, "PHOTON", rate_text)
+    for key, label in (("ihi_mag_landed", page["ihi_mag_landed_label"]), ("ihi_photon_landed", page["ihi_photon_landed_label"])):
+        result = st.session_state.get(key)
+        if not result:
+            continue
+        st.markdown(f"**{label}**")
+        scenario, economics = result
+        _render_landed_cost_result(page, scenario, economics)
+        comparison = economics.economics_comparison
+        if comparison is None:
+            continue
+        st.markdown(f"**{page['ihi_economics_label']}**")
+        st.table(
+            [
+                {
+                    page["column_comparison"]: "Product",
+                    page["column_calculated"]: _display_number(comparison.product_sales_calculated_jpy, page),
+                    page["column_historical"]: _display_number(comparison.product_sales_historical_jpy, page),
+                    page["column_sales_delta"]: _display_number(comparison.product_sales_difference_jpy, page),
+                },
+                {
+                    page["column_comparison"]: "Shipping",
+                    page["column_calculated"]: _display_number(comparison.shipping_sales_calculated_jpy, page),
+                    page["column_historical"]: _display_number(comparison.shipping_sales_historical_jpy, page),
+                    page["column_sales_delta"]: _display_number(comparison.shipping_sales_difference_jpy, page),
+                },
+                {
+                    page["column_comparison"]: "Total",
+                    page["column_calculated"]: _display_number(comparison.total_sales_calculated_jpy, page),
+                    page["column_historical"]: _display_number(comparison.total_sales_historical_jpy, page),
+                    page["column_sales_delta"]: _display_number(comparison.total_sales_difference_jpy, page),
+                },
+            ]
+        )
+
+
+def _render_landed_cost_result(page: dict, scenario, economics) -> None:
+    labels = page["completeness"]
+    st.write(f"{page['summary_completeness']}: {labels.get(scenario.status.value, scenario.status.value)}")
+    st.write(f"{page['summary_sales']}: {_display_number(economics.total_sales_ex_tax_jpy, page)}")
+    st.write(f"{page['summary_landed']}: {_display_number(economics.total_landed_cost_jpy, page)}")
+    st.write(f"{page['summary_gross_profit']}: {_display_number(economics.gross_profit_jpy, page)}")
+    st.write(
+        f"{page['summary_gross_margin']}: "
+        f"{f'{economics.gross_margin_rate:.1%}' if economics.gross_margin_rate is not None else page['no_value']}"
+    )
+    st.table(
+        [
+            {
+                page["column_sku"]: line.sku or page["no_value"],
+                page["column_dealer_usd"]: _display_number(line.dealer_price_usd, page),
+                page["column_fx"]: _display_number(line.exchange_rate, page),
+                page["column_dealer_jpy"]: _display_number(line.dealer_cost_jpy, page),
+                page["column_import_tax"]: _display_number(line.import_tax_jpy, page),
+                page["column_insurance"]: _display_number(line.insurance_jpy, page),
+                page["column_domestic"]: _display_number(line.domestic_shipping_jpy, page),
+                page["column_landed"]: _display_number(line.landed_cost_jpy, page),
+                page["column_sales_candidate"]: _display_number(line.standard_sales_price_jpy, page),
+                page["column_line_profit"]: _display_number(
+                    None
+                    if line.standard_sales_price_jpy is None or line.landed_cost_jpy is None
+                    else line.standard_sales_price_jpy - line.landed_cost_jpy,
+                    page,
+                ),
+                page["golden_warning"]: "; ".join(line.warnings) or page["no_value"],
+            }
+            for line in scenario.product_lines
+        ]
+    )
+    if scenario.shipping_lines:
+        st.table(
+            [
+                {
+                    page["column_shipping_type"]: line.shipping_type.value if line.shipping_type else page["no_value"],
+                    page["column_qty"]: line.quantity,
+                    page["column_usd_rate"]: _display_number(line.rate_usd, page),
+                    page["column_cost_jpy"]: _display_number(line.cost_jpy, page),
+                    page["column_sales_candidate"]: _display_number(line.sales_price_candidate_jpy, page),
+                }
+                for line in scenario.shipping_lines
+            ]
+        )
+    if scenario.unresolved_components:
+        st.write(f"{page['golden_missing_label']}: {', '.join(scenario.unresolved_components)}")
+    if economics.warnings:
+        st.caption("; ".join(economics.warnings))
+
+
+def _run_ihi_landed(page: dict, case: dict, configuration: str, rate_text: str):
+    try:
+        rate = float(rate_text)
+    except (TypeError, ValueError):
+        st.warning(page["exchange_rate_invalid"])
+        return None
+    books = load_official_manufacturer_price_books()
+    candidates = collect_manufacturer_candidates(*books) if books else []
+    dealer_values = resolve_ihi_dealer_values(candidates)
+    sales = st.session_state.get(SESSION_SALES_CANDIDATES) or []
+    spaceone_path = Path("/tmp/dt_price_investigation/SO_MASTER.xlsx")
+    if spaceone_path.exists() and books:
+        spaceone = parse_spaceone_master(spaceone_path, source_name="SO_MASTER")
+        preview = build_sku_link_preview(spaceone.items, *books)
+        policies = extract_pricing_policies(spaceone.items)
+        sales = simulate_sales_price_candidates(
+            preview, policies, build_exchange_rate_scenario(rate), spaceone.items
+        )
+    policy = _extracted_landed_policy()
+    if policy is None or policy.import_tax_rate is None:
+        tax_rate = _optional_float(st.session_state.get("input_landed_import_tax"))
+        insurance_rate = _optional_float(st.session_state.get("input_landed_insurance_rate"))
+        if tax_rate is None:
+            st.warning(page["exchange_rate_invalid"])
+            return None
+        policy = policy_from_inputs(
+            import_tax_rate=tax_rate,
+            insurance_mode=InsuranceMode.PERCENTAGE,
+            insurance_rate=insurance_rate,
+            shipping_markup_multiplier=None,
+            domestic_shipping_jpy=10000,
+            domestic_shipping_mode=DomesticShippingMode.REVIEW_REQUIRED,
+        )
+    scenario, economics = build_ihi_landed_cost_scenario(
+        configuration,
+        exchange_rate=rate,
+        policy=policy,
+        dealer_values=dealer_values,
+        sales_candidates=sales,
+        price_book_candidates=candidates,
+    )
+    quote = case["mag_customer_quote"] if configuration == "MAG" else case["photon_customer_quote"]
+    historical = ihi_historical_sales_totals(quote)
+    comparisons = []
+    if sales:
+        comparisons = compare_ihi_historical_prices(
+            sales,
+            extract_pricing_policies(parse_spaceone_master(spaceone_path, source_name="SO_MASTER").items)
+            if spaceone_path.exists()
+            else [],
+            historical_lines=[
+                line for line in ihi_historical_comparison_lines(case) if line.get("quote") == configuration
+            ],
+        )
+    economics = compare_quote_economics(
+        economics,
+        configuration_name=configuration,
+        quote_number=historical["quote_number"],
+        historical_product_sales_jpy=historical["product_sales_jpy"],
+        historical_shipping_sales_jpy=historical["shipping_sales_jpy"],
+        historical_total_sales_jpy=historical["total_sales_jpy"],
+        product_comparisons=comparisons,
+    )
+    return scenario, economics
+
+
+def _product_inputs_from_preview(preview) -> list[dict]:
+    if preview is None:
+        return []
+    inputs = []
+    for item in preview.items:
+        if item.link.link_status.value not in {"AUTO_LINKED", "MANUALLY_LINKED"}:
+            continue
+        current = item.current_values
+        if current is None or current.dealer_price_usd is None:
+            continue
+        inputs.append(
+            {
+                "sku": item.link.manufacturer_sku,
+                "quantity": 1,
+                "dealer_price_usd": current.dealer_price_usd,
+                "msrp_usd": current.msrp_usd,
+                "description": item.name_ja,
+                "price_book": current.price_book,
+                "price_book_version": current.price_book_version,
+            }
+        )
+    return inputs
+
+
+def _shipping_lines_from_inputs(snapshot_key: str, parsed: dict, policy) -> list:
+    lines = []
+    for shipping_type, qty in (
+        (ShippingType.LARGE_BOX, parsed["large_qty"]),
+        (ShippingType.SMALL_BOX, parsed["small_qty"]),
+    ):
+        if not qty:
+            continue
+        if snapshot_key == "SUPPLIER_QUOTE":
+            rate = supplier_quote_shipping_rate(shipping_type)
+        else:
+            rate = september_dealer_update_shipping_rate(shipping_type)
+        if rate is None:
+            continue
+        lines.append(
+            build_shipping_line(
+                shipping_type,
+                qty,
+                rate,
+                parsed["rate"],
+                policy,
+                source_type=snapshot_key,
+                source_reference=snapshot_key,
+                rule_status="SNAPSHOT",
+            )
+        )
+    return lines
+
+
+def _extracted_landed_policy():
+    cached = st.session_state.get("quote_calc_policy")
+    if "quote_calc_policy" in st.session_state:
+        return cached
+    path = locate_quote_calc_workbook()
+    policy = extract_quote_calc_audit(path).policy_candidate if path else None
+    st.session_state["quote_calc_policy"] = policy
+    return policy
+
+
+def _extracted_shipping_markup():
+    policy = _extracted_landed_policy()
+    return policy.shipping_markup_multiplier if policy else None
+
+
+def _optional_float(value):
+    if value in (None, ""):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _parse_landed_inputs(page, rate_text, tax_text, insurance_rate_text, domestic_text, large_qty_text, small_qty_text):
+    try:
+        rate = float(rate_text)
+        tax_rate = float(tax_text)
+    except (TypeError, ValueError):
+        st.warning(page["exchange_rate_invalid"])
+        return None
+    insurance_rate = None
+    if insurance_rate_text:
+        try:
+            insurance_rate = float(insurance_rate_text)
+        except (TypeError, ValueError):
+            st.warning(page["exchange_rate_invalid"])
+            return None
+    domestic = None
+    if domestic_text:
+        try:
+            domestic = float(domestic_text)
+        except (TypeError, ValueError):
+            st.warning(page["exchange_rate_invalid"])
+            return None
+    large_qty = int(large_qty_text) if large_qty_text else 0
+    small_qty = int(small_qty_text) if small_qty_text else 0
+    return {
+        "rate": rate,
+        "tax_rate": tax_rate,
+        "insurance_rate": insurance_rate,
+        "domestic": domestic,
+        "large_qty": large_qty,
+        "small_qty": small_qty,
+    }
 
 
 def _ensure_official_master() -> None:

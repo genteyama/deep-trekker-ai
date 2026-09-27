@@ -225,6 +225,44 @@ class PricingPolicyStatus(str, Enum):
     SUPERSEDED = "SUPERSEDED"
 
 
+class CostBasis(str, Enum):
+    PRODUCT_DEALER_JPY = "PRODUCT_DEALER_JPY"
+    PRODUCT_PLUS_SHIPPING_JPY = "PRODUCT_PLUS_SHIPPING_JPY"
+    SUPPLIER_QUOTED = "SUPPLIER_QUOTED"
+    FIXED_JPY = "FIXED_JPY"
+    MANUAL = "MANUAL"
+    REVIEW_REQUIRED = "REVIEW_REQUIRED"
+
+
+class InsuranceMode(str, Enum):
+    PERCENTAGE = "PERCENTAGE"
+    SUPPLIER_QUOTED = "SUPPLIER_QUOTED"
+    FIXED_JPY = "FIXED_JPY"
+    MANUAL = "MANUAL"
+    NONE = "NONE"
+
+
+class DomesticShippingMode(str, Enum):
+    FIRST_PRODUCT_LINE = "FIRST_PRODUCT_LINE"
+    PER_PRODUCT_LINE = "PER_PRODUCT_LINE"
+    PER_QUOTE = "PER_QUOTE"
+    FIXED_JPY = "FIXED_JPY"
+    MANUAL = "MANUAL"
+    REVIEW_REQUIRED = "REVIEW_REQUIRED"
+
+
+class ScenarioCompleteness(str, Enum):
+    COMPLETE = "COMPLETE"
+    INCOMPLETE = "INCOMPLETE"
+
+
+class QuoteAdjustmentType(str, Enum):
+    ROUNDING = "ROUNDING"
+    COMMERCIAL_ADJUSTMENT = "COMMERCIAL_ADJUSTMENT"
+    PROJECT_DISCOUNT = "PROJECT_DISCOUNT"
+    MANUAL = "MANUAL"
+
+
 class HistoricalComparisonStatus(str, Enum):
     MATCH = "MATCH"
     DIFFERENCE = "DIFFERENCE"
