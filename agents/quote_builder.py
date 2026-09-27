@@ -16,6 +16,8 @@ from models import (
     QuoteDraftStatus,
     QuoteEconomicsResult,
     QuotePriceSnapshot,
+    QuoteRemark,
+    RemarkSource,
     RequirementType,
     SalesPriceCandidate,
     ScenarioCompleteness,
@@ -83,6 +85,10 @@ def build_quote_draft(
                 manufacturer_price_snapshot=snapshot.model_copy() if snapshot else None,
                 landed_cost_jpy=product.landed_cost_jpy,
                 dealer_price_usd=product.dealer_price_usd,
+                dealer_cost_jpy=product.dealer_cost_jpy,
+                import_tax_jpy=product.import_tax_jpy,
+                insurance_jpy=product.insurance_jpy,
+                domestic_shipping_jpy=product.domestic_shipping_jpy,
                 standard_sales_price_candidate_jpy=sales.raw_sales_price_jpy if sales else None,
                 standard_sales_price_candidate_id=sales.sales_price_candidate_id if sales else None,
                 final_sales_price_jpy=None,
@@ -112,11 +118,17 @@ def build_quote_draft(
             shipping_snapshot_id=shipping_snapshot_id,
             pricing_policy_candidate_ids=policy_ids,
             manufacturer_price_snapshots=snapshots,
+            landed_cost_policy_snapshot=(
+                landed_scenario.calculation_policy.model_copy()
+                if landed_scenario.calculation_policy
+                else None
+            ),
             source_references=list(landed_scenario.source_references),
         ),
         landed_cost_scenario_id=landed_scenario.scenario_id,
         tax_rate=tax_rate,
-        remarks=list(presentation.get("remarks") or []),
+        remarks=[],
+        remark_candidates=_remark_candidates(presentation),
         created_at=captured,
         updated_at=captured,
         source_references=list(landed_scenario.source_references) + ["Quote Builder draft"],
@@ -154,6 +166,13 @@ def build_ihi_quote_draft(
     return draft
 
 
+def ensure_draft_editable(draft: QuoteDraft) -> None:
+    if draft.status == QuoteDraftStatus.APPROVED:
+        raise ValueError("Approved drafts cannot be edited. Create a new version.")
+    if draft.status == QuoteDraftStatus.SUPERSEDED:
+        raise ValueError("Superseded drafts cannot be edited. Create a new version.")
+
+
 def apply_presentation_mode(
     draft: QuoteDraft,
     line_id: str,
@@ -162,6 +181,7 @@ def apply_presentation_mode(
     bundled_into_line_id: Optional[str] = None,
     presentation: Optional[dict] = None,
 ) -> QuoteDraft:
+    ensure_draft_editable(draft)
     line = _config_line(draft, line_id)
     if mode == CustomerPresentationMode.BUNDLED_WITH_PARENT and not bundled_into_line_id:
         raise ValueError("BUNDLED_WITH_PARENT requires bundled_into_line_id.")
@@ -184,6 +204,7 @@ def apply_final_price(
     entered_by: Optional[str] = None,
     presentation: Optional[dict] = None,
 ) -> QuoteDraft:
+    ensure_draft_editable(draft)
     line = _config_line(draft, line_id)
     if status == FinalPriceStatus.USE_STANDARD_CANDIDATE:
         if line.standard_sales_price_candidate_jpy is None:
@@ -223,6 +244,7 @@ def apply_final_price(
 
 
 def apply_shipping_final_price(draft: QuoteDraft, amount_jpy: float, *, presentation: Optional[dict] = None) -> QuoteDraft:
+    ensure_draft_editable(draft)
     refresh_quote_draft(draft, presentation=presentation)
     shipping = next((item for item in draft.customer_lines if item.line_kind == "SHIPPING"), None)
     if shipping is None:
@@ -236,6 +258,7 @@ def apply_shipping_final_price(draft: QuoteDraft, amount_jpy: float, *, presenta
 
 
 def apply_tax_rate(draft: QuoteDraft, tax_rate: Optional[float], *, presentation: Optional[dict] = None) -> QuoteDraft:
+    ensure_draft_editable(draft)
     draft.tax_rate = tax_rate
     draft.pricing_context.tax_rate = tax_rate
     refresh_quote_draft(draft, presentation=presentation)
@@ -243,12 +266,43 @@ def apply_tax_rate(draft: QuoteDraft, tax_rate: Optional[float], *, presentation
 
 
 def apply_minimum_margin_reference(draft: QuoteDraft, rate: Optional[float]) -> QuoteDraft:
+    ensure_draft_editable(draft)
     draft.pricing_context.minimum_margin_reference = rate
     _recalculate(draft)
     return draft
 
 
+def apply_selected_remarks(draft: QuoteDraft, texts: Sequence[str], *, source: RemarkSource = RemarkSource.HUMAN_CONFIRMED) -> QuoteDraft:
+    ensure_draft_editable(draft)
+    selected = set(texts)
+    for candidate in draft.remark_candidates:
+        candidate.selected = candidate.text in selected
+        if candidate.selected and candidate.source == RemarkSource.GOLDEN_HISTORICAL_SNAPSHOT:
+            candidate.source = source
+    extra = [
+        QuoteRemark(text=text, source=RemarkSource.HUMAN_ENTERED, selected=True)
+        for text in texts
+        if text not in {item.text for item in draft.remark_candidates}
+    ]
+    draft.remark_candidates.extend(extra)
+    draft.remarks = [item.text for item in draft.remark_candidates if item.selected]
+    return draft
+
+
+def apply_lead_time_text(draft: QuoteDraft, text: Optional[str]) -> QuoteDraft:
+    ensure_draft_editable(draft)
+    draft.lead_time_text = text
+    return draft
+
+
+def apply_valid_until(draft: QuoteDraft, value: Optional[str]) -> QuoteDraft:
+    ensure_draft_editable(draft)
+    draft.valid_until = value
+    return draft
+
+
 def apply_historical_acceptance_preview(draft: QuoteDraft, historical_quote: dict) -> QuoteDraft:
+    ensure_draft_editable(draft)
     by_description = {
         line.get("description"): line.get("unit_price_jpy")
         for line in historical_quote.get("lines") or []
@@ -310,6 +364,7 @@ def internal_configuration_rows(draft: QuoteDraft) -> list[dict]:
 
 
 def refresh_quote_draft(draft: QuoteDraft, *, presentation: Optional[dict] = None) -> QuoteDraft:
+    ensure_draft_editable(draft)
     spec = presentation or load_quote_presentation().get(draft.configuration_name or "", {})
     draft.customer_lines = _rebuild_customer_lines(draft, spec)
     _recalculate(draft)
@@ -385,8 +440,7 @@ def _rebuild_customer_lines(draft: QuoteDraft, presentation: dict) -> list[Custo
     return lines
 
 
-def _recalculate(draft: QuoteDraft) -> None:
-    warnings = []
+def inspect_quote_economics(draft: QuoteDraft) -> dict:
     product_sales = 0.0
     shipping_sales = None
     product_sales_complete = True
@@ -420,7 +474,30 @@ def _recalculate(draft: QuoteDraft) -> None:
     if product_cost_complete and shipping_cost is not None:
         total_landed = round(product_cost + shipping_cost, 4)
     ready, ready_warnings = _readiness(draft, total_sales, total_landed)
-    warnings.extend(ready_warnings)
+    return {
+        "product_sales": round(product_sales, 4) if product_sales_complete else None,
+        "shipping_sales": shipping_sales,
+        "product_cost": round(product_cost, 4) if product_cost_complete else None,
+        "shipping_cost": None if shipping_cost is None else round(shipping_cost, 4),
+        "total_sales": total_sales,
+        "total_landed": total_landed,
+        "ready": ready,
+        "warnings": list(ready_warnings),
+    }
+
+
+def _recalculate(draft: QuoteDraft) -> None:
+    if draft.status in {QuoteDraftStatus.APPROVED, QuoteDraftStatus.SUPERSEDED}:
+        return
+    inspected = inspect_quote_economics(draft)
+    warnings = list(inspected["warnings"])
+    total_sales = inspected["total_sales"]
+    total_landed = inspected["total_landed"]
+    ready = inspected["ready"]
+    product_sales = inspected["product_sales"]
+    shipping_sales = inspected["shipping_sales"]
+    product_cost = inspected["product_cost"]
+    shipping_cost = inspected["shipping_cost"]
     gross_profit = None
     gross_margin = None
     if ready and total_sales and total_landed is not None:
@@ -445,11 +522,11 @@ def _recalculate(draft: QuoteDraft) -> None:
         draft.total_jpy = round(total_sales + draft.tax_jpy, 4)
     draft.economics_result = QuoteEconomicsResult(
         scenario_id=draft.landed_cost_scenario_id or draft.quote_draft_id,
-        product_sales_total_jpy=round(product_sales, 4) if product_sales_complete else None,
+        product_sales_total_jpy=product_sales,
         shipping_sales_total_jpy=shipping_sales,
         total_sales_ex_tax_jpy=total_sales,
-        product_landed_cost_total_jpy=round(product_cost, 4) if product_cost_complete else None,
-        shipping_cost_total_jpy=None if shipping_cost is None else round(shipping_cost, 4),
+        product_landed_cost_total_jpy=product_cost,
+        shipping_cost_total_jpy=shipping_cost,
         other_cost_total_jpy=0.0,
         total_landed_cost_jpy=total_landed,
         gross_profit_jpy=gross_profit,
@@ -476,6 +553,10 @@ def _readiness(
         if line.landed_cost_jpy is None:
             warnings.append(f"{line.manufacturer_sku or line.line_id}: Landed cost is missing.")
         if line.customer_presentation_status == CustomerPresentationMode.UNDECIDED:
+            if line.requirement_type == RequirementType.REQUIRED_DEPENDENCY:
+                warnings.append(
+                    f"{line.manufacturer_sku or line.line_id}: Required Component unresolved."
+                )
             warnings.append(f"{line.manufacturer_sku or line.line_id}: Customer presentation is UNDECIDED.")
         if (
             line.customer_presentation_status == CustomerPresentationMode.SEPARATE_LINE
@@ -556,3 +637,21 @@ def _unique(values: Sequence[str]) -> list[str]:
         if value not in seen:
             seen.append(value)
     return seen
+
+
+def _remark_candidates(presentation: dict) -> list[QuoteRemark]:
+    kind = presentation.get("remarks_kind") or RemarkSource.GOLDEN_HISTORICAL_SNAPSHOT.value
+    try:
+        source = RemarkSource(kind)
+    except ValueError:
+        source = RemarkSource.GOLDEN_HISTORICAL_SNAPSHOT
+    candidates = [
+        QuoteRemark(text=text, source=source, selected=False)
+        for text in presentation.get("remarks") or []
+    ]
+    current_lead = presentation.get("current_lead_time_text")
+    if current_lead:
+        candidates.append(
+            QuoteRemark(text=current_lead, source=RemarkSource.CURRENT_LEAD_TIME, selected=False)
+        )
+    return candidates

@@ -15,12 +15,24 @@ from agents.landed_cost import (
     september_dealer_update_shipping_rate,
     supplier_quote_shipping_rate,
 )
+from agents.quote_approval import (
+    QuoteApprovalError,
+    QuoteApprovalStore,
+    apply_ihi_photon_human_final_fixture,
+    approve_quote,
+    create_revision_draft,
+    generate_quote_outputs,
+    validate_for_approval,
+)
 from agents.quote_builder import (
     apply_final_price,
     apply_historical_acceptance_preview,
+    apply_lead_time_text,
     apply_presentation_mode,
+    apply_selected_remarks,
     apply_shipping_final_price,
     apply_tax_rate,
+    apply_valid_until,
     build_ihi_quote_draft,
     customer_preview_rows,
 )
@@ -42,6 +54,7 @@ from models import (
     DomesticShippingMode,
     FinalPriceStatus,
     InsuranceMode,
+    QuoteDraftStatus,
     RequiredConfigurationItem,
     ShippingType,
     SupplierQuote,
@@ -124,6 +137,8 @@ def render_quote_control(texts: dict) -> None:
     _render_landed_cost(page)
     st.divider()
     _render_quote_builder(page)
+    st.divider()
+    _render_quote_approval(page)
     st.divider()
     _render_update_inbox(page)
     _render_golden_quote_cases(page)
@@ -1037,6 +1052,7 @@ def _render_quote_builder(page: dict) -> None:
         st.text(page["no_quote_draft"])
         return
     status_labels = page["draft_statuses"]
+    st.write(f"{page['column_version']}: v{draft.quote_version}")
     st.write(f"{page['draft_status_label']}: {status_labels.get(draft.status.value, draft.status.value)}")
     st.write(f"{page['summary_completeness']}: {page['completeness'].get(draft.completeness.value, draft.completeness.value)}")
     _render_internal_bom(page, draft)
@@ -1133,8 +1149,8 @@ def _render_customer_preview(page: dict, draft) -> None:
     st.write(f"{page['golden_total']}: {_display_number(draft.total_jpy, page)}")
     st.markdown(f"**{page['remarks_label']}**")
     st.caption(page["remarks_caption"])
-    for remark in draft.remarks:
-        st.write(remark)
+    for remark in draft.remark_candidates:
+        st.write(f"[{remark.source.value}] {remark.text}")
     tax_text = st.text_input(page["tax_rate_label"], key="input_draft_tax_rate")
     if tax_text and st.button(page["apply_manual_price_button"], key="apply_draft_tax"):
         try:
@@ -1151,6 +1167,186 @@ def _render_customer_preview(page: dict, draft) -> None:
             st.rerun()
         except (TypeError, ValueError):
             st.warning(page["exchange_rate_invalid"])
+
+
+def _render_quote_approval(page: dict) -> None:
+    st.subheader(page["section_quote_approval"])
+    st.write(page["section_quote_approval_description"])
+    store = _ensure_quote_approval_store()
+    draft = st.session_state.get("quote_draft")
+    snapshot = st.session_state.get("approved_quote_snapshot")
+    if draft is None:
+        st.text(page["no_quote_draft"])
+        if snapshot is None:
+            return
+    else:
+        status_labels = page["draft_statuses"]
+        economics = draft.economics_result
+        st.write(f"{page['column_version']}: v{draft.quote_version}")
+        st.write(f"{page['draft_status_label']}: {status_labels.get(draft.status.value, draft.status.value)}")
+        st.write(f"{page['column_customer']}: {draft.customer or page['no_value']}")
+        st.write(f"{page['column_title']}: {draft.title or page['no_value']}")
+        st.write(f"{page['golden_subtotal']}: {_display_number(draft.subtotal_ex_tax_jpy, page)}")
+        st.write(f"{page['column_import_tax']}: {_display_number(draft.tax_jpy, page)}")
+        st.write(f"{page['golden_total']}: {_display_number(draft.total_jpy, page)}")
+        st.write(f"{page['column_landed_total']}: {_display_number(economics.total_landed_cost_jpy if economics else None, page)}")
+        st.write(f"{page['column_gross_profit']}: {_display_number(economics.gross_profit_jpy if economics else None, page)}")
+        st.write(f"{page['column_gross_margin']}: {_display_percent(economics.gross_margin_rate if economics else None, page)}")
+        if draft.warnings:
+            st.warning("\n".join(draft.warnings))
+        selected_remarks = st.multiselect(
+            page["select_remarks_label"],
+            options=[item.text for item in draft.remark_candidates],
+            default=[item.text for item in draft.remark_candidates if item.selected],
+            key="input_selected_remarks",
+        )
+        lead_time = st.text_input(page["lead_time_label"], value=draft.lead_time_text or "", key="input_lead_time")
+        valid_until = st.text_input(page["valid_until_label"], value=draft.valid_until or "", key="input_valid_until")
+        confirm_configuration = st.checkbox(page["confirm_configuration"], key="confirm_configuration")
+        confirm_presentation = st.checkbox(page["confirm_presentation"], key="confirm_presentation")
+        confirm_sales_price = st.checkbox(page["confirm_sales_price"], key="confirm_sales_price")
+        confirm_remarks = st.checkbox(page["confirm_remarks"], key="confirm_remarks")
+        if draft.configuration_name == "PHOTON" and draft.status != QuoteDraftStatus.APPROVED:
+            if st.button(page["photon_human_final_button"], key="photon_human_final"):
+                try:
+                    apply_ihi_photon_human_final_fixture(draft)
+                    st.session_state["quote_draft"] = draft
+                    st.rerun()
+                except ValueError:
+                    st.warning(page["approved_draft_locked"])
+        if st.button(page["confirm_ready_button"], key="check_quote_approval"):
+            try:
+                apply_selected_remarks(draft, selected_remarks)
+                apply_lead_time_text(draft, lead_time or None)
+                apply_valid_until(draft, valid_until or None)
+            except ValueError:
+                st.warning(page["approved_draft_locked"])
+            st.session_state["quote_approval_validation"] = validate_for_approval(draft)
+            st.session_state["quote_draft"] = draft
+        validation = st.session_state.get("quote_approval_validation")
+        if validation is not None:
+            if validation.can_approve:
+                st.success(page["approval_ready"])
+            else:
+                st.error(validation.blocking_reason or page["approval_blocked"])
+            if validation.critical_warnings:
+                st.error("\n".join(validation.critical_warnings))
+            if validation.regular_warnings:
+                st.warning("\n".join(validation.regular_warnings))
+        ready_to_approve = (
+            draft.status == QuoteDraftStatus.READY_FOR_APPROVAL
+            and validation is not None
+            and validation.can_approve
+            and confirm_configuration
+            and confirm_presentation
+            and confirm_sales_price
+            and confirm_remarks
+        )
+        if ready_to_approve and st.button(page["approve_snapshot_button"], key="approve_quote_snapshot"):
+            try:
+                apply_selected_remarks(draft, selected_remarks)
+                apply_lead_time_text(draft, lead_time or None)
+                apply_valid_until(draft, valid_until or None)
+                approval, snapshot = approve_quote(
+                    draft,
+                    approved_by="弦",
+                    confirmations={
+                        "configuration": confirm_configuration,
+                        "presentation": confirm_presentation,
+                        "sales_price": confirm_sales_price,
+                        "remarks": confirm_remarks,
+                    },
+                    warnings_acknowledged=list(validation.regular_warnings),
+                    store=store,
+                )
+                st.session_state["quote_draft"] = draft
+                st.session_state["quote_approval"] = approval
+                st.session_state["approved_quote_snapshot"] = snapshot
+                st.session_state["quote_outputs"] = generate_quote_outputs(snapshot)
+                st.rerun()
+            except (QuoteApprovalError, ValueError) as error:
+                st.error(str(error))
+        if snapshot is not None and st.button(page["create_revision_button"], key="create_quote_revision"):
+            revision = create_revision_draft(snapshot, store=store)
+            st.session_state["quote_draft"] = revision
+            st.session_state["quote_approval_validation"] = None
+            st.rerun()
+    snapshot = st.session_state.get("approved_quote_snapshot")
+    if snapshot is None:
+        st.text(page["no_approved_snapshot"])
+        return
+    st.markdown(f"**{page['output_preview_label']}**")
+    st.write(f"{page['quote_number_candidate_label']}: {snapshot.quote_number_candidate or page['no_value']}")
+    outputs = st.session_state.get("quote_outputs") or generate_quote_outputs(snapshot)
+    internal_tab, spaceone_tab, moneyforward_tab = st.tabs(
+        [page["tab_internal_transfer"], page["tab_spaceone_quote"], page["tab_moneyforward"]]
+    )
+    with internal_tab:
+        st.table(
+            [
+                {
+                    "Part Number": row.part_number,
+                    page["column_name_ja"]: row.item_name,
+                    page["column_qty"]: row.quantity,
+                    "DT USD": _display_number(row.dealer_unit_price_usd, page),
+                    page["column_landed"]: _display_number(row.landed_subtotal_jpy, page),
+                    page["column_final_price"]: _display_number(row.adjusted_unit_price_jpy, page),
+                    page["column_gross_margin"]: _display_percent(row.gross_margin_rate, page),
+                }
+                for row in outputs.internal_transfer.rows
+            ]
+        )
+        st.write(f"{page['golden_total']}: {_display_number(outputs.internal_transfer.customer_total_jpy, page)}")
+    with spaceone_tab:
+        st.write(f"{page['column_customer']}: {outputs.spaceone_quote.customer or page['no_value']}")
+        st.write(f"{page['column_title']}: {outputs.spaceone_quote.title or page['no_value']}")
+        st.table(
+            [
+                {
+                    page["column_item"]: line.item_name,
+                    page["column_item_detail"]: line.item_detail,
+                    page["column_unit_price"]: _display_number(line.unit_price_jpy, page),
+                    page["column_qty"]: line.quantity,
+                    page["column_amount"]: _display_number(line.amount_jpy, page),
+                }
+                for line in outputs.spaceone_quote.lines
+            ]
+        )
+        st.write(f"{page['golden_subtotal']}: {_display_number(outputs.spaceone_quote.subtotal, page)}")
+        st.write(f"{page['column_import_tax']}: {_display_number(outputs.spaceone_quote.tax, page)}")
+        st.write(f"{page['golden_total']}: {_display_number(outputs.spaceone_quote.total, page)}")
+        if outputs.spaceone_quote.remarks:
+            st.markdown(f"**{page['remarks_label']}**")
+            for remark in outputs.spaceone_quote.remarks:
+                st.write(remark)
+    with moneyforward_tab:
+        st.table(
+            [
+                {
+                    page["column_item"]: row.item_name,
+                    page["column_item_detail"]: row.item_detail,
+                    page["column_unit_price"]: _display_number(row.unit_price_jpy, page),
+                    page["column_qty"]: row.quantity,
+                    page["column_amount"]: _display_number(row.amount_jpy, page),
+                    page["column_notes"]: row.notes or page["no_value"],
+                }
+                for row in outputs.moneyforward.rows
+            ]
+        )
+        st.text_area(page["mf_tsv_label"], value=outputs.moneyforward.tsv_preview, height=180)
+        st.write(f"{page['golden_total']}: {_display_number(outputs.moneyforward.total_jpy, page)}")
+
+
+def _ensure_quote_approval_store() -> QuoteApprovalStore:
+    if "quote_approval_store" not in st.session_state:
+        st.session_state["quote_approval_store"] = QuoteApprovalStore()
+    return st.session_state["quote_approval_store"]
+
+
+def _display_percent(value, page: dict) -> str:
+    if value is None:
+        return page["no_value"]
+    return f"{value:.2%}"
 
 
 def _build_ihi_draft_from_ui(page: dict, case: dict, configuration: str):

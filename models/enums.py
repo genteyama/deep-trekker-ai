@@ -264,6 +264,18 @@ class QuoteDraftStatus(str, Enum):
     SUPERSEDED = "SUPERSEDED"
 
 
+class RemarkSource(str, Enum):
+    GOLDEN_HISTORICAL_SNAPSHOT = "GOLDEN_HISTORICAL_SNAPSHOT"
+    CURRENT_LEAD_TIME = "CURRENT_LEAD_TIME"
+    HUMAN_ENTERED = "HUMAN_ENTERED"
+    HUMAN_CONFIRMED = "HUMAN_CONFIRMED"
+
+
+class QuoteWarningSeverity(str, Enum):
+    CRITICAL = "CRITICAL"
+    WARNING = "WARNING"
+
+
 class RequirementType(str, Enum):
     BASE_PRODUCT = "BASE_PRODUCT"
     SELECTED_OPTION = "SELECTED_OPTION"

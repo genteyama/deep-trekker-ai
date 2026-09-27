@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from models.enums import (
     DestinationRegion,
@@ -19,6 +19,8 @@ from models.enums import (
     InsuranceMode,
     QuoteAdjustmentType,
     QuoteDraftStatus,
+    QuoteWarningSeverity,
+    RemarkSource,
     RequirementType,
     ScenarioCompleteness,
     PriceBasis,
@@ -981,6 +983,10 @@ class QuoteConfigurationLine(BaseModel):
     manufacturer_price_snapshot: Optional[QuotePriceSnapshot] = None
     landed_cost_jpy: Optional[float] = None
     dealer_price_usd: Optional[float] = None
+    dealer_cost_jpy: Optional[float] = None
+    import_tax_jpy: Optional[float] = None
+    insurance_jpy: Optional[float] = None
+    domestic_shipping_jpy: Optional[float] = None
     standard_sales_price_candidate_jpy: Optional[float] = None
     standard_sales_price_candidate_id: Optional[str] = None
     final_sales_price_jpy: Optional[float] = None
@@ -1016,11 +1022,19 @@ class QuoteDraftPricingContext(BaseModel):
     shipping_snapshot_id: Optional[str] = None
     pricing_policy_candidate_ids: list[str] = Field(default_factory=list)
     manufacturer_price_snapshots: list[QuotePriceSnapshot] = Field(default_factory=list)
+    landed_cost_policy_snapshot: Optional[LandedCostPolicyCandidate] = None
     source_references: list[str] = Field(default_factory=list)
+
+
+class QuoteRemark(BaseModel):
+    text: str
+    source: RemarkSource = RemarkSource.HUMAN_ENTERED
+    selected: bool = False
 
 
 class QuoteDraft(BaseModel):
     quote_draft_id: str
+    quote_version: int = 1
     case_id: Optional[str] = None
     customer: Optional[str] = None
     title: Optional[str] = None
@@ -1040,6 +1054,9 @@ class QuoteDraft(BaseModel):
     status: QuoteDraftStatus = QuoteDraftStatus.DRAFT
     warnings: list[str] = Field(default_factory=list)
     remarks: list[str] = Field(default_factory=list)
+    remark_candidates: list[QuoteRemark] = Field(default_factory=list)
+    lead_time_text: Optional[str] = None
+    valid_until: Optional[str] = None
     adjustments: list[QuoteAdjustment] = Field(default_factory=list)
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
@@ -1062,3 +1079,176 @@ class CostScenario(BaseModel):
     gross_profit_jpy: Optional[float] = None
     gross_margin_rate: Optional[float] = None
     status: Optional[str] = None
+
+
+class QuoteWarningItem(BaseModel):
+    message: str
+    severity: QuoteWarningSeverity = QuoteWarningSeverity.WARNING
+
+
+class QuoteApproval(BaseModel):
+    quote_approval_id: str
+    quote_draft_id: str
+    quote_version: int
+    status: QuoteDraftStatus
+    reviewed_by: Optional[str] = None
+    reviewed_at: Optional[datetime] = None
+    approved_by: Optional[str] = None
+    approved_at: Optional[datetime] = None
+    approval_comment: Optional[str] = None
+    warnings_acknowledged: list[str] = Field(default_factory=list)
+    confirmations: dict[str, bool] = Field(default_factory=dict)
+    critical_warnings: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    source_references: list[str] = Field(default_factory=list)
+
+
+class QuoteReviewSummary(BaseModel):
+    quote_draft_id: str
+    quote_version: int
+    status: QuoteDraftStatus
+    customer: Optional[str] = None
+    title: Optional[str] = None
+    configuration_name: Optional[str] = None
+    configuration_rows: list[dict] = Field(default_factory=list)
+    customer_lines: list[dict] = Field(default_factory=list)
+    shipping_description: Optional[str] = None
+    shipping_price_jpy: Optional[float] = None
+    quantities: list[dict] = Field(default_factory=list)
+    subtotal_ex_tax_jpy: Optional[float] = None
+    tax_rate: Optional[float] = None
+    tax_jpy: Optional[float] = None
+    total_jpy: Optional[float] = None
+    total_landed_cost_jpy: Optional[float] = None
+    gross_profit_jpy: Optional[float] = None
+    gross_margin_rate: Optional[float] = None
+    remarks: list[QuoteRemark] = Field(default_factory=list)
+    lead_time_text: Optional[str] = None
+    valid_until: Optional[str] = None
+    unresolved_warnings: list[QuoteWarningItem] = Field(default_factory=list)
+
+
+class ApprovalValidationResult(BaseModel):
+    ready_for_approval: bool
+    current_status: QuoteDraftStatus
+    can_approve: bool
+    blocking_reason: Optional[str] = None
+    critical_warnings: list[str] = Field(default_factory=list)
+    regular_warnings: list[str] = Field(default_factory=list)
+    review_summary: Optional[QuoteReviewSummary] = None
+
+
+class ApprovedQuoteSnapshot(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    approved_quote_snapshot_id: str
+    quote_draft_id: str
+    quote_version: int
+    case_id: Optional[str] = None
+    configuration_name: Optional[str] = None
+    customer: Optional[str] = None
+    title: Optional[str] = None
+    approved_at: datetime
+    approved_by: Optional[str] = None
+    status: QuoteDraftStatus = QuoteDraftStatus.APPROVED
+    configuration_snapshot: list[QuoteConfigurationLine] = Field(default_factory=list)
+    customer_lines_snapshot: list[CustomerQuoteLineDraft] = Field(default_factory=list)
+    shipping_snapshot: list[LandedCostShippingLine] = Field(default_factory=list)
+    manufacturer_price_snapshots: list[QuotePriceSnapshot] = Field(default_factory=list)
+    pricing_policy_references: list[str] = Field(default_factory=list)
+    landed_cost_policy_snapshot: Optional[LandedCostPolicyCandidate] = None
+    exchange_rate: Optional[float] = None
+    subtotal_ex_tax_jpy: Optional[float] = None
+    tax_rate: Optional[float] = None
+    tax_jpy: Optional[float] = None
+    total_jpy: Optional[float] = None
+    total_landed_cost_jpy: Optional[float] = None
+    gross_profit_jpy: Optional[float] = None
+    gross_margin_rate: Optional[float] = None
+    remarks: list[QuoteRemark] = Field(default_factory=list)
+    lead_time_text: Optional[str] = None
+    valid_until: Optional[str] = None
+    quote_number_candidate: Optional[str] = None
+    official_quote_number: Optional[str] = None
+    source_references: list[str] = Field(default_factory=list)
+
+
+class InternalQuoteTransferRow(BaseModel):
+    part_number: Optional[str] = None
+    item_name: Optional[str] = None
+    quantity: int = 1
+    dealer_unit_price_usd: Optional[float] = None
+    dealer_amount_usd: Optional[float] = None
+    dealer_cost_jpy: Optional[float] = None
+    import_tax_jpy: Optional[float] = None
+    insurance_jpy: Optional[float] = None
+    domestic_shipping_jpy: Optional[float] = None
+    landed_subtotal_jpy: Optional[float] = None
+    spaceone_standard_sales_jpy: Optional[float] = None
+    adjusted_unit_price_jpy: Optional[float] = None
+    sales_amount_jpy: Optional[float] = None
+    gross_profit_jpy: Optional[float] = None
+    gross_margin_rate: Optional[float] = None
+    presentation_mode: Optional[CustomerPresentationMode] = None
+    requirement_type: Optional[RequirementType] = None
+
+
+class InternalQuoteTransferPayload(BaseModel):
+    source_approved_quote_snapshot_id: str
+    rows: list[InternalQuoteTransferRow] = Field(default_factory=list)
+    customer_subtotal_ex_tax_jpy: Optional[float] = None
+    customer_tax_jpy: Optional[float] = None
+    customer_total_jpy: Optional[float] = None
+    total_landed_cost_jpy: Optional[float] = None
+    gross_profit_jpy: Optional[float] = None
+    gross_margin_rate: Optional[float] = None
+
+
+class SpaceOneQuoteLine(BaseModel):
+    item_name: Optional[str] = None
+    item_detail: Optional[str] = None
+    unit_price_jpy: Optional[float] = None
+    quantity: int = 1
+    amount_jpy: Optional[float] = None
+
+
+class SpaceOneQuotePayload(BaseModel):
+    source_approved_quote_snapshot_id: str
+    customer: Optional[str] = None
+    title: Optional[str] = None
+    quote_number_candidate: Optional[str] = None
+    official_quote_number: Optional[str] = None
+    issue_date: Optional[str] = None
+    valid_until: Optional[str] = None
+    lines: list[SpaceOneQuoteLine] = Field(default_factory=list)
+    subtotal: Optional[float] = None
+    tax_rate: Optional[float] = None
+    tax: Optional[float] = None
+    total: Optional[float] = None
+    international_shipping_description: Optional[str] = None
+    remarks: list[str] = Field(default_factory=list)
+
+
+class MoneyForwardQuoteRow(BaseModel):
+    item_name: Optional[str] = None
+    item_detail: Optional[str] = None
+    unit_price_jpy: Optional[float] = None
+    quantity: int = 1
+    amount_jpy: Optional[float] = None
+    notes: Optional[str] = None
+
+
+class MoneyForwardQuotePayload(BaseModel):
+    source_approved_quote_snapshot_id: str
+    rows: list[MoneyForwardQuoteRow] = Field(default_factory=list)
+    subtotal_ex_tax_jpy: Optional[float] = None
+    tax_jpy: Optional[float] = None
+    total_jpy: Optional[float] = None
+    tsv_preview: str = ""
+
+
+class QuoteOutputBundle(BaseModel):
+    source_approved_quote_snapshot_id: str
+    internal_transfer: InternalQuoteTransferPayload
+    spaceone_quote: SpaceOneQuotePayload
+    moneyforward: MoneyForwardQuotePayload

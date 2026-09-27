@@ -1,0 +1,16 @@
+{
+  "configuration": "PHOTON",
+  "source": "HUMAN_FINAL_PRICE_INPUT",
+  "note": "Historical IHI prices entered as human final prices for approval acceptance. Not auto-adopted from Golden Quote.",
+  "line_prices_jpy": {
+    "9680-BASE": 3540000,
+    "8459": 160000,
+    "5608": 2220000,
+    "7851-PHOTON": 370000
+  },
+  "shipping_price_jpy": 870000,
+  "tax_rate": 0.1,
+  "expected_subtotal_ex_tax_jpy": 7160000,
+  "expected_tax_jpy": 716000,
+  "expected_total_jpy": 7876000
+}

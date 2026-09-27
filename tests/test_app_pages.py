@@ -39,6 +39,7 @@ def test_home_opens_quote_control_page():
     assert "SpaceOne販売価格ポリシー" in [item.value for item in at.subheader] + visible_text
     assert "案件原価・粗利試算" in [item.value for item in at.subheader] + visible_text
     assert "見積ドラフト作成" in [item.value for item in at.subheader] + visible_text
+    assert "見積レビュー・承認" in [item.value for item in at.subheader] + visible_text
     assert "まだ価格表は読み込んでいません。" in [item.value for item in at.text]
     assert "現在は開発用の整理処理です" in [item.value for item in at.warning]
     assert any(button.label == "価格表を読み込む" for button in at.button)
