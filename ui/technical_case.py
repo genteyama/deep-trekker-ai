@@ -11,6 +11,15 @@ from agents.approval import (
     build_approval_board,
     summarize_approvals,
 )
+from agents.facts import (
+    ERROR_DUPLICATE_FACT,
+    WARNING_REUSABLE,
+    WARNING_TIME_SENSITIVE_REUSABLE,
+    FactRegistrationInput,
+    draft_fact_candidate,
+    fact_registration_warnings,
+    register_technical_fact,
+)
 from agents.technical_case_agent import (
     ERROR_EMPTY_RESPONSE,
     ERROR_NO_QUESTIONS,
@@ -20,7 +29,13 @@ from agents.technical_case_agent import (
     run_manufacturer_response_analysis,
     run_technical_case_analysis,
 )
-from models import CaseRequirement, SuggestedQuestionStatus, TechnicalQuestion
+from models import (
+    CaseRequirement,
+    FactConfidence,
+    FactScope,
+    SuggestedQuestionStatus,
+    TechnicalQuestion,
+)
 from ui.navigation import PAGE_HOME, set_current_page
 from ui.technical_case_flow import SESSION_ANALYSIS, SESSION_CASE, SESSION_INQUIRY
 
@@ -305,6 +320,7 @@ def _render_approval_card(
 
         if item.is_applied:
             st.success(page["applied_message"])
+            _render_fact_registration(page, item)
             return
 
         st.markdown(f"**{page['human_review_label']}**")
@@ -367,6 +383,75 @@ def _render_approval_summary(page: dict, board: ApprovalBoard) -> None:
         st.write(f"{page['suggested_status']['ANSWERED']}: {summary['answered']}")
         st.write(f"{page['suggested_status']['PARTIAL']}: {summary['partial']}")
         st.write(f"{page['suggested_status']['FOLLOW_UP_REQUIRED']}: {summary['follow_up_required']}")
+
+
+def _render_fact_registration(page: dict, item: QuestionApprovalItem) -> None:
+    st.markdown(f"**{page['fact_section_label']}**")
+    question_id = item.question.question_id
+    candidate = draft_fact_candidate(item)
+    scope = st.radio(
+        page["fact_scope_label"],
+        options=list(FactScope),
+        format_func=lambda value: page["fact_scope"][value.value],
+        key=f"fact_scope_{question_id}",
+        index=0,
+    )
+    is_time_sensitive = st.checkbox(
+        page["fact_time_sensitive_label"],
+        key=f"fact_time_{question_id}",
+    )
+    for warning_code in fact_registration_warnings(scope, is_time_sensitive):
+        if warning_code == WARNING_REUSABLE:
+            st.info(page["fact_reusable_confirm"])
+        if warning_code == WARNING_TIME_SENSITIVE_REUSABLE:
+            st.warning(page["fact_time_sensitive_warning"])
+
+    with st.form(f"register_fact_{question_id}"):
+        product = st.text_input(page["fact_product_label"], key=f"fact_product_{question_id}")
+        topic = st.text_input(page["fact_topic_label"], key=f"fact_topic_{question_id}")
+        fact_text = st.text_area(
+            page["fact_text_label"],
+            value=candidate.fact if candidate and candidate.fact else "",
+            key=f"fact_text_{question_id}",
+        )
+        confidence = st.selectbox(
+            page["fact_confidence_label"],
+            options=list(FactConfidence),
+            index=list(FactConfidence).index(FactConfidence.SPACEONE_VERIFIED),
+            format_func=lambda value: page["fact_confidence"][value.value],
+            key=f"fact_confidence_{question_id}",
+        )
+        notes = st.text_area(page["fact_notes_label"], key=f"fact_notes_{question_id}")
+        submitted = st.form_submit_button(
+            page["fact_register_button"],
+            key=f"register_fact_button_{question_id}",
+        )
+
+    if submitted:
+        result = register_technical_fact(
+            item,
+            FactRegistrationInput(
+                product=product,
+                topic=topic,
+                fact=fact_text,
+                scope=scope,
+                is_time_sensitive=is_time_sensitive,
+                confidence=confidence,
+                notes=notes,
+            ),
+        )
+        if result.success:
+            st.success(page["fact_registered_message"])
+        elif result.error_code == ERROR_DUPLICATE_FACT:
+            st.warning(page["fact_duplicate"])
+
+    if item.registered_facts:
+        st.markdown(f"**{page['registered_facts_label']}**")
+        for fact in item.registered_facts:
+            scope_label = page["fact_scope"].get(fact.scope.value, "") if fact.scope else ""
+            st.write(f"- {fact.product or page['unnamed_item']} / {fact.topic or page['unnamed_item']}: {fact.fact}")
+            if scope_label:
+                st.caption(scope_label)
 
 
 def _sync_inquiry_question(inquiry_run: Optional[TechnicalCaseRun], question: TechnicalQuestion) -> None:

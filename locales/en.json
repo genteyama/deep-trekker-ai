@@ -87,7 +87,32 @@
       "summary_total": "Questions",
       "summary_applied": "Applied",
       "summary_pending": "Pending",
-      "evidence_label": "Evidence"
+      "evidence_label": "Evidence",
+      "fact_section_label": "Organize as technical fact",
+      "fact_register_button": "Register as technical fact",
+      "fact_registered_message": "Registered as a technical fact",
+      "fact_duplicate": "This technical fact is already registered",
+      "fact_product_label": "Product",
+      "fact_topic_label": "Topic",
+      "fact_text_label": "Technical fact",
+      "fact_scope_label": "Scope",
+      "fact_scope": {
+        "CASE_ONLY": "This case only",
+        "PRODUCT_REUSABLE": "Reusable in other cases"
+      },
+      "fact_time_sensitive_label": "Time-sensitive",
+      "fact_confidence_label": "Confidence",
+      "fact_notes_label": "Notes",
+      "fact_reusable_confirm": "This information will be reused in other cases. Check that conditions and assumptions are included.",
+      "fact_time_sensitive_warning": "This may change over time. Do not treat it as permanent product knowledge.",
+      "fact_confidence": {
+        "MANUFACTURER_CONFIRMED": "Manufacturer confirmed",
+        "SPACEONE_VERIFIED": "Space One verified",
+        "CUSTOMER_INFORMATION": "Customer information",
+        "PAST_CASE": "Past case",
+        "AI_EXTRACTED_UNVERIFIED": "AI extracted, unverified"
+      },
+      "registered_facts_label": "Registered technical facts"
     }
   }
 }

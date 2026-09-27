@@ -50,6 +50,7 @@ class QuestionApprovalItem:
         self.ai_candidate = ai_candidate
         self.approval: Optional[ApprovalRecord] = None
         self.answer: Optional[TechnicalAnswer] = None
+        self.registered_facts: list = []
 
     @property
     def is_applied(self) -> bool:

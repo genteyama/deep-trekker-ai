@@ -87,7 +87,32 @@
       "summary_total": "全質問数",
       "summary_applied": "反映済み",
       "summary_pending": "未反映",
-      "evidence_label": "根拠テキスト"
+      "evidence_label": "根拠テキスト",
+      "fact_section_label": "技術情報として整理",
+      "fact_register_button": "技術情報として登録",
+      "fact_registered_message": "技術情報として登録しました",
+      "fact_duplicate": "同じ内容の技術情報は、すでに登録されています",
+      "fact_product_label": "製品",
+      "fact_topic_label": "トピック",
+      "fact_text_label": "技術情報本文",
+      "fact_scope_label": "適用範囲",
+      "fact_scope": {
+        "CASE_ONLY": "この案件のみ",
+        "PRODUCT_REUSABLE": "他案件でも参照可能"
+      },
+      "fact_time_sensitive_label": "時間依存情報",
+      "fact_confidence_label": "確信度",
+      "fact_notes_label": "備考",
+      "fact_reusable_confirm": "この情報は今後ほかの案件でも参照されます。条件や前提が抜けていないか確認してください。",
+      "fact_time_sensitive_warning": "時間によって変わる可能性があります。恒久的な製品情報として扱わないことを推奨します。",
+      "fact_confidence": {
+        "MANUFACTURER_CONFIRMED": "メーカー確認済み",
+        "SPACEONE_VERIFIED": "スペースワン確認済み",
+        "CUSTOMER_INFORMATION": "顧客情報",
+        "PAST_CASE": "過去案件",
+        "AI_EXTRACTED_UNVERIFIED": "AI抽出・未確認"
+      },
+      "registered_facts_label": "登録済み技術情報"
     }
   }
 }

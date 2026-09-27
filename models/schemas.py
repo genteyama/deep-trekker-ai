@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 from models.enums import (
     FactConfidence,
+    FactScope,
     MatchConfidence,
     QuestionStatus,
     QuestionTarget,
@@ -95,6 +96,22 @@ class TechnicalAnswer(BaseModel):
     original_text: Optional[str] = None
 
 
+class TechnicalFactCandidate(BaseModel):
+    fact_candidate_id: str
+    case_id: Optional[str] = None
+    question_id: Optional[str] = None
+    answer_id: Optional[str] = None
+    product: Optional[str] = None
+    topic: Optional[str] = None
+    fact: Optional[str] = None
+    scope: Optional[FactScope] = None
+    source_type: Optional[str] = None
+    source_reference: Optional[str] = None
+    suggested_confidence: Optional[FactConfidence] = None
+    notes: Optional[str] = None
+    is_time_sensitive: bool = False
+
+
 class TechnicalFact(BaseModel):
     fact_id: str
     case_id: str
@@ -105,6 +122,9 @@ class TechnicalFact(BaseModel):
     source_reference: Optional[str] = None
     confidence: Optional[FactConfidence] = None
     status: Optional[str] = None
+    scope: Optional[FactScope] = None
+    is_time_sensitive: bool = False
+    notes: Optional[str] = None
 
 
 class ConfigurationItem(BaseModel):

@@ -71,6 +71,8 @@ def test_manufacturer_response_button_shows_mock_matches():
     assert DEFAULT_RESPONSE_SUMMARY in visible_text
     assert "回答あり" in visible_text
     assert "質問に含まれていない追加情報" in " ".join(visible_text)
+    assert "技術情報として整理" not in " ".join(visible_text)
+    assert not any(button.label == "技術情報として登録" for button in at.button)
     assert at.error.len == 0
 
 
@@ -92,6 +94,34 @@ def test_apply_button_marks_manufacturer_question_applied():
     assert "確認済みとして反映しました" in success_text
     assert "反映済み" in " ".join([item.value for item in at.caption] + visible_text)
     assert "未反映: 0" in visible_text
+    assert "技術情報として整理" in " ".join(visible_text)
+    assert any(button.label == "技術情報として登録" for button in at.button)
+
+
+def test_human_can_register_technical_fact_from_applied_answer():
+    at = _start_app()
+    at.button(key="open_technical_case").click().run()
+    at.text_area(key="input_customer_inquiry").set_value("管内点検の相談です。")
+    at.button(key="analyze_inquiry").click().run()
+    at.text_area(key="input_manufacturer_response").set_value("メーカーからの返信サンプルです。")
+    at.button(key="organize_manufacturer_response").click().run()
+    [button for button in at.button if button.label == "この内容で反映"][0].click().run()
+
+    question_id = at.session_state["manufacturer_approval_board"].items[0].question.question_id
+    at.text_input(key=f"fact_product_{question_id}").set_value("MAG Utility Crawler")
+    at.text_input(key=f"fact_topic_{question_id}").set_value("surface_transition")
+    at.text_area(key=f"fact_text_{question_id}").set_value("MAGは異なる面へ連続して移動できない。")
+    at.button(key=f"register_fact_button_{question_id}").click().run()
+
+    board_item = at.session_state["manufacturer_approval_board"].items[0]
+    success_text = [entry.value for entry in at.success]
+    visible_text = [entry.value for entry in at.text] + [entry.value for entry in at.markdown]
+
+    assert "技術情報として登録しました" in success_text
+    assert len(board_item.registered_facts) == 1
+    assert board_item.registered_facts[0].scope.value == "CASE_ONLY"
+    assert board_item.registered_facts[0].confidence.value != "MANUFACTURER_CONFIRMED"
+    assert "登録済み技術情報" in " ".join(visible_text)
 
 
 def test_back_button_returns_to_home():
