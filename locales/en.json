@@ -298,6 +298,7 @@
       "remarks_caption": "Golden historical snapshot only. Current lead time is not updated.",
       "draft_status_label": "Draft status",
       "tax_rate_label": "Tax rate",
+      "apply_description_button": "Apply description",
       "min_margin_label": "Minimum margin reference",
       "dependency_choice_label": "2601 customer presentation",
       "dependency_undecided": "Undecided",
@@ -439,6 +440,7 @@
         "metric_margin": "Gross margin",
         "no_current_step_detail": "This step is available after a quote draft is created.",
         "unset_label": "Not set",
+        "pending_price_key_ambiguous": "Pending sales price for SKU {sku} was not restored because this quote has multiple lines with that SKU. Enter the value on each line.",
         "warning_title": "Items need review",
         "warning_details": "Warning details",
         "warning_kinds": {

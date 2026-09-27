@@ -100,6 +100,8 @@ def customer_facing_preview(draft) -> list[dict]:
     for line in draft.customer_lines:
         rows.append(
             {
+                "customer_quote_line_id": line.customer_quote_line_id,
+                "source_configuration_line_ids": list(line.source_configuration_line_ids),
                 "display_name": line.display_name,
                 "description": line.description,
                 "quantity": line.quantity,

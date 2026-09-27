@@ -19,6 +19,7 @@ from agents.quote_builder import (
     apply_shipping_final_price,
     apply_tax_rate,
     apply_valid_until,
+    refresh_quote_draft,
 )
 from agents.quote_dates import date_widget_keys, format_quote_date
 from data.golden_cases.loader import IHI_QUOTE_001, load_quote_golden_case
@@ -41,10 +42,19 @@ from ui.components.quote_summary import render_costing_summary, render_summary_c
 from ui.components.warning_panel import render_validation_warnings, render_warning_panel
 from ui.quote_format import display_number, display_percent, display_yen
 from ui.quote_persistence import (
+    PENDING_FORM_KEY,
     SESSION_SAVE_ERROR,
     SESSION_SAVE_STATUS,
+    clear_pending_description,
+    clear_pending_final_price,
+    clear_pending_presentation,
+    clear_pending_shipping,
+    clear_pending_tax,
+    customer_description_widget_key,
     get_quote_repository,
     maybe_autosave,
+    reset_pending_form,
+    restore_pending_form_widgets,
     save_draft_now,
 )
 from ui.quote_steps import (
@@ -60,6 +70,7 @@ from ui.quote_steps import (
 
 def render_quote_workspace(page: dict, helpers: dict) -> None:
     restore_review_widget_state(st.session_state)
+    restore_pending_form_widgets(st.session_state, st.session_state.get("quote_draft"))
     draft = st.session_state.get("quote_draft")
     snapshot = st.session_state.get("approved_quote_snapshot")
     validation = st.session_state.get("quote_approval_validation")
@@ -140,7 +151,8 @@ def _create_draft(page: dict, helpers, case: dict, configuration: str) -> None:
     if draft is not None:
         helpers["init_date_widgets"](draft, overwrite=True)
         st.session_state[SESSION_QUOTE_STEP] = 1
-        _save_draft(page, draft, manual=True)
+        reset_pending_form(st.session_state, 1)
+        _save_draft(page, draft, manual=True, from_widgets=False)
         st.rerun()
 
 
@@ -192,6 +204,7 @@ def _render_2601_choice(page: dict, draft) -> None:
             CustomerPresentationMode(choice),
             bundled_into_line_id=parent.line_id if choice == "BUNDLED_WITH_PARENT" and parent else None,
         )
+        clear_pending_presentation(st.session_state)
         st.session_state["quote_draft"] = draft
         st.rerun()
 
@@ -199,6 +212,7 @@ def _render_2601_choice(page: dict, draft) -> None:
 def _render_step_costing(page: dict, draft) -> None:
     st.subheader(page["workspace"]["step_costing"])
     render_warning_panel(page, draft)
+    _render_pending_price_key_reviews(page)
     render_costing_summary(page, draft)
     empty = page["workspace"].get("unset_label", "未設定")
     st.table(
@@ -217,6 +231,7 @@ def _render_step_costing(page: dict, draft) -> None:
         render_price_adjustment(page, line)
         if st.button(page["use_standard_button"], key=f"use_standard_{line.line_id}"):
             apply_final_price(draft, line.line_id, FinalPriceStatus.USE_STANDARD_CANDIDATE)
+            clear_pending_final_price(st.session_state, line)
             st.session_state["quote_draft"] = draft
             st.rerun()
         entered = st.text_input(page["manual_price_label"], key=f"manual_price_{line.line_id}")
@@ -229,6 +244,7 @@ def _render_step_costing(page: dict, draft) -> None:
                     amount_jpy=float(entered),
                     reason="UI manual override",
                 )
+                clear_pending_final_price(st.session_state, line)
                 st.session_state["quote_draft"] = draft
                 st.rerun()
             except (TypeError, ValueError):
@@ -250,6 +266,7 @@ def _render_step_costing(page: dict, draft) -> None:
     if shipping_text and st.button(page["apply_shipping_price_button"], key="apply_draft_shipping"):
         try:
             apply_shipping_final_price(draft, float(shipping_text))
+            clear_pending_shipping(st.session_state)
             st.session_state["quote_draft"] = draft
             st.rerun()
         except (TypeError, ValueError):
@@ -284,6 +301,22 @@ def _render_step_customer(page: dict, draft) -> None:
             for row in rows
         ]
     )
+    for row in rows:
+        line_id = row.get("customer_quote_line_id") or row.get("display_name")
+        if not line_id:
+            continue
+        key = customer_description_widget_key(str(line_id))
+        st.text_area(
+            f"{page['column_item_detail']}：{row.get('display_name') or empty}",
+            key=key,
+        )
+        if row.get("line_kind") == "SHIPPING":
+            continue
+        if st.button(page.get("apply_description_button", "説明を反映"), key=f"apply_description_{line_id}"):
+            _apply_pending_description(draft, row, st.session_state.get(key) or "")
+            clear_pending_description(st.session_state, str(line_id))
+            st.session_state["quote_draft"] = draft
+            st.rerun()
     st.markdown("<hr class='section-rule' />", unsafe_allow_html=True)
     render_summary_cards(
         [
@@ -297,6 +330,7 @@ def _render_step_customer(page: dict, draft) -> None:
     if tax_text and st.button(page["apply_manual_price_button"], key="apply_draft_tax"):
         try:
             apply_tax_rate(draft, float(tax_text))
+            clear_pending_tax(st.session_state)
             st.session_state["quote_draft"] = draft
             st.rerun()
         except (TypeError, ValueError):
@@ -533,17 +567,32 @@ def render_quote_debug_details(page: dict) -> None:
             st.caption(item)
 
 
-def _save_draft(page: dict, draft, *, manual: bool) -> None:
+def _save_draft(page: dict, draft, *, manual: bool, from_widgets: bool = True) -> None:
     workspace = page["workspace"]
     st.session_state[SESSION_SAVE_STATUS] = "saving"
     try:
         if manual:
-            save_draft_now(get_quote_repository(), draft, st.session_state)
+            save_draft_now(get_quote_repository(), draft, st.session_state, from_widgets=from_widgets)
         else:
-            maybe_autosave(get_quote_repository(), draft, st.session_state)
+            maybe_autosave(get_quote_repository(), draft, st.session_state, from_widgets=from_widgets)
     except QuoteRepositoryError as error:
         st.session_state[SESSION_SAVE_ERROR] = str(error)
         st.error(workspace.get("save_failed", str(error)))
+
+
+def _render_pending_price_key_reviews(page: dict) -> None:
+    stored = st.session_state[PENDING_FORM_KEY] if PENDING_FORM_KEY in st.session_state else {}
+    reviews = (stored or {}).get("pending_final_price_reviews") or []
+    if not reviews:
+        return
+    template = page["workspace"].get(
+        "pending_price_key_ambiguous",
+        "SKU {sku} の入力途中売価は、同一見積に複数行があるため復元しません。行ごとに入力してください。",
+    )
+    for review in reviews:
+        if review.get("reason") != "ambiguous_sku":
+            continue
+        st.warning(template.format(sku=review.get("sku") or ""))
 
 
 def _resume_draft(page: dict, helpers, quote_draft_id: str, version: int) -> None:
@@ -554,6 +603,24 @@ def _resume_draft(page: dict, helpers, quote_draft_id: str, version: int) -> Non
     ):
         st.rerun()
     st.error(page["workspace"].get("resume_failed", "下書きを開けませんでした。"))
+
+
+def _apply_pending_description(draft, row: dict, text: str) -> None:
+    source_ids = row.get("source_configuration_line_ids") or []
+    line_id = row.get("customer_quote_line_id")
+    customer = next(
+        (item for item in draft.customer_lines if item.customer_quote_line_id == line_id),
+        None,
+    )
+    if customer is not None:
+        source_ids = customer.source_configuration_line_ids or source_ids
+        customer.description = text or None
+    for config in draft.configuration_lines:
+        if config.line_id in source_ids or (
+            customer is not None and config.line_id in (customer.source_configuration_line_ids or [])
+        ):
+            config.customer_description = text or None
+    refresh_quote_draft(draft)
 
 
 def _line_status_label(workspace: dict, line) -> str:

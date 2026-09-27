@@ -408,6 +408,118 @@ def test_new_quote_buttons_remain_after_draft_is_created():
     assert any(getattr(item, "key", None) == "save_quote_draft" for item in at.button)
 
 
+def test_pending_form_values_resume_without_applying_or_widget_exception():
+    from datetime import date
+
+    from agents.quote_dates import date_widget_keys
+    from repositories.sqlite_quote_repository import SqliteQuoteRepository
+    from tests.test_quote_builder import _photon_draft
+    from ui.quote_persistence import customer_description_widget_key, manual_price_widget_key
+    from ui.quote_steps import persist_review_key
+
+    draft = _photon_draft()
+    base = next(line for line in draft.configuration_lines if line.manufacturer_sku == "9680-BASE")
+    customer = next(line for line in draft.customer_lines if line.line_kind == "PRODUCT")
+    remark = draft.remark_candidates[0].text
+    official_base = base.final_sales_price_jpy
+    official_shipping = next(line for line in draft.customer_lines if line.line_kind == "SHIPPING").amount_jpy
+    official_tax = draft.tax_rate
+    official_description = customer.description
+    official_remarks = list(draft.remarks)
+    keys = date_widget_keys(draft.quote_draft_id)
+
+    at = _start_app()
+    at.button(key="open_quote_control").click().run()
+    at.session_state["quote_draft"] = draft
+    at.session_state["quote_workspace_step"] = 2
+    at.run()
+    assert not at.exception
+    at.text_input(key=manual_price_widget_key(base.line_id)).set_value("3540000").run()
+    at.text_input(key="input_draft_shipping_price").set_value("870000").run()
+    at.button(key="quote_step_3").click().run()
+    at.text_input(key="input_draft_tax_rate").set_value("0.10").run()
+    at.text_area(key=customer_description_widget_key(customer.customer_quote_line_id)).set_value("途中の説明").run()
+    at.button(key="quote_step_4").click().run()
+    at.multiselect(key="input_selected_remarks").set_value([remark]).run()
+    at.date_input(key=keys["issue"]).set_value(date(2026, 9, 27)).run()
+    at.checkbox(key=keys["auto"]).set_value(True).run()
+    at.button(key="save_quote_draft").click().run()
+    assert not at.exception
+    assert at.session_state["quote_draft"].configuration_lines[0].final_sales_price_jpy == official_base
+    assert next(line for line in at.session_state["quote_draft"].customer_lines if line.line_kind == "SHIPPING").amount_jpy == official_shipping
+    assert at.session_state["quote_draft"].tax_rate == official_tax
+
+    loaded = SqliteQuoteRepository().get_draft(draft.quote_draft_id)
+    assert loaded.ui_state["pending_final_prices"][base.line_id] == "3540000"
+    assert loaded.ui_state["pending_shipping_customer_price"] == "870000"
+    assert loaded.ui_state["pending_tax_rate"] == "0.10"
+    assert loaded.ui_state["pending_customer_descriptions"][customer.customer_quote_line_id] == "途中の説明"
+    assert remark in loaded.ui_state["selected_remarks"]
+    assert loaded.draft.remarks == official_remarks
+    assert next(
+        line for line in loaded.draft.customer_lines if line.customer_quote_line_id == customer.customer_quote_line_id
+    ).description == official_description
+
+    resumed = _start_app()
+    resumed.button(key="open_quote_control").click().run()
+    resume = next((button for button in resumed.button if button.label == "作業を再開"), None)
+    assert resume is not None
+    resume.click().run()
+    assert not resumed.exception
+    assert resumed.session_state["quote_draft"].quote_draft_id == draft.quote_draft_id
+    resumed.button(key="quote_step_2").click().run()
+    assert not resumed.exception
+    assert resumed.session_state[manual_price_widget_key(base.line_id)] == "3540000"
+    assert resumed.session_state["input_draft_shipping_price"] == "870000"
+    assert resumed.session_state["quote_draft"].configuration_lines[0].final_sales_price_jpy == official_base
+    resumed.button(key="quote_step_3").click().run()
+    assert not resumed.exception
+    assert resumed.session_state["input_draft_tax_rate"] == "0.10"
+    assert resumed.session_state[customer_description_widget_key(customer.customer_quote_line_id)] == "途中の説明"
+    resumed.button(key="quote_step_4").click().run()
+    assert not resumed.exception
+    assert remark in resumed.session_state["input_selected_remarks"]
+    assert resumed.session_state[keys["issue"]] == date(2026, 9, 27)
+    assert resumed.session_state[keys["auto"]] is True
+    persist_key = persist_review_key("input_selected_remarks")
+    assert persist_key in resumed.session_state
+    assert resumed.session_state[persist_key] == resumed.session_state["input_selected_remarks"]
+
+
+def test_export_inputs_resume_without_changing_snapshot():
+    from tests.test_quote_approval import _approve, _ready_photon
+    from repositories.sqlite_quote_repository import SqliteQuoteRepository
+
+    draft = _ready_photon()
+    _, snapshot = _approve(draft)
+    original_id = snapshot.approved_quote_snapshot_id
+    repo = SqliteQuoteRepository()
+    repo.save_snapshot(snapshot)
+    repo.save_draft(
+        draft,
+        {
+            "step": 5,
+            "pending_official_quote_number": "8195",
+            "pending_generated_by": "Gen Oteyama",
+        },
+    )
+
+    at = _start_app()
+    at.button(key="open_quote_control").click().run()
+    resume = next((button for button in at.button if button.label == "作業を再開"), None)
+    assert resume is not None
+    resume.click().run()
+    assert not at.exception
+    if at.session_state["quote_workspace_step"] != 5:
+        at.button(key="quote_step_5").click().run()
+    assert not at.exception
+    assert at.session_state["input_official_quote_number"] == "8195"
+    assert at.session_state["input_export_generated_by"] == "Gen Oteyama"
+    assert at.session_state["approved_quote_snapshot"].approved_quote_snapshot_id == original_id
+    assert at.session_state["approved_quote_snapshot"].official_quote_number is None
+    assert at.session_state["approved_quote_snapshot"].total_jpy == 7876000
+
+
 def test_brand_logos_are_local_assets():
     from ui.theme import BRAND_LOGOS, DEEPTREKKER_LOGO, PIPETREKKER_LOGO, SPACEONE_LOGO
 

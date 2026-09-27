@@ -298,6 +298,7 @@
       "remarks_caption": "Golden Historical Snapshotです。Current Lead Timeへは反映しません。",
       "draft_status_label": "Draft Status",
       "tax_rate_label": "消費税率",
+      "apply_description_button": "説明を反映",
       "min_margin_label": "最低粗利率参考値",
       "dependency_choice_label": "2601 顧客表示",
       "dependency_undecided": "未決定",
@@ -439,6 +440,7 @@
         "metric_margin": "粗利率",
         "no_current_step_detail": "この工程の詳細は、見積ドラフト作成後に表示されます。",
         "unset_label": "未設定",
+        "pending_price_key_ambiguous": "SKU {sku} の入力途中売価は、同一見積に複数行があるため復元しません。行ごとに入力してください。",
         "warning_title": "要確認があります",
         "warning_details": "警告の詳細",
         "warning_kinds": {
