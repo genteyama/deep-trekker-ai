@@ -76,3 +76,74 @@ class PriceBookDiffType(str, Enum):
     NOTES_CHANGED = "NOTES_CHANGED"
     REMOVED_SKU = "REMOVED_SKU"
     UNCHANGED = "UNCHANGED"
+
+
+class SkuSourceStatus(str, Enum):
+    ACTIVE = "ACTIVE"
+    OBSOLETE = "OBSOLETE"
+
+
+class SkuDuplicateClass(str, Enum):
+    DUPLICATE_SAME = "DUPLICATE_SAME"
+    DUPLICATE_CONTEXT_DIFFERENT = "DUPLICATE_CONTEXT_DIFFERENT"
+    PRICE_CONFLICT = "PRICE_CONFLICT"
+
+
+class RecordStatus(str, Enum):
+    CANDIDATE = "CANDIDATE"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+    SUPERSEDED = "SUPERSEDED"
+
+
+class YesNoUnknown(str, Enum):
+    YES = "YES"
+    NO = "NO"
+    UNKNOWN = "UNKNOWN"
+
+
+class ShippingType(str, Enum):
+    LARGE_BOX = "LARGE_BOX"
+    SMALL_BOX = "SMALL_BOX"
+    PIPE_TREKKER = "PIPE_TREKKER"
+    CUSTOM = "CUSTOM"
+
+
+class DestinationRegion(str, Enum):
+    USA = "USA"
+    EUROPE_UK = "EUROPE_UK"
+    GLOBAL = "GLOBAL"
+    JAPAN = "JAPAN"
+    CUSTOM = "CUSTOM"
+
+
+class ShippingScopeType(str, Enum):
+    STANDARD = "STANDARD"
+    CASE_SPECIFIC = "CASE_SPECIFIC"
+
+
+class UpdateSourceType(str, Enum):
+    DEALER_UPDATE_EMAIL = "DEALER_UPDATE_EMAIL"
+    DIRECT_EMAIL = "DIRECT_EMAIL"
+    WHATSAPP = "WHATSAPP"
+    SUPPLIER_QUOTE = "SUPPLIER_QUOTE"
+    MEETING = "MEETING"
+    PHONE = "PHONE"
+    MANUAL = "MANUAL"
+
+
+class UpdateCategory(str, Enum):
+    SHIPPING = "SHIPPING"
+    LEAD_TIME = "LEAD_TIME"
+    PRODUCT_SPEC = "PRODUCT_SPEC"
+    PRICE = "PRICE"
+    PRODUCT_STATUS = "PRODUCT_STATUS"
+    WARRANTY = "WARRANTY"
+    FIRMWARE = "FIRMWARE"
+    MARKETING_MATERIAL = "MARKETING_MATERIAL"
+    OTHER = "OTHER"
+
+
+class UpdateConfidence(str, Enum):
+    RULE_BASED_UNVERIFIED = "RULE_BASED_UNVERIFIED"
+    MANUAL_UNVERIFIED = "MANUAL_UNVERIFIED"

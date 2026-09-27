@@ -1,3 +1,4 @@
+from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 
@@ -92,6 +93,100 @@ def missing_columns_price_book() -> BytesIO:
             ]
         }
     )
+
+
+def official_dt40_style_book() -> BytesIO:
+    return build_workbook(
+        {
+            "CONFIG": [
+                ["Dealer Retail:", "D_MSRP"],
+                ["Discount Code:", "E_DT-40"],
+            ],
+            "PHOTON": [
+                ["Product:", "PHOTON"],
+                [None, None, None, " PHOTON MSRP"],
+                [None, "Part Number", "Description", "MSRP", "DT40", "Notes:"],
+                [None, None, "PRICING HAS BEEN UPDATED FOR APRIL 1ST, 2026", "MSRP USD", "Deep Trekker Dealer 40% Discount"],
+                [None, None, None, 1, 0.6],
+                [None, "9680-BASE", "PHOTON BASE PACKAGE", 17391, 10434.6, "Base package"],
+                [None, "2535", "GAME PAD", 105, 105, "*** NO DEALER DISCOUNT - Requires Bridge Box"],
+                [None, "9757-2", "BRIDGE BOX, ROV", 3280, 1968, None],
+                [None, "00123", "LEADING ZERO SAMPLE", 10, 6, None],
+            ],
+            "PIVOT": [
+                [None, "Part Number", "Description", "MSRP", "DT40", "Notes:"],
+                [None, "2535", "GAME PAD", 105, 105, "*** NO DEALER DISCOUNT - Requires Bridge Box"],
+                [None, "8998", "CONTROLLER CABLE SUPPORT", 381, 228.6, "PIVOT note"],
+            ],
+            "REVOLUTION-OBSOLETE": [
+                [None, "Part Number", "Description", "MSRP", "DT40", "Notes:"],
+                [None, "7511-SC-BASE", "Obsolete package", 1000, 600, "obsolete"],
+                [None, "8998", "CONTROLLER CABLE SUPPORT", 381, 228.6, "OBSOLETE note"],
+            ],
+        }
+    )
+
+
+def official_pt30_style_book() -> BytesIO:
+    return build_workbook(
+        {
+            "CONFIG": [
+                ["Dealer Retail:", "D_MSRP"],
+                ["Discount Code:", "E_PT-30"],
+            ],
+            "A-150": [
+                [None, "Part Number", "Description", "MSRP", "PT30", "Notes:"],
+                [None, "11000S", "A-150 S", 47500, 33250, "Base system"],
+            ],
+            "A-200": [
+                [None, "Part Number", "Description", "MSRP", "PT30", "Notes:"],
+                [None, "10800S", "A-200S", 52500, 36750, None],
+            ],
+        }
+    )
+
+
+def duplicate_same_price_book() -> BytesIO:
+    return build_workbook(
+        {
+            "PHOTON": [
+                ["Part Number", "Description", "MSRP", "Dealer Price", "Notes"],
+                ["2535", "GAME PAD", 105, 105, "NO DEALER DISCOUNT"],
+            ],
+            "PIVOT": [
+                ["Part Number", "Description", "MSRP", "Dealer Price", "Notes"],
+                ["2535", "GAME PAD", 105, 105, "NO DEALER DISCOUNT"],
+            ],
+        }
+    )
+
+
+def price_conflict_book() -> BytesIO:
+    return build_workbook(
+        {
+            "PHOTON": [
+                ["Part Number", "Description", "MSRP", "Dealer Price", "Notes"],
+                ["11490", "ALL TERRAIN WHEELS", 1945, 1361.5, None],
+            ],
+            "A-200": [
+                ["Part Number", "Description", "MSRP", "Dealer Price", "Notes"],
+                ["11490", "ALL TERRAIN WHEELS", 77000, 68701.1, None],
+            ],
+        }
+    )
+
+
+def datetime_sku_book() -> BytesIO:
+    workbook = Workbook()
+    worksheet = workbook.active
+    worksheet.title = "PHOTON"
+    worksheet.append(["Part Number", "Description", "MSRP", "Dealer Price", "Notes"])
+    worksheet.append([datetime(9757, 2, 1), "Broken date SKU", 3280, 1968, None])
+    worksheet.append(["2500-1", "BRIDGE CONSOLE ONLY, NO DPK", 26250, 15750, None])
+    buffer = BytesIO()
+    workbook.save(buffer)
+    buffer.seek(0)
+    return buffer
 
 
 def previous_master_book() -> BytesIO:

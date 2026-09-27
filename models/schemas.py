@@ -4,6 +4,7 @@ from typing import Optional
 from pydantic import BaseModel, Field
 
 from models.enums import (
+    DestinationRegion,
     FactConfidence,
     FactScope,
     MatchConfidence,
@@ -11,9 +12,18 @@ from models.enums import (
     QuestionStatus,
     QuestionTarget,
     RecommendationOrigin,
+    RecordStatus,
     RelationType,
+    ShippingScopeType,
+    ShippingType,
+    SkuDuplicateClass,
+    SkuSourceStatus,
     SuggestedQuestionStatus,
+    UpdateCategory,
+    UpdateConfidence,
+    UpdateSourceType,
     ValidationSeverity,
+    YesNoUnknown,
 )
 
 
@@ -153,12 +163,44 @@ class SKU(BaseModel):
     msrp_usd: Optional[float] = None
     dealer_price_usd: Optional[float] = None
     dealer_rate: Optional[float] = None
+    dealer_equals_msrp: bool = False
+    no_dealer_discount_note: bool = False
     notes: Optional[str] = None
     source_price_book: Optional[str] = None
     source_sheet: Optional[str] = None
+    source_row: Optional[int] = None
+    source_status: Optional[SkuSourceStatus] = SkuSourceStatus.ACTIVE
     price_book_version: Optional[str] = None
     effective_date: Optional[datetime] = None
     last_synced_at: Optional[datetime] = None
+
+
+class SKUSourceOccurrence(BaseModel):
+    sku: str
+    source_price_book: Optional[str] = None
+    source_sheet: Optional[str] = None
+    source_row: Optional[int] = None
+    description: Optional[str] = None
+    msrp_usd: Optional[float] = None
+    dealer_price_usd: Optional[float] = None
+    notes: Optional[str] = None
+    source_status: Optional[SkuSourceStatus] = SkuSourceStatus.ACTIVE
+    dealer_equals_msrp: bool = False
+    no_dealer_discount_note: bool = False
+
+
+class SKUMasterCandidate(BaseModel):
+    sku: str
+    description: Optional[str] = None
+    msrp_usd: Optional[float] = None
+    dealer_price_usd: Optional[float] = None
+    dealer_rate: Optional[float] = None
+    dealer_equals_msrp: bool = False
+    no_dealer_discount_note: bool = False
+    source_status: Optional[SkuSourceStatus] = SkuSourceStatus.ACTIVE
+    occurrence_count: int = 1
+    duplicate_class: Optional[SkuDuplicateClass] = None
+    occurrences: list[SKUSourceOccurrence] = Field(default_factory=list)
 
 
 class SKURelation(BaseModel):
@@ -212,6 +254,9 @@ class PriceBookSheetSummary(BaseModel):
     model: Optional[str] = None
     item_count: int = 0
     header_found: bool = False
+    skipped: bool = False
+    skip_reason: Optional[str] = None
+    source_status: Optional[SkuSourceStatus] = None
 
 
 class PriceBookImportResult(BaseModel):
@@ -220,6 +265,8 @@ class PriceBookImportResult(BaseModel):
     imported_at: Optional[datetime] = None
     sheets: list[PriceBookSheetSummary] = Field(default_factory=list)
     items: list[SKU] = Field(default_factory=list)
+    occurrences: list[SKUSourceOccurrence] = Field(default_factory=list)
+    candidates: list[SKUMasterCandidate] = Field(default_factory=list)
     warnings: list[PriceBookIssue] = Field(default_factory=list)
     errors: list[PriceBookIssue] = Field(default_factory=list)
     infos: list[PriceBookIssue] = Field(default_factory=list)
@@ -264,6 +311,67 @@ class PricingPolicy(BaseModel):
     domestic_shipping_jpy: Optional[float] = None
     target_gross_margin_rate: Optional[float] = None
     rounding_unit: Optional[float] = None
+
+
+SHIPPING_RULE_PRIORITY = (
+    "SUPPLIER_QUOTE_CASE_SPECIFIC",
+    "MANUFACTURER_CASE_SPECIFIC_REPLY",
+    "LATEST_DEALER_UPDATE_STANDARD",
+    "PAST_CASE_ACTUAL",
+    "UNKNOWN_NEEDS_REVIEW",
+)
+
+
+class ShippingRule(BaseModel):
+    shipping_rule_id: str
+    shipping_type: Optional[ShippingType] = None
+    destination_region: Optional[DestinationRegion] = None
+    rate_usd: Optional[float] = None
+    currency: str = "USD"
+    dangerous_goods: YesNoUnknown = YesNoUnknown.UNKNOWN
+    battery_included: YesNoUnknown = YesNoUnknown.UNKNOWN
+    product_scope: Optional[str] = None
+    sku_scope: list[str] = Field(default_factory=list)
+    case_id: Optional[str] = None
+    scope_type: ShippingScopeType = ShippingScopeType.STANDARD
+    source_type: Optional[str] = None
+    source_reference: Optional[str] = None
+    announced_at: Optional[datetime] = None
+    effective_from: Optional[datetime] = None
+    effective_until: Optional[datetime] = None
+    status: RecordStatus = RecordStatus.CANDIDATE
+    notes: Optional[str] = None
+    update_candidate_id: Optional[str] = None
+
+
+class UpdateSource(BaseModel):
+    update_source_id: str
+    source_type: Optional[UpdateSourceType] = None
+    source_title: Optional[str] = None
+    source_sender: Optional[str] = None
+    source_date: Optional[datetime] = None
+    source_text: Optional[str] = None
+    source_reference: Optional[str] = None
+    imported_at: Optional[datetime] = None
+
+
+class UpdateCandidate(BaseModel):
+    update_candidate_id: str
+    update_source_id: str
+    category: Optional[UpdateCategory] = None
+    title: Optional[str] = None
+    summary: Optional[str] = None
+    product: Optional[str] = None
+    sku: Optional[str] = None
+    old_value: Optional[str] = None
+    new_value: Optional[str] = None
+    unit: Optional[str] = None
+    effective_from: Optional[datetime] = None
+    is_time_sensitive: bool = False
+    confidence: Optional[UpdateConfidence] = None
+    status: RecordStatus = RecordStatus.CANDIDATE
+    notes: Optional[str] = None
+    target_master: Optional[str] = None
 
 
 class CostScenario(BaseModel):

@@ -24,6 +24,7 @@ def import_price_book(
     column_aliases: Optional[dict] = None,
     imported_at: Optional[datetime] = None,
     official_master: Optional[SkuMasterStore] = None,
+    data_only: bool = True,
 ) -> PriceBookImportResult:
     result = parse_price_book(
         source,
@@ -31,6 +32,7 @@ def import_price_book(
         version=version,
         column_aliases=column_aliases,
         imported_at=imported_at,
+        data_only=data_only,
     )
     if official_master is not None:
         _ = official_master.snapshot()
