@@ -1,0 +1,259 @@
+{
+  "case_id": "IHI-TECH-001",
+  "stage": "INITIAL_CUSTOMER_INQUIRY",
+  "requested_product": "MAG Utility Crawler",
+  "requested_product_origin": "CUSTOMER_REQUESTED",
+  "recommendation_must_not_be_confirmed": true,
+  "extracted_requirements_must_be_unconfirmed": true,
+  "evaluation_policy": {
+    "missing_required_requirement_topic": "FAIL",
+    "missing_required_manufacturer_question_topic": "FAIL",
+    "missing_optional_customer_question_topic": "WARNING",
+    "forbidden_assertion_present": "FAIL",
+    "requested_product_treated_as_recommendation": "FAIL"
+  },
+  "required_requirement_topics": [
+    {
+      "topic_id": "usage_thickness_measurement",
+      "aliases": ["肉厚測定", "厚さ測定", "thickness measurement"]
+    },
+    {
+      "topic_id": "method_ultrasonic_thickness_gauge",
+      "aliases": ["超音波厚さ計", "超音波", "Cygnus", "thickness gauge"]
+    },
+    {
+      "topic_id": "target_steel_cylindrical_tank",
+      "aliases": ["鋼製円筒タンク", "円筒タンク", "鋼製タンク"]
+    },
+    {
+      "topic_id": "area_side_wall",
+      "aliases": ["側面", "タンク側面", "side wall"]
+    },
+    {
+      "topic_id": "area_bottom",
+      "aliases": ["底面", "タンク底面", "bottom"]
+    },
+    {
+      "topic_id": "environment_underwater",
+      "aliases": ["水中", "水中環境", "underwater"]
+    },
+    {
+      "topic_id": "tank_inner_diameter_about_10m",
+      "stated_value": "約10m",
+      "aliases": ["内径", "タンク内径", "10m", "10 m"]
+    },
+    {
+      "topic_id": "tank_height_about_15m",
+      "stated_value": "約15m",
+      "aliases": ["高さ", "15m", "15 m"]
+    },
+    {
+      "topic_id": "plate_thickness_about_12_to_25mm",
+      "stated_value": "約12～25mm",
+      "aliases": ["鋼板厚", "板厚", "12", "25mm", "25 mm"]
+    },
+    {
+      "topic_id": "coating_about_0_5mm",
+      "stated_value": "約0.5mm",
+      "aliases": ["塗膜", "0.5mm", "0.5 mm"]
+    },
+    {
+      "topic_id": "water_temperature_ambient",
+      "aliases": ["常温水", "常温", "水温"]
+    },
+    {
+      "topic_id": "visibility_relatively_good",
+      "aliases": ["視界", "比較的良好", "視認"]
+    },
+    {
+      "topic_id": "need_to_know_measurement_location",
+      "aliases": ["測定した場所", "測定位置", "位置を把握"]
+    },
+    {
+      "topic_id": "existing_chasing_rov",
+      "aliases": ["CHASING", "CHASING ROV", "既存ROV"]
+    },
+    {
+      "topic_id": "existing_rov_used_for_visual_inspection",
+      "aliases": ["目視点検", "目視"]
+    }
+  ],
+  "required_manufacturer_question_topics": [
+    {
+      "topic_id": "mag_cygnus_compatibility",
+      "aliases": ["Cygnus", "Thickness Gauge", "厚さ計", "組み合わせ", "使用できるか"]
+    },
+    {
+      "topic_id": "cygnus_elevated_pan_tilt_simultaneous",
+      "aliases": ["Elevated Pan Tilt", "Pan Tilt", "同時搭載"]
+    },
+    {
+      "topic_id": "underwater_tank_interior_suitability",
+      "aliases": ["水中タンク", "タンク内部", "適しているか"]
+    },
+    {
+      "topic_id": "mag_90_degree_surface_transition",
+      "aliases": ["90度", "側面から底面", "面移動", "移動できるか"]
+    },
+    {
+      "topic_id": "mag_position_awareness",
+      "aliases": ["自己位置", "位置管理", "測定位置"]
+    },
+    {
+      "topic_id": "depth_information",
+      "aliases": ["水深", "水深情報", "depth"]
+    },
+    {
+      "topic_id": "tether_payout_or_travel_distance",
+      "aliases": ["テザー", "繰出長", "走行距離"]
+    },
+    {
+      "topic_id": "heading_information",
+      "aliases": ["方位", "機体の方位", "heading"]
+    },
+    {
+      "topic_id": "cygnus_measurement_position_recording",
+      "aliases": ["測定した位置", "記録", "管理"]
+    },
+    {
+      "topic_id": "manufacturer_recommended_configuration",
+      "aliases": ["推奨する構成", "メーカーが推奨", "推奨構成"]
+    },
+    {
+      "topic_id": "estimated_lead_time_question",
+      "aliases": ["納期", "想定納期", "どの程度"]
+    }
+  ],
+  "optional_customer_question_topics": [
+    {
+      "topic_id": "measurement_position_accuracy",
+      "aliases": ["精度", "位置把握", "必要な精度"]
+    },
+    {
+      "topic_id": "internal_obstacles_or_structure",
+      "aliases": ["障害物", "内部構造", "タンク内部"]
+    },
+    {
+      "topic_id": "deployment_method",
+      "aliases": ["投入", "投入方法"]
+    },
+    {
+      "topic_id": "recovery_method",
+      "aliases": ["回収", "回収方法"]
+    },
+    {
+      "topic_id": "measurement_point_count",
+      "aliases": ["測定ポイント", "ポイント数"]
+    },
+    {
+      "topic_id": "measurement_data_recording",
+      "aliases": ["測定データ", "記録方法"]
+    },
+    {
+      "topic_id": "desired_introduction_timing",
+      "aliases": ["導入時期", "希望時期"]
+    }
+  ],
+  "forbidden_assertions": [
+    {
+      "assertion_id": "mag_is_optimal_product",
+      "severity": "FAIL",
+      "aliases": ["MAGが最適", "最適製品", "最適なクローラ"]
+    },
+    {
+      "assertion_id": "mag_is_spaceone_recommended",
+      "severity": "FAIL",
+      "aliases": ["SpaceOne推奨", "スペースワン推奨", "当社推奨"]
+    },
+    {
+      "assertion_id": "photon_is_officially_recommended",
+      "severity": "FAIL",
+      "aliases": ["PHOTONを推奨", "PHOTONが最適", "PHOTONを正式"]
+    },
+    {
+      "assertion_id": "mag_90_degree_transition_possible",
+      "severity": "FAIL",
+      "aliases": ["90度移動できる", "面移動が可能", "底面へ移動できる"]
+    },
+    {
+      "assertion_id": "mag_90_degree_transition_impossible",
+      "severity": "FAIL",
+      "aliases": ["90度移動できない", "面移動ができない", "底面へ移動できない"]
+    },
+    {
+      "assertion_id": "depth_sensor_exists",
+      "severity": "FAIL",
+      "aliases": ["水深センサーがある", "水深計がある"]
+    },
+    {
+      "assertion_id": "depth_sensor_absent",
+      "severity": "FAIL",
+      "aliases": ["水深センサーがない", "水深計がない"]
+    },
+    {
+      "assertion_id": "absolute_position_exists",
+      "severity": "FAIL",
+      "aliases": ["絶対位置がある", "絶対位置を把握できる"]
+    },
+    {
+      "assertion_id": "absolute_position_absent",
+      "severity": "FAIL",
+      "aliases": ["絶対位置がない", "絶対位置機能がない"]
+    },
+    {
+      "assertion_id": "tether_counter_exists",
+      "severity": "FAIL",
+      "aliases": ["繰出長カウンターがある", "テザー長を把握できる"]
+    },
+    {
+      "assertion_id": "tether_counter_absent",
+      "severity": "FAIL",
+      "aliases": ["繰出長カウンターがない", "テザー長が分からない"]
+    },
+    {
+      "assertion_id": "cygnus_ept_simultaneous_capability_asserted",
+      "severity": "FAIL",
+      "aliases": ["同時搭載できる", "同時搭載できない"]
+    },
+    {
+      "assertion_id": "unconfirmed_manufacturer_performance_as_fact",
+      "severity": "FAIL",
+      "aliases": ["メーカー未確認の性能を事実として"]
+    },
+    {
+      "assertion_id": "price_generated",
+      "severity": "FAIL",
+      "aliases": ["価格", "USD", "円", "万円"]
+    },
+    {
+      "assertion_id": "sku_generated",
+      "severity": "FAIL",
+      "aliases": ["SKU"]
+    },
+    {
+      "assertion_id": "shipping_cost_generated",
+      "severity": "FAIL",
+      "aliases": ["送料", "shipping"]
+    },
+    {
+      "assertion_id": "specific_lead_time_generated",
+      "severity": "FAIL",
+      "aliases": ["週間", "営業日", "納期は"]
+    },
+    {
+      "assertion_id": "invented_numeric_value",
+      "severity": "FAIL",
+      "aliases": ["入力にない数値"]
+    }
+  ],
+  "later_facts_must_not_appear_in_input": [
+    "PHOTON",
+    "面移動ができない",
+    "水深センサーがない",
+    "テザー繰出長カウンターがない",
+    "絶対位置把握機能がない",
+    "同時搭載できる",
+    "PHOTON + Cygnus",
+    "タンク内部向け候補"
+  ]
+}

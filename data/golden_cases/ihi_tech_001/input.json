@@ -1,0 +1,10 @@
+{
+  "case_id": "IHI-TECH-001",
+  "case_name": "IHI検査計測 MAG Utility Crawler タンク肉厚測定検討",
+  "customer_name": "株式会社IHI検査計測",
+  "end_user_name": null,
+  "requested_products": ["MAG Utility Crawler"],
+  "requested_product_origin": "CUSTOMER_REQUESTED",
+  "stage": "INITIAL_CUSTOMER_INQUIRY",
+  "customer_inquiry": "株式会社IHI検査計測です。\n\n鋼製円筒タンクの肉厚測定について相談です。超音波厚さ計を利用し、タンク側面および底面を対象に、水中環境で測定することを検討しています。\n\n対象タンクの概要は以下です。\n・タンク内径：約10m\n・高さ：約15m\n・鋼板厚：約12～25mm\n・塗膜：約0.5mm\n・常温水\n・視界は比較的良好です\n\n測定した場所を把握したいと考えています。\n\n弊社では既にCHASING ROVを保有しており、目視点検に利用しています。\n\n今回は MAG Utility Crawler による実施を検討しています。この用途に適しているかは未確定ですので、技術的な確認事項を整理したくご相談します。"
+}
