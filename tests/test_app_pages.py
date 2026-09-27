@@ -33,14 +33,18 @@ def test_home_opens_quote_control_page():
 
     assert at.title[0].value == "見積・価格管理AI"
     assert "Quote & Price Control Agent" in caption_text
+    assert any("1 構成確認" in (button.label or "") for button in at.button)
+    assert any("2 原価・標準売価" in (button.label or "") for button in at.button)
+    assert any("3 顧客向け見積" in (button.label or "") for button in at.button)
+    assert any("4 レビュー・承認" in (button.label or "") for button in at.button)
+    assert any("5 帳票出力" in (button.label or "") for button in at.button)
+    assert any(expander.label == "詳細・開発情報" for expander in at.expander)
     assert "価格表・SKU管理" in [item.value for item in at.subheader] + visible_text
     assert "Deep Trekker 更新情報" in [item.value for item in at.subheader] + visible_text
     assert "SpaceOneマスター照合" in [item.value for item in at.subheader] + visible_text
     assert "SpaceOne販売価格ポリシー" in [item.value for item in at.subheader] + visible_text
     assert "案件原価・粗利試算" in [item.value for item in at.subheader] + visible_text
     assert "見積ドラフト作成" in [item.value for item in at.subheader] + visible_text
-    assert "見積レビュー・承認" in [item.value for item in at.subheader] + visible_text
-    assert "ファイル出力" in " ".join([item.value for item in at.subheader] + visible_text + [item.value for item in at.markdown])
     assert "まだ価格表は読み込んでいません。" in [item.value for item in at.text]
     assert "現在は開発用の整理処理です" in [item.value for item in at.warning]
     assert any(button.label == "価格表を読み込む" for button in at.button)
@@ -226,6 +230,7 @@ def test_quote_date_widgets_do_not_raise_and_follow_auto_rule():
     draft = _photon_draft()
     keys = date_widget_keys(draft.quote_draft_id)
     at.session_state["quote_draft"] = draft
+    at.session_state["quote_workspace_step"] = 4
     at.run()
 
     assert not at.exception
@@ -267,6 +272,7 @@ def test_quote_date_human_final_button_does_not_raise_after_widgets():
     draft = _photon_draft()
     keys = date_widget_keys(draft.quote_draft_id)
     at.session_state["quote_draft"] = draft
+    at.session_state["quote_workspace_step"] = 4
     at.run()
     assert not at.exception
 
@@ -275,3 +281,67 @@ def test_quote_date_human_final_button_does_not_raise_after_widgets():
     assert at.session_state[keys["issue"]] == date(2026, 9, 26)
     assert at.session_state[keys["valid"]] == date(2026, 10, 31)
     assert at.session_state[keys["auto"]] is False
+
+
+def test_quote_workspace_shows_only_selected_step_and_keeps_draft():
+    from agents.quote_approval import apply_ihi_photon_human_final_fixture
+    from agents.quote_dates import date_widget_keys
+    from tests.test_quote_approval import _approve, _ready_photon
+    from tests.test_quote_builder import _photon_draft
+
+    at = _start_app()
+    at.button(key="open_quote_control").click().run()
+    draft = _photon_draft()
+    draft_id = draft.quote_draft_id
+    keys = date_widget_keys(draft_id)
+    at.session_state["quote_draft"] = draft
+    at.session_state["quote_workspace_step"] = 1
+    at.run()
+    assert not at.exception
+    assert at.session_state["quote_draft"].quote_draft_id == draft_id
+    assert not any(getattr(item, "key", None) == keys["issue"] for item in at.date_input)
+    assert not any(getattr(item, "key", None) == "export_spaceone_xlsx" for item in at.button)
+    assert not any(getattr(item, "key", None) == "approve_quote_snapshot" for item in at.button)
+
+    at.button(key="quote_step_3").click().run()
+    assert at.session_state["quote_workspace_step"] == 3
+    assert at.session_state["quote_draft"].quote_draft_id == draft_id
+    visible = " ".join([item.value for item in at.text] + [item.value for item in at.markdown])
+    assert "PHOTON" in visible or "DeepTrekker" in visible
+    assert not any(getattr(item, "key", None) == keys["issue"] for item in at.date_input)
+
+    at.button(key="quote_step_4").click().run()
+    at.checkbox(key="confirm_configuration").set_value(True).run()
+    at.session_state[keys["issue"]]  # widget exists
+    assert at.session_state["confirm_configuration"] is True
+    assert not any(getattr(item, "key", None) == "approve_quote_snapshot" for item in at.button)
+    assert any(getattr(item, "key", None) == "check_quote_approval" for item in at.button)
+
+    apply_ihi_photon_human_final_fixture(at.session_state["quote_draft"])
+    at.session_state[keys["pending"]] = True
+    at.run()
+    at.button(key="quote_step_1").click().run()
+    assert at.session_state["quote_draft"].issue_date == "2026-09-26"
+    assert at.session_state["quote_draft"].total_jpy == 7876000
+    assert at.session_state["quote_persist_confirm_configuration"] is True
+    at.button(key="quote_step_4").click().run()
+    assert at.session_state["quote_draft"].issue_date == "2026-09-26"
+    assert at.session_state["confirm_configuration"] is True
+    assert at.session_state[keys["issue"]].isoformat() == "2026-09-26"
+
+    at.session_state["quote_workspace_step"] = 5
+    at.run()
+    assert any("帳票出力には承認が必要です" in (item or "") for item in [entry.value for entry in at.warning] + [entry.value for entry in at.text])
+    assert not any(getattr(item, "key", None) == "export_spaceone_xlsx" for item in at.button)
+
+    ready = _ready_photon()
+    _, snapshot = _approve(ready)
+    at.session_state["quote_draft"] = ready
+    at.session_state["approved_quote_snapshot"] = snapshot
+    at.session_state["quote_workspace_step"] = 5
+    at.run()
+    assert not at.exception
+    assert any(getattr(item, "key", None) == "export_spaceone_xlsx" for item in at.button)
+    assert snapshot.total_jpy == 7876000
+    assert abs(snapshot.gross_margin_rate - 0.29598) < 0.00001
+    assert at.session_state["approved_quote_snapshot"].approved_quote_snapshot_id == snapshot.approved_quote_snapshot_id

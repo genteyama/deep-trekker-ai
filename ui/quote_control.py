@@ -15,15 +15,7 @@ from agents.landed_cost import (
     september_dealer_update_shipping_rate,
     supplier_quote_shipping_rate,
 )
-from agents.quote_approval import (
-    QuoteApprovalError,
-    QuoteApprovalStore,
-    apply_ihi_photon_human_final_fixture,
-    approve_quote,
-    create_revision_draft,
-    generate_quote_outputs,
-    validate_for_approval,
-)
+from agents.quote_approval import QuoteApprovalStore
 from agents.quote_export import (
     QuoteExportError,
     export_internal_calc_excel,
@@ -32,17 +24,10 @@ from agents.quote_export import (
     export_spaceone_quote_excel,
 )
 from agents.quote_builder import (
-    apply_final_price,
     apply_historical_acceptance_preview,
     apply_issue_date,
-    apply_lead_time_text,
-    apply_presentation_mode,
-    apply_selected_remarks,
-    apply_shipping_final_price,
-    apply_tax_rate,
     apply_valid_until,
     build_ihi_quote_draft,
-    customer_preview_rows,
 )
 from agents.quote_dates import (
     apply_date_widget_defaults,
@@ -63,10 +48,8 @@ from agents.sku_link import build_sku_link_preview, try_manual_link
 from agents.supplier_quote_validation import load_official_manufacturer_price_books, validate_supplier_quote
 from data.golden_cases.loader import IHI_QUOTE_001, load_quote_golden_case
 from models import (
-    CustomerPresentationMode,
     DomesticShippingMode,
     ExportPurpose,
-    FinalPriceStatus,
     InsuranceMode,
     QuoteDraftStatus,
     RequiredConfigurationItem,
@@ -86,6 +69,7 @@ from models import (
 )
 from parsers.spaceone_master_parser import parse_spaceone_master
 from ui.navigation import PAGE_HOME, set_current_page
+from ui.quote_workspace import render_quote_debug_details, render_quote_workspace
 
 SESSION_IMPORT = "price_book_import"
 SESSION_DIFF = "price_book_diff"
@@ -118,6 +102,33 @@ def render_quote_control(texts: dict) -> None:
     st.write(page["description"])
     st.divider()
 
+    render_quote_workspace(
+        page,
+        helpers={
+            "create_ihi_draft": _build_ihi_draft_from_ui,
+            "init_date_widgets": _init_date_widget_state,
+            "render_dates": _render_quote_date_inputs,
+            "render_export": _render_file_export,
+            "ensure_store": _ensure_quote_approval_store,
+        },
+    )
+
+    with st.expander(page["workspace"]["advanced_debug_label"], expanded=False):
+        render_quote_debug_details(page)
+        st.divider()
+        _render_sku_master_tools(page)
+        st.divider()
+        _render_spaceone_reconciliation(page)
+        st.divider()
+        _render_pricing_policy(page)
+        st.divider()
+        _render_landed_cost(page)
+        st.divider()
+        _render_update_inbox(page)
+        _render_golden_quote_cases(page)
+
+
+def _render_sku_master_tools(page: dict) -> None:
     st.subheader(page["section_sku_master"])
     st.write(page["section_sku_master_description"])
     st.caption(page["diff_not_applied"])
@@ -142,20 +153,6 @@ def render_quote_control(texts: dict) -> None:
         _render_import_summary(page, result)
         _render_sku_list(page, result)
         _render_diff(page, st.session_state.get(SESSION_DIFF))
-
-    st.divider()
-    _render_spaceone_reconciliation(page)
-    st.divider()
-    _render_pricing_policy(page)
-    st.divider()
-    _render_landed_cost(page)
-    st.divider()
-    _render_quote_builder(page)
-    st.divider()
-    _render_quote_approval(page)
-    st.divider()
-    _render_update_inbox(page)
-    _render_golden_quote_cases(page)
 
 
 def _run_import(page: dict, uploaded, previous, source_price_book: str, version: str) -> None:
@@ -1050,317 +1047,6 @@ def _parse_landed_inputs(page, rate_text, tax_text, insurance_rate_text, domesti
         "large_qty": large_qty,
         "small_qty": small_qty,
     }
-
-
-def _render_quote_builder(page: dict) -> None:
-    st.subheader(page["section_quote_builder"])
-    st.write(page["section_quote_builder_description"])
-    st.caption(page["quote_builder_hint"])
-    case = load_quote_golden_case(IHI_QUOTE_001)
-    if st.button(page["ihi_photon_draft_button"], key="ihi_photon_draft"):
-        draft = _build_ihi_draft_from_ui(page, case, "PHOTON")
-        st.session_state["quote_draft"] = draft
-        if draft is not None:
-            _init_date_widget_state(draft, overwrite=True)
-    if st.button(page["ihi_mag_draft_button"], key="ihi_mag_draft"):
-        draft = _build_ihi_draft_from_ui(page, case, "MAG")
-        st.session_state["quote_draft"] = draft
-        if draft is not None:
-            _init_date_widget_state(draft, overwrite=True)
-    draft = st.session_state.get("quote_draft")
-    if draft is None:
-        st.text(page["no_quote_draft"])
-        return
-    status_labels = page["draft_statuses"]
-    st.write(f"{page['column_version']}: v{draft.quote_version}")
-    st.write(f"{page['draft_status_label']}: {status_labels.get(draft.status.value, draft.status.value)}")
-    st.write(f"{page['summary_completeness']}: {page['completeness'].get(draft.completeness.value, draft.completeness.value)}")
-    _render_internal_bom(page, draft)
-    _render_2601_choice(page, draft)
-    _render_customer_preview(page, draft)
-
-
-def _render_internal_bom(page: dict, draft) -> None:
-    st.markdown(f"**{page['internal_bom_label']}**")
-    presentation_labels = page["presentation_modes"]
-    st.table(
-        [
-            {
-                page["column_sku"]: line.manufacturer_sku or page["no_value"],
-                page["column_name_ja"]: line.manufacturer_description or page["no_value"],
-                page["column_requirement"]: line.requirement_type.value,
-                page["column_dealer_usd"]: _display_number(line.dealer_price_usd, page),
-                page["column_landed"]: _display_number(line.landed_cost_jpy, page),
-                page["column_sales_candidate"]: _display_number(line.standard_sales_price_candidate_jpy, page),
-                page["column_final_price"]: _display_number(line.final_sales_price_jpy, page),
-                page["column_presentation"]: presentation_labels.get(
-                    line.customer_presentation_status.value, line.customer_presentation_status.value
-                ),
-                page["golden_warning"]: "; ".join(line.warnings) or page["no_value"],
-            }
-            for line in draft.configuration_lines
-        ]
-    )
-    for line in draft.configuration_lines:
-        if line.customer_presentation_status != CustomerPresentationMode.SEPARATE_LINE:
-            continue
-        if st.button(page["use_standard_button"], key=f"use_standard_{line.line_id}"):
-            apply_final_price(draft, line.line_id, FinalPriceStatus.USE_STANDARD_CANDIDATE)
-            st.session_state["quote_draft"] = draft
-            st.rerun()
-        entered = st.text_input(page["manual_price_label"], key=f"manual_price_{line.line_id}")
-        if st.button(page["apply_manual_price_button"], key=f"apply_manual_{line.line_id}"):
-            try:
-                apply_final_price(
-                    draft,
-                    line.line_id,
-                    FinalPriceStatus.MANUAL_OVERRIDE,
-                    amount_jpy=float(entered),
-                    reason="UI manual override",
-                )
-                st.session_state["quote_draft"] = draft
-                st.rerun()
-            except (TypeError, ValueError):
-                st.warning(page["exchange_rate_invalid"])
-
-
-def _render_2601_choice(page: dict, draft) -> None:
-    target = next((line for line in draft.configuration_lines if line.manufacturer_sku == "2601"), None)
-    if target is None:
-        return
-    parent = next((line for line in draft.configuration_lines if line.manufacturer_sku == "2604"), None)
-    choice = st.radio(
-        page["dependency_choice_label"],
-        options=["UNDECIDED", "SEPARATE_LINE", "BUNDLED_WITH_PARENT"],
-        format_func=lambda key: {
-            "UNDECIDED": page["dependency_undecided"],
-            "SEPARATE_LINE": page["dependency_separate"],
-            "BUNDLED_WITH_PARENT": page["dependency_bundle"],
-        }[key],
-        key="input_2601_presentation",
-    )
-    if st.button(page["apply_2601_button"], key="apply_2601_presentation"):
-        apply_presentation_mode(
-            draft,
-            target.line_id,
-            CustomerPresentationMode(choice),
-            bundled_into_line_id=parent.line_id if choice == "BUNDLED_WITH_PARENT" and parent else None,
-        )
-        st.session_state["quote_draft"] = draft
-        st.rerun()
-
-
-def _render_customer_preview(page: dict, draft) -> None:
-    st.markdown(f"**{page['customer_preview_label']}**")
-    st.table(
-        [
-            {
-                page["column_item"]: row["display_name"],
-                page["column_item_detail"]: row["description"],
-                page["column_unit_price"]: _display_number(row["unit_price_jpy"], page),
-                page["column_qty"]: row["quantity"],
-                page["column_amount"]: _display_number(row["amount_jpy"], page),
-            }
-            for row in customer_preview_rows(draft)
-        ]
-    )
-    st.write(f"{page['golden_subtotal']}: {_display_number(draft.subtotal_ex_tax_jpy, page)}")
-    st.write(f"{page['column_import_tax']}: {_display_number(draft.tax_jpy, page)}")
-    st.write(f"{page['golden_total']}: {_display_number(draft.total_jpy, page)}")
-    st.markdown(f"**{page['remarks_label']}**")
-    st.caption(page["remarks_caption"])
-    for remark in draft.remark_candidates:
-        st.write(f"[{remark.source.value}] {remark.text}")
-    tax_text = st.text_input(page["tax_rate_label"], key="input_draft_tax_rate")
-    if tax_text and st.button(page["apply_manual_price_button"], key="apply_draft_tax"):
-        try:
-            apply_tax_rate(draft, float(tax_text))
-            st.session_state["quote_draft"] = draft
-            st.rerun()
-        except (TypeError, ValueError):
-            st.warning(page["exchange_rate_invalid"])
-    shipping_text = st.text_input(page["shipping_price_label"], key="input_draft_shipping_price")
-    if shipping_text and st.button(page["apply_shipping_price_button"], key="apply_draft_shipping"):
-        try:
-            apply_shipping_final_price(draft, float(shipping_text))
-            st.session_state["quote_draft"] = draft
-            st.rerun()
-        except (TypeError, ValueError):
-            st.warning(page["exchange_rate_invalid"])
-
-
-def _render_quote_approval(page: dict) -> None:
-    st.subheader(page["section_quote_approval"])
-    st.write(page["section_quote_approval_description"])
-    store = _ensure_quote_approval_store()
-    draft = st.session_state.get("quote_draft")
-    snapshot = st.session_state.get("approved_quote_snapshot")
-    if draft is None:
-        st.text(page["no_quote_draft"])
-        if snapshot is None:
-            _render_file_export(page, None)
-            return
-    else:
-        status_labels = page["draft_statuses"]
-        economics = draft.economics_result
-        st.write(f"{page['column_version']}: v{draft.quote_version}")
-        st.write(f"{page['draft_status_label']}: {status_labels.get(draft.status.value, draft.status.value)}")
-        st.write(f"{page['column_customer']}: {draft.customer or page['no_value']}")
-        st.write(f"{page['column_title']}: {draft.title or page['no_value']}")
-        st.write(f"{page['golden_subtotal']}: {_display_number(draft.subtotal_ex_tax_jpy, page)}")
-        st.write(f"{page['column_import_tax']}: {_display_number(draft.tax_jpy, page)}")
-        st.write(f"{page['golden_total']}: {_display_number(draft.total_jpy, page)}")
-        st.write(f"{page['column_landed_total']}: {_display_number(economics.total_landed_cost_jpy if economics else None, page)}")
-        st.write(f"{page['column_gross_profit']}: {_display_number(economics.gross_profit_jpy if economics else None, page)}")
-        st.write(f"{page['column_gross_margin']}: {_display_percent(economics.gross_margin_rate if economics else None, page)}")
-        if draft.warnings:
-            st.warning("\n".join(draft.warnings))
-        selected_remarks = st.multiselect(
-            page["select_remarks_label"],
-            options=[item.text for item in draft.remark_candidates],
-            default=[item.text for item in draft.remark_candidates if item.selected],
-            key="input_selected_remarks",
-        )
-        lead_time = st.text_input(page["lead_time_label"], value=draft.lead_time_text or "", key="input_lead_time")
-        issue_date, valid_until = _render_quote_date_inputs(page, draft)
-        confirm_configuration = st.checkbox(page["confirm_configuration"], key="confirm_configuration")
-        confirm_presentation = st.checkbox(page["confirm_presentation"], key="confirm_presentation")
-        confirm_sales_price = st.checkbox(page["confirm_sales_price"], key="confirm_sales_price")
-        confirm_remarks = st.checkbox(page["confirm_remarks"], key="confirm_remarks")
-        if draft.configuration_name == "PHOTON" and draft.status != QuoteDraftStatus.APPROVED:
-            if st.button(page["photon_human_final_button"], key="photon_human_final"):
-                try:
-                    apply_ihi_photon_human_final_fixture(draft)
-                    st.session_state["quote_draft"] = draft
-                    st.session_state[date_widget_keys(draft.quote_draft_id)["pending"]] = True
-                    st.rerun()
-                except ValueError:
-                    st.warning(page["approved_draft_locked"])
-        if st.button(page["confirm_ready_button"], key="check_quote_approval"):
-            try:
-                apply_selected_remarks(draft, selected_remarks)
-                apply_lead_time_text(draft, lead_time or None)
-                apply_issue_date(draft, issue_date or None)
-                apply_valid_until(draft, valid_until or None)
-            except ValueError:
-                st.warning(page["approved_draft_locked"])
-            st.session_state["quote_approval_validation"] = validate_for_approval(draft)
-            st.session_state["quote_draft"] = draft
-        validation = st.session_state.get("quote_approval_validation")
-        if validation is not None:
-            if validation.can_approve:
-                st.success(page["approval_ready"])
-            else:
-                st.error(validation.blocking_reason or page["approval_blocked"])
-            if validation.critical_warnings:
-                st.error("\n".join(validation.critical_warnings))
-            if validation.regular_warnings:
-                st.warning("\n".join(validation.regular_warnings))
-        ready_to_approve = (
-            draft.status == QuoteDraftStatus.READY_FOR_APPROVAL
-            and validation is not None
-            and validation.can_approve
-            and confirm_configuration
-            and confirm_presentation
-            and confirm_sales_price
-            and confirm_remarks
-        )
-        if ready_to_approve and st.button(page["approve_snapshot_button"], key="approve_quote_snapshot"):
-            try:
-                apply_selected_remarks(draft, selected_remarks)
-                apply_lead_time_text(draft, lead_time or None)
-                apply_issue_date(draft, issue_date or None)
-                apply_valid_until(draft, valid_until or None)
-                approval, snapshot = approve_quote(
-                    draft,
-                    approved_by="弦",
-                    confirmations={
-                        "configuration": confirm_configuration,
-                        "presentation": confirm_presentation,
-                        "sales_price": confirm_sales_price,
-                        "remarks": confirm_remarks,
-                    },
-                    warnings_acknowledged=list(validation.regular_warnings),
-                    store=store,
-                )
-                st.session_state["quote_draft"] = draft
-                st.session_state["quote_approval"] = approval
-                st.session_state["approved_quote_snapshot"] = snapshot
-                st.session_state["quote_outputs"] = generate_quote_outputs(snapshot)
-                st.rerun()
-            except (QuoteApprovalError, ValueError) as error:
-                st.error(str(error))
-        if snapshot is not None and st.button(page["create_revision_button"], key="create_quote_revision"):
-            revision = create_revision_draft(snapshot, store=store)
-            st.session_state["quote_draft"] = revision
-            st.session_state["quote_approval_validation"] = None
-            st.rerun()
-    snapshot = st.session_state.get("approved_quote_snapshot")
-    if snapshot is None:
-        st.text(page["no_approved_snapshot"])
-        _render_file_export(page, None)
-        return
-    st.markdown(f"**{page['output_preview_label']}**")
-    st.write(f"{page['quote_number_candidate_label']}: {snapshot.quote_number_candidate or page['no_value']}")
-    outputs = st.session_state.get("quote_outputs") or generate_quote_outputs(snapshot)
-    internal_tab, spaceone_tab, moneyforward_tab = st.tabs(
-        [page["tab_internal_transfer"], page["tab_spaceone_quote"], page["tab_moneyforward"]]
-    )
-    with internal_tab:
-        st.table(
-            [
-                {
-                    "Part Number": row.part_number,
-                    page["column_name_ja"]: row.item_name,
-                    page["column_qty"]: row.quantity,
-                    "DT USD": _display_number(row.dealer_unit_price_usd, page),
-                    page["column_landed"]: _display_number(row.landed_subtotal_jpy, page),
-                    page["column_final_price"]: _display_number(row.adjusted_unit_price_jpy, page),
-                    page["column_gross_margin"]: _display_percent(row.gross_margin_rate, page),
-                }
-                for row in outputs.internal_transfer.rows
-            ]
-        )
-        st.write(f"{page['golden_total']}: {_display_number(outputs.internal_transfer.customer_total_jpy, page)}")
-    with spaceone_tab:
-        st.write(f"{page['column_customer']}: {outputs.spaceone_quote.customer or page['no_value']}")
-        st.write(f"{page['column_title']}: {outputs.spaceone_quote.title or page['no_value']}")
-        st.table(
-            [
-                {
-                    page["column_item"]: line.item_name,
-                    page["column_item_detail"]: line.item_detail,
-                    page["column_unit_price"]: _display_number(line.unit_price_jpy, page),
-                    page["column_qty"]: line.quantity,
-                    page["column_amount"]: _display_number(line.amount_jpy, page),
-                }
-                for line in outputs.spaceone_quote.lines
-            ]
-        )
-        st.write(f"{page['golden_subtotal']}: {_display_number(outputs.spaceone_quote.subtotal, page)}")
-        st.write(f"{page['column_import_tax']}: {_display_number(outputs.spaceone_quote.tax, page)}")
-        st.write(f"{page['golden_total']}: {_display_number(outputs.spaceone_quote.total, page)}")
-        if outputs.spaceone_quote.remarks:
-            st.markdown(f"**{page['remarks_label']}**")
-            for remark in outputs.spaceone_quote.remarks:
-                st.write(remark)
-    with moneyforward_tab:
-        st.table(
-            [
-                {
-                    page["column_item"]: row.item_name,
-                    page["column_item_detail"]: row.item_detail,
-                    page["column_unit_price"]: _display_number(row.unit_price_jpy, page),
-                    page["column_qty"]: row.quantity,
-                    page["column_amount"]: _display_number(row.amount_jpy, page),
-                    page["column_notes"]: row.notes or page["no_value"],
-                }
-                for row in outputs.moneyforward.rows
-            ]
-        )
-        st.text_area(page["mf_tsv_label"], value=outputs.moneyforward.tsv_preview, height=180)
-        st.write(f"{page['golden_total']}: {_display_number(outputs.moneyforward.total_jpy, page)}")
-    _render_file_export(page, snapshot)
 
 
 def _render_file_export(page: dict, snapshot) -> None:
