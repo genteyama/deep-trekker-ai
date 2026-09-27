@@ -149,6 +149,20 @@ class UpdateConfidence(str, Enum):
     MANUAL_UNVERIFIED = "MANUAL_UNVERIFIED"
 
 
+class LinkStatus(str, Enum):
+    AUTO_LINKED = "AUTO_LINKED"
+    MANUALLY_LINKED = "MANUALLY_LINKED"
+    REVIEW_REQUIRED = "REVIEW_REQUIRED"
+    UNLINKED = "UNLINKED"
+    NO_LINK_REQUIRED = "NO_LINK_REQUIRED"
+
+
+class LinkMethod(str, Enum):
+    AUTO_SKU_MATCH = "AUTO_SKU_MATCH"
+    MANUAL_SKU_ENTRY = "MANUAL_SKU_ENTRY"
+    NONE = "NONE"
+
+
 class MatchStatus(str, Enum):
     EXACT_MATCH = "EXACT_MATCH"
     PRICE_MISMATCH = "PRICE_MISMATCH"

@@ -40,6 +40,7 @@ def test_home_opens_quote_control_page():
     assert "現在は開発用の整理処理です" in [item.value for item in at.warning]
     assert any(button.label == "価格表を読み込む" for button in at.button)
     assert any(button.label == "社内マスターをSKUで照合" for button in at.button)
+    assert "SKUリンク移行プレビュー" in " ".join([item.value for item in at.subheader] + visible_text + [item.value for item in at.markdown])
     assert any(button.label == "更新情報として整理" for button in at.button)
     assert not any("正式" in (button.label or "") and "反映" in (button.label or "") for button in at.button)
     assert not any(button.label == "Apply" for button in at.button)
@@ -160,6 +161,32 @@ def test_quote_control_shows_import_and_diff_without_apply():
     assert "価格変更" in " ".join(visible_text)
     assert "削除候補" in " ".join(visible_text)
     assert not any("正式" in (button.label or "") and "反映" in (button.label or "") for button in at.button)
+
+
+def test_quote_control_shows_sku_link_preview_and_manual_fields():
+    from agents.quote_control_agent import import_price_book
+    from agents.sku_link import build_sku_link_preview
+    from parsers.spaceone_master_parser import parse_spaceone_master
+    from tests.price_book_fixtures import manufacturer_books_for_reconciliation, spaceone_master_book
+
+    at = _start_app()
+    at.button(key="open_quote_control").click().run()
+
+    dt40_file, pt30_file = manufacturer_books_for_reconciliation()
+    dt40 = import_price_book(dt40_file, source_price_book="DT40")
+    pt30 = import_price_book(pt30_file, source_price_book="PT30")
+    spaceone = parse_spaceone_master(spaceone_master_book(), source_name="SO_MASTER")
+    at.session_state["sku_link_preview"] = build_sku_link_preview(spaceone.items, dt40, pt30)
+    at.run()
+
+    visible_text = [item.value for item in at.text] + [item.value for item in at.markdown]
+    joined = " ".join(visible_text)
+    assert "総SpaceOne商品: 12" in visible_text
+    assert "AUTO_LINKED: 6" in visible_text
+    assert "REVIEW_REQUIRED:" in joined
+    assert "要確認SKUの手動紐付け" in joined
+    assert any(input_box.label == "正式Manufacturer SKU" for input_box in at.text_input)
+    assert any(button.label == "このSKUに紐付け" for button in at.button)
 
 
 def test_back_button_returns_to_home():

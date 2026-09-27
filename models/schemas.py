@@ -7,6 +7,8 @@ from models.enums import (
     DestinationRegion,
     FactConfidence,
     FactScope,
+    LinkMethod,
+    LinkStatus,
     MatchConfidence,
     MatchStatus,
     PriceBookDiffType,
@@ -477,6 +479,88 @@ class MasterReconciliationSummary(BaseModel):
 class MasterReconciliationReport(BaseModel):
     summary: MasterReconciliationSummary = Field(default_factory=MasterReconciliationSummary)
     results: list[MasterReconciliationResult] = Field(default_factory=list)
+
+
+class ManufacturerSkuLink(BaseModel):
+    manufacturer_sku_link_id: str
+    spaceone_item_id: str
+    spaceone_sku: Optional[str] = None
+    manufacturer_sku: Optional[str] = None
+    manufacturer_price_book: Optional[str] = None
+    link_status: LinkStatus = LinkStatus.UNLINKED
+    link_method: Optional[LinkMethod] = None
+    linked_at: Optional[datetime] = None
+    linked_by: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class CurrentManufacturerValues(BaseModel):
+    sku: str
+    description: Optional[str] = None
+    msrp_usd: Optional[float] = None
+    dealer_price_usd: Optional[float] = None
+    dealer_rate: Optional[float] = None
+    notes: list[str] = Field(default_factory=list)
+    source_status: Optional[SkuSourceStatus] = None
+    price_book: Optional[str] = None
+    source_sheets: list[str] = Field(default_factory=list)
+    price_book_version: Optional[str] = None
+
+
+class LegacyManufacturerValues(BaseModel):
+    legacy_manufacturer_msrp: Optional[float] = None
+    legacy_manufacturer_dealer_price: Optional[float] = None
+    legacy_reference: Optional[CellReference] = None
+
+
+class PriceDifference(BaseModel):
+    legacy_msrp: Optional[float] = None
+    current_msrp: Optional[float] = None
+    msrp_delta: Optional[float] = None
+    legacy_dealer_price: Optional[float] = None
+    current_dealer_price: Optional[float] = None
+    dealer_price_delta: Optional[float] = None
+
+
+class QuotePriceSnapshot(BaseModel):
+    snapshot_id: str
+    sku: str
+    price_book: Optional[str] = None
+    price_book_version: Optional[str] = None
+    manufacturer_msrp_usd: Optional[float] = None
+    manufacturer_dealer_price_usd: Optional[float] = None
+    captured_at: Optional[datetime] = None
+    source_reference: Optional[str] = None
+
+
+class SkuLinkPreviewItem(BaseModel):
+    spaceone_item_id: str
+    spaceone_sku: Optional[str] = None
+    name_ja: Optional[str] = None
+    spaceone_sales_price: Optional[float] = None
+    match_status: Optional[MatchStatus] = None
+    link: ManufacturerSkuLink
+    current_values: Optional[CurrentManufacturerValues] = None
+    legacy: LegacyManufacturerValues = Field(default_factory=LegacyManufacturerValues)
+    price_difference: Optional[PriceDifference] = None
+    review_reason: Optional[str] = None
+
+
+class SkuLinkPreview(BaseModel):
+    total_items: int = 0
+    auto_linked: int = 0
+    review_required: int = 0
+    manually_linked: int = 0
+    no_link_required: int = 0
+    unlinked: int = 0
+    items: list[SkuLinkPreviewItem] = Field(default_factory=list)
+    current_candidates: list[SKUMasterCandidate] = Field(default_factory=list)
+
+
+class ManualLinkResult(BaseModel):
+    accepted: bool
+    message: str
+    preview: SkuLinkPreview
 
 
 class CostScenario(BaseModel):

@@ -5,8 +5,10 @@ from openpyxl.utils.exceptions import InvalidFileException
 
 from agents.master_reconciliation import reconcile_spaceone_master
 from agents.quote_control_agent import SkuMasterStore, diff_price_books, import_price_book
+from agents.sku_link import build_sku_link_preview, try_manual_link
 from agents.update_inbox_agent import UpdateInboxStore, create_manual_candidate, organize_pasted_update
 from models import (
+    LinkStatus,
     MatchStatus,
     PriceBookDiff,
     PriceBookDiffType,
@@ -22,6 +24,7 @@ SESSION_DIFF = "price_book_diff"
 SESSION_OFFICIAL_MASTER = "official_sku_master"
 SESSION_UPDATE_INBOX = "dt_update_inbox"
 SESSION_RECONCILE = "spaceone_reconciliation"
+SESSION_SKU_LINKS = "sku_link_preview"
 DIFF_ORDER = (
     PriceBookDiffType.NEW_SKU,
     PriceBookDiffType.PRICE_CHANGED,
@@ -162,6 +165,7 @@ def _render_spaceone_reconciliation(page: dict) -> None:
     report = st.session_state.get(SESSION_RECONCILE)
     if report is None:
         st.text(page["no_reconcile"])
+        _render_sku_link_preview(page)
         return
 
     summary = report.summary
@@ -224,6 +228,7 @@ def _render_spaceone_reconciliation(page: dict) -> None:
     else:
         st.text(page["no_reconcile_rows"])
     st.caption(page["recommended_change_caption"])
+    _render_sku_link_preview(page)
 
 
 def _run_reconciliation(page: dict, dt40_file, pt30_file, spaceone_file) -> None:
@@ -238,6 +243,77 @@ def _run_reconciliation(page: dict, dt40_file, pt30_file, spaceone_file) -> None
         st.error(page["reconcile_error"])
         return
     st.session_state[SESSION_RECONCILE] = reconcile_spaceone_master(spaceone.items, dt40, pt30)
+    st.session_state[SESSION_SKU_LINKS] = build_sku_link_preview(spaceone.items, dt40, pt30)
+
+
+def _render_sku_link_preview(page: dict) -> None:
+    preview = st.session_state.get(SESSION_SKU_LINKS)
+    st.markdown(f"**{page['sku_link_preview_label']}**")
+    flash = st.session_state.pop("sku_link_flash", None)
+    if flash:
+        accepted, message = flash
+        if accepted:
+            st.success(message)
+        else:
+            st.warning(message)
+    if preview is None:
+        st.text(page["no_sku_links"])
+        return
+    st.write(f"{page['sku_link_total']}: {preview.total_items}")
+    st.write(f"{page['sku_link_auto']}: {preview.auto_linked}")
+    st.write(f"{page['sku_link_review']}: {preview.review_required}")
+    st.write(f"{page['sku_link_manual']}: {preview.manually_linked}")
+    st.write(f"{page['sku_link_none']}: {preview.no_link_required}")
+    link_labels = page["link_statuses"]
+    rows = []
+    for item in preview.items:
+        current = item.current_values
+        legacy = item.legacy
+        reference = legacy.legacy_reference
+        delta = item.price_difference.dealer_price_delta if item.price_difference else None
+        rows.append(
+            {
+                page["column_spaceone_sku"]: item.spaceone_sku or page["no_value"],
+                page["column_name_ja"]: item.name_ja or page["no_value"],
+                page["column_link_status"]: link_labels.get(item.link.link_status.value, item.link.link_status.value),
+                page["column_manufacturer_sku"]: item.link.manufacturer_sku or page["no_value"],
+                page["column_legacy_dealer"]: _display_number(legacy.legacy_manufacturer_dealer_price, page),
+                page["column_current_dealer"]: _display_number(current.dealer_price_usd if current else None, page),
+                page["column_legacy_msrp"]: _display_number(legacy.legacy_manufacturer_msrp, page),
+                page["column_current_msrp"]: _display_number(current.msrp_usd if current else None, page),
+                page["column_dealer_delta"]: _display_number(delta, page),
+                page["column_old_ref"]: (
+                    f"{reference.workbook} {reference.sheet}!{reference.cell}"
+                    if reference and reference.sheet and reference.cell
+                    else page["no_value"]
+                ),
+                page["column_review_reason"]: item.review_reason or page["no_value"],
+            }
+        )
+    st.table(rows)
+
+    review_items = [item for item in preview.items if item.link.link_status == LinkStatus.REVIEW_REQUIRED]
+    if not review_items:
+        return
+    st.markdown(f"**{page['manual_sku_link_label']}**")
+    st.caption(page["manual_sku_link_hint"])
+    for item in review_items:
+        st.write(f"{item.spaceone_sku or page['no_value']} / {item.name_ja or page['no_value']}")
+        entered = st.text_input(
+            page["manual_manufacturer_sku_label"],
+            key=f"manual_manufacturer_sku_{item.spaceone_item_id}",
+        )
+        if st.button(page["manual_link_button"], key=f"manual_link_button_{item.spaceone_item_id}"):
+            result = try_manual_link(preview, item.spaceone_item_id, entered)
+            st.session_state[SESSION_SKU_LINKS] = result.preview
+            st.session_state["sku_link_flash"] = (result.accepted, result.message)
+            st.rerun()
+
+
+def _display_number(value, page: dict) -> str:
+    if value is None:
+        return page["no_value"]
+    return f"{value:,}"
 
 
 def _match_filter(item, selected: str) -> bool:
