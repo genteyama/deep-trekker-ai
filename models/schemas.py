@@ -20,7 +20,9 @@ from models.enums import (
     ShippingScopeType,
     ShippingType,
     SkuDuplicateClass,
+    SkuMappingSource,
     SkuSourceStatus,
+    SupplierQuoteValidationStatus,
     SuggestedQuestionStatus,
     UpdateCategory,
     UpdateConfidence,
@@ -215,6 +217,7 @@ class SKURelation(BaseModel):
 
 
 class SupplierQuoteLine(BaseModel):
+    line_id: Optional[str] = None
     sku: Optional[str] = None
     description: Optional[str] = None
     quantity: Optional[int] = None
@@ -223,23 +226,110 @@ class SupplierQuoteLine(BaseModel):
     discount: Optional[float] = None
     notes: Optional[str] = None
     extraction_confidence: Optional[str] = None
+    expected_validation_status: Optional[SupplierQuoteValidationStatus] = None
+
+
+class SupplierQuoteShippingLine(BaseModel):
+    shipping_type: Optional[ShippingType] = None
+    description: Optional[str] = None
+    quantity: Optional[int] = None
+    unit_price_usd: Optional[float] = None
+    line_total_usd: Optional[float] = None
+    destination: Optional[str] = None
+
+
+class SupplierQuoteInsurance(BaseModel):
+    description: Optional[str] = None
+    quantity: Optional[int] = None
+    amount_usd: Optional[float] = None
+    is_separate_line: bool = True
+
+
+class QuoteKnownIssue(BaseModel):
+    code: str
+    message: str
+    details: Optional[str] = None
 
 
 class SupplierQuote(BaseModel):
     supplier_quote_id: str
     case_id: str
     quote_number: Optional[str] = None
+    quote_reference: Optional[str] = None
     version: Optional[str] = None
     quote_date: Optional[datetime] = None
     valid_until: Optional[datetime] = None
+    expires_at: Optional[datetime] = None
+    supplier: Optional[str] = None
     supplier_contact: Optional[str] = None
     currency: Optional[str] = None
     lines: list[SupplierQuoteLine] = Field(default_factory=list)
+    shipping_lines: list[SupplierQuoteShippingLine] = Field(default_factory=list)
     shipping_usd: Optional[float] = None
+    insurance: Optional[SupplierQuoteInsurance] = None
     insurance_usd: Optional[float] = None
     total_usd: Optional[float] = None
     lead_time: Optional[str] = None
+    known_issues: list[QuoteKnownIssue] = Field(default_factory=list)
+    source_metadata: dict = Field(default_factory=dict)
+    is_manufacturer_source_of_truth: bool = False
     source_file: Optional[str] = None
+
+
+class LeadTimeSnapshot(BaseModel):
+    text: Optional[str] = None
+    as_of: Optional[str] = None
+    kind: str = "QUOTE_SNAPSHOT"
+    is_technical_fact: bool = False
+    is_lead_time_master: bool = False
+
+
+class CustomerQuoteLine(BaseModel):
+    line_id: Optional[str] = None
+    description: Optional[str] = None
+    quantity: Optional[int] = None
+    unit_price_jpy: Optional[float] = None
+    line_total_jpy: Optional[float] = None
+    manufacturer_sku: Optional[str] = None
+    sku_source: Optional[SkuMappingSource] = SkuMappingSource.UNMAPPED
+    notes: Optional[str] = None
+
+
+class CustomerQuoteShippingBox(BaseModel):
+    shipping_type: Optional[ShippingType] = None
+    quantity: Optional[int] = None
+
+
+class CustomerQuoteShipping(BaseModel):
+    description: Optional[str] = None
+    boxes: list[CustomerQuoteShippingBox] = Field(default_factory=list)
+    price_jpy: Optional[float] = None
+
+
+class CustomerQuoteInsurance(BaseModel):
+    included_in_sales_price: bool = True
+    separate_line: bool = False
+    note: Optional[str] = None
+
+
+class CustomerQuote(BaseModel):
+    quote_number: str
+    case_id: str
+    configuration_name: Optional[str] = None
+    quote_date: Optional[datetime] = None
+    customer: Optional[str] = None
+    title: Optional[str] = None
+    currency: Optional[str] = "JPY"
+    lines: list[CustomerQuoteLine] = Field(default_factory=list)
+    shipping: Optional[CustomerQuoteShipping] = None
+    insurance: Optional[CustomerQuoteInsurance] = None
+    lead_time: Optional[LeadTimeSnapshot] = None
+    subtotal_ex_tax_jpy: Optional[float] = None
+    tax_jpy: Optional[float] = None
+    total_jpy: Optional[float] = None
+    lead_time_note: Optional[str] = None
+    insurance_note: Optional[str] = None
+    source_metadata: dict = Field(default_factory=dict)
 
 
 class PriceBookIssue(BaseModel):

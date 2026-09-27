@@ -1,0 +1,176 @@
+{
+  "case_id": "IHI_QUOTE_001",
+  "display_name": "IHI検査計測 MAG / PHOTON 肉厚測定提案",
+  "related_technical_case_id": "IHI-TECH-001",
+  "manufacturer_source_of_truth": ["DT40", "PT30"],
+  "supplier_quote_is_manufacturer_source_of_truth": false,
+  "supplier_quote_role": "VALIDATION_TARGET",
+  "customer_quotes_role": "EXPECTED_BUSINESS_OUTPUT",
+  "do_not_recalculate_customer_prices": true,
+  "known_issue_codes": [
+    "SUPPLIER_PRICE_REQUIRES_VALIDATION",
+    "MISSING_COMPONENT",
+    "SHIPPING_REQUIRES_CONFIGURATION_REVIEW"
+  ],
+  "missing_components": [
+    {
+      "code": "MISSING_COMPONENT",
+      "configuration": "MAG + Cygnus",
+      "description": "MAG Cygnus Integration Kit",
+      "customer_quote_line": "INTEGRATION KIT, POWER BRUSH CYGNUS GAUGE",
+      "present_in_supplier_quote": false,
+      "present_in_mag_customer_quote": true,
+      "expected_manufacturer_sku": null,
+      "sku_source": "UNMAPPED",
+      "note": "7851-PHOTON is the PHOTON Integration Kit and is a different part. Do not add a guessed MAG kit SKU to the Supplier Quote."
+    }
+  ],
+  "supplier_quote_expectations": {
+    "quote_reference": "20260925-142434902",
+    "total_usd": 88600,
+    "currency": "USD",
+    "photon_integration_kit_sku": "7851-PHOTON",
+    "photon_integration_kit_present": true,
+    "shipping": {
+      "shipping_type": "LARGE_BOX",
+      "quantity": 3,
+      "unit_price_usd": 2922,
+      "total_usd": 8766
+    },
+    "insurance": {
+      "amount_usd": 1950,
+      "is_separate_line": true
+    },
+    "line_validations": [
+      {
+        "sku": "9701-MAG-4K",
+        "expected_status": "REQUIRES_REVIEW",
+        "reason": "Compare to DT40 / PT30 Current Manufacturer Value. Do not treat the Supplier Quote price as Source of Truth."
+      },
+      {
+        "sku": "9735",
+        "expected_status": "REQUIRES_REVIEW",
+        "reason": "Compare to DT40 / PT30 Current Manufacturer Value. Do not treat the Supplier Quote price as Source of Truth."
+      },
+      {
+        "sku": "9680-BASE",
+        "expected_status": "REQUIRES_REVIEW",
+        "reason": "Compare to DT40 / PT30 Current Manufacturer Value. Do not treat the Supplier Quote price as Source of Truth."
+      },
+      {
+        "sku": "7851-PHOTON",
+        "expected_status": "REQUIRES_REVIEW",
+        "reason": "PHOTON Integration Kit is present. Price still requires DT40 / PT30 validation."
+      },
+      {
+        "sku": "5608",
+        "expected_status": "REQUIRES_REVIEW",
+        "reason": "Compare to DT40 / PT30 Current Manufacturer Value. Do not treat the Supplier Quote price as Source of Truth."
+      },
+      {
+        "sku": "8459",
+        "expected_status": "REQUIRES_REVIEW",
+        "reason": "Compare to DT40 / PT30 Current Manufacturer Value. Do not treat the Supplier Quote price as Source of Truth."
+      }
+    ]
+  },
+  "human_verified_sku_mappings": [
+    {
+      "quote": "MAG",
+      "customer_line_description": "MAG UTILITY CRAWLER PACKAGE 4K",
+      "expected_manufacturer_sku": "9701-MAG-4K",
+      "sku_source": "HUMAN_VERIFIED",
+      "basis": "Supplier Quote lists this SKU for the same product. The customer quote PDF does not print a SKU."
+    },
+    {
+      "quote": "MAG",
+      "customer_line_description": "ELEVATED PT CAMERA KIT",
+      "expected_manufacturer_sku": "9735",
+      "sku_source": "HUMAN_VERIFIED",
+      "basis": "Supplier Quote lists this SKU for the same product. The customer quote PDF does not print a SKU."
+    },
+    {
+      "quote": "MAG",
+      "customer_line_description": "THICKNESS GUAGE - CYGNUS",
+      "expected_manufacturer_sku": "5608",
+      "sku_source": "HUMAN_VERIFIED",
+      "basis": "Supplier Quote lists this SKU for the same product. The customer quote PDF does not print a SKU."
+    },
+    {
+      "quote": "MAG",
+      "customer_line_description": "INTEGRATION KIT, POWER BRUSH CYGNUS GAUGE",
+      "expected_manufacturer_sku": null,
+      "sku_source": "UNMAPPED",
+      "expected_status": "MISSING_COMPONENT",
+      "basis": "Present on the SpaceOne MAG quote and missing from the Supplier Quote. Formal SKU is not guessed."
+    },
+    {
+      "quote": "PHOTON",
+      "customer_line_description": "DeepTrekker PHOTON BASE Package",
+      "expected_manufacturer_sku": "9680-BASE",
+      "sku_source": "HUMAN_VERIFIED",
+      "basis": "Supplier Quote lists this SKU for the same product. The customer quote PDF does not print a SKU."
+    },
+    {
+      "quote": "PHOTON",
+      "customer_line_description": "POWER PACK ASY, PHOTON",
+      "expected_manufacturer_sku": "8459",
+      "sku_source": "HUMAN_VERIFIED",
+      "basis": "Supplier Quote lists this SKU for the same product. The customer quote PDF does not print a SKU."
+    },
+    {
+      "quote": "PHOTON",
+      "customer_line_description": "THICKNESS GUAGE - CYGNUS",
+      "expected_manufacturer_sku": "5608",
+      "sku_source": "HUMAN_VERIFIED",
+      "basis": "Supplier Quote lists this SKU for the same product. The customer quote PDF does not print a SKU."
+    },
+    {
+      "quote": "PHOTON",
+      "customer_line_description": "THICKNESS GAUGE - CYGNUS INTEGRATION KIT",
+      "expected_manufacturer_sku": "7851-PHOTON",
+      "sku_source": "HUMAN_VERIFIED",
+      "basis": "Supplier Quote lists 7851-PHOTON. The customer quote PDF does not print a SKU."
+    }
+  ],
+  "mag_customer_quote_expectations": {
+    "quote_number": "8194",
+    "subtotal_ex_tax_jpy": 12648000,
+    "tax_jpy": 1264800,
+    "total_jpy": 13912800,
+    "shipping": {
+      "large_box": 2,
+      "small_box": 0,
+      "price_jpy": 1190000
+    },
+    "insurance_included_in_sales_price": true,
+    "insurance_separate_line": false,
+    "lead_time": {
+      "text": "発注より5か月程度",
+      "as_of": "2026-09-26",
+      "kind": "QUOTE_SNAPSHOT",
+      "is_technical_fact": false,
+      "is_lead_time_master": false
+    }
+  },
+  "photon_customer_quote_expectations": {
+    "quote_number": "8195",
+    "subtotal_ex_tax_jpy": 7160000,
+    "tax_jpy": 716000,
+    "total_jpy": 7876000,
+    "shipping": {
+      "large_box": 1,
+      "small_box": 1,
+      "price_jpy": 870000
+    },
+    "insurance_included_in_sales_price": true,
+    "insurance_separate_line": false,
+    "lead_time": {
+      "text": "発注より3か月程度",
+      "as_of": "2026-09-26",
+      "kind": "QUOTE_SNAPSHOT",
+      "is_technical_fact": false,
+      "is_lead_time_master": false
+    }
+  }
+}

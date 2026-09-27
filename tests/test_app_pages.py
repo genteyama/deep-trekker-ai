@@ -40,6 +40,7 @@ def test_home_opens_quote_control_page():
     assert "現在は開発用の整理処理です" in [item.value for item in at.warning]
     assert any(button.label == "価格表を読み込む" for button in at.button)
     assert any(button.label == "社内マスターをSKUで照合" for button in at.button)
+    assert any(expander.label == "Golden Quote Cases（開発用）" for expander in at.expander)
     assert "SKUリンク移行プレビュー" in " ".join([item.value for item in at.subheader] + visible_text + [item.value for item in at.markdown])
     assert any(button.label == "更新情報として整理" for button in at.button)
     assert not any("正式" in (button.label or "") and "反映" in (button.label or "") for button in at.button)

@@ -6,6 +6,7 @@ from openpyxl.utils.exceptions import InvalidFileException
 from agents.master_reconciliation import reconcile_spaceone_master
 from agents.quote_control_agent import SkuMasterStore, diff_price_books, import_price_book
 from agents.sku_link import build_sku_link_preview, try_manual_link
+from data.golden_cases.loader import IHI_QUOTE_001, load_quote_golden_case
 from agents.update_inbox_agent import UpdateInboxStore, create_manual_candidate, organize_pasted_update
 from models import (
     LinkStatus,
@@ -77,6 +78,7 @@ def render_quote_control(texts: dict) -> None:
     _render_spaceone_reconciliation(page)
     st.divider()
     _render_update_inbox(page)
+    _render_golden_quote_cases(page)
 
 
 def _run_import(page: dict, uploaded, previous, source_price_book: str, version: str) -> None:
@@ -414,6 +416,55 @@ def _render_update_inbox(page: dict) -> None:
             }
         )
     st.table(rows)
+
+
+def _render_golden_quote_cases(page: dict) -> None:
+    with st.expander(page["golden_quote_cases_label"]):
+        st.caption(page["golden_quote_cases_hint"])
+        case = load_quote_golden_case(IHI_QUOTE_001)
+        supplier = case["supplier_quote"]
+        mag = case["mag_customer_quote"]
+        photon = case["photon_customer_quote"]
+        expected = case["expected_validation"]
+        st.markdown(f"**{expected['case_id']}**")
+        st.write(expected["display_name"])
+        st.write(
+            f"{page['golden_sot_label']}: {', '.join(expected['manufacturer_source_of_truth'])}"
+        )
+        st.write(
+            f"{page['golden_supplier_role_label']}: {page['golden_supplier_not_sot']}"
+        )
+        st.markdown(f"**{page['golden_known_issues_label']}**")
+        for issue in supplier.get("known_issues") or []:
+            st.write(f"{issue['code']}: {issue['message']}")
+        st.markdown(f"**{page['golden_supplier_label']}**")
+        st.write(f"{page['golden_reference']}: {supplier.get('quote_reference')}")
+        st.write(f"{page['golden_supplier_total']}: {supplier.get('total_usd'):,} USD")
+        st.table(
+            [
+                {
+                    page["column_sku"]: line.get("sku") or page["no_value"],
+                    page["column_description"]: line.get("description"),
+                    page["golden_qty"]: line.get("quantity"),
+                    page["golden_unit_usd"]: line.get("unit_price_usd"),
+                }
+                for line in supplier.get("lines") or []
+            ]
+        )
+        st.markdown(f"**{page['golden_mag_label']}**")
+        st.write(f"{page['golden_quote_number']}: {mag.get('quote_number')}")
+        st.write(f"{page['golden_subtotal']}: {mag.get('subtotal_ex_tax_jpy'):,} JPY")
+        st.write(f"{page['golden_total']}: {mag.get('total_jpy'):,} JPY")
+        st.write(f"{page['golden_shipping']}: {mag.get('shipping', {}).get('description')}")
+        st.write(f"{page['golden_insurance']}: {mag.get('insurance_note')}")
+        st.write(f"{page['golden_lead_time']}: {mag.get('lead_time_note')}")
+        st.markdown(f"**{page['golden_photon_label']}**")
+        st.write(f"{page['golden_quote_number']}: {photon.get('quote_number')}")
+        st.write(f"{page['golden_subtotal']}: {photon.get('subtotal_ex_tax_jpy'):,} JPY")
+        st.write(f"{page['golden_total']}: {photon.get('total_jpy'):,} JPY")
+        st.write(f"{page['golden_shipping']}: {photon.get('shipping', {}).get('description')}")
+        st.write(f"{page['golden_insurance']}: {photon.get('insurance_note')}")
+        st.write(f"{page['golden_lead_time']}: {photon.get('lead_time_note')}")
 
 
 def _ensure_official_master() -> None:

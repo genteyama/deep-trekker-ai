@@ -1,0 +1,81 @@
+{
+  "quote_number": "8194",
+  "case_id": "IHI_QUOTE_001",
+  "configuration_name": "MAG",
+  "quote_date": "2026-09-28",
+  "customer": "株式会社IHI検査計測",
+  "title": "DeepTrekker MAG Utility Crawler 一式",
+  "currency": "JPY",
+  "lines": [
+    {
+      "line_id": "MAG-L1",
+      "description": "MAG UTILITY CRAWLER PACKAGE 4K",
+      "quantity": 1,
+      "unit_price_jpy": 6620000,
+      "line_total_jpy": 6620000,
+      "manufacturer_sku": null,
+      "sku_source": "UNMAPPED"
+    },
+    {
+      "line_id": "MAG-L2",
+      "description": "ELEVATED PT CAMERA KIT",
+      "quantity": 1,
+      "unit_price_jpy": 2258000,
+      "line_total_jpy": 2258000,
+      "manufacturer_sku": null,
+      "sku_source": "UNMAPPED"
+    },
+    {
+      "line_id": "MAG-L3",
+      "description": "THICKNESS GUAGE - CYGNUS",
+      "quantity": 1,
+      "unit_price_jpy": 2220000,
+      "line_total_jpy": 2220000,
+      "manufacturer_sku": null,
+      "sku_source": "UNMAPPED"
+    },
+    {
+      "line_id": "MAG-L4",
+      "description": "INTEGRATION KIT, POWER BRUSH CYGNUS GAUGE",
+      "quantity": 1,
+      "unit_price_jpy": 360000,
+      "line_total_jpy": 360000,
+      "manufacturer_sku": null,
+      "sku_source": "UNMAPPED",
+      "notes": "Present on the SpaceOne MAG quote. Missing from the Supplier Quote. SKU is not printed on the customer quote."
+    }
+  ],
+  "shipping": {
+    "description": "国際輸送費 カナダ→日本 大型梱包 ×2",
+    "boxes": [
+      {
+        "shipping_type": "LARGE_BOX",
+        "quantity": 2
+      }
+    ],
+    "price_jpy": 1190000
+  },
+  "insurance": {
+    "included_in_sales_price": true,
+    "separate_line": false,
+    "note": "輸送時保険料は代金に含む。"
+  },
+  "lead_time": {
+    "text": "発注より5か月程度",
+    "as_of": "2026-09-26",
+    "kind": "QUOTE_SNAPSHOT",
+    "is_technical_fact": false,
+    "is_lead_time_master": false
+  },
+  "subtotal_ex_tax_jpy": 12648000,
+  "tax_jpy": 1264800,
+  "total_jpy": 13912800,
+  "lead_time_note": "納期目安：発注より5か月程度（2026年9月26日現在）",
+  "insurance_note": "輸送時保険料は代金に含む。",
+  "source_metadata": {
+    "quote_number": "8194",
+    "issue_date": "2026-09-28",
+    "role": "EXPECTED_BUSINESS_OUTPUT",
+    "sku_printed_on_source": false
+  }
+}

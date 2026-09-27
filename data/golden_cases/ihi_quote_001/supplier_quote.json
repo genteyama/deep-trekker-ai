@@ -1,0 +1,113 @@
+{
+  "supplier_quote_id": "IHI_QUOTE_001-SQ",
+  "case_id": "IHI_QUOTE_001",
+  "quote_reference": "20260925-142434902",
+  "quote_date": "2026-09-25",
+  "expires_at": "2026-10-25",
+  "valid_until": "2026-10-25",
+  "supplier": "Deep Trekker",
+  "supplier_contact": "Christianne Stever",
+  "currency": "USD",
+  "is_manufacturer_source_of_truth": false,
+  "lines": [
+    {
+      "line_id": "SQ-L1",
+      "sku": "9701-MAG-4K",
+      "description": "MAG CRAWLER PACKAGE 4K",
+      "quantity": 1,
+      "unit_price_usd": 35437,
+      "line_total_usd": 35437,
+      "expected_validation_status": "REQUIRES_REVIEW"
+    },
+    {
+      "line_id": "SQ-L2",
+      "sku": "9735",
+      "description": "ELEVATING PAN TILT CAMERA KIT + LEDS - UTILITY CRAWLERS",
+      "quantity": 1,
+      "unit_price_usd": 12075,
+      "line_total_usd": 12075,
+      "expected_validation_status": "REQUIRES_REVIEW"
+    },
+    {
+      "line_id": "SQ-L3",
+      "sku": "9680-BASE",
+      "description": "PHOTON BASE PACKAGE",
+      "quantity": 1,
+      "unit_price_usd": 17391,
+      "line_total_usd": 17391,
+      "expected_validation_status": "REQUIRES_REVIEW"
+    },
+    {
+      "line_id": "SQ-L4",
+      "sku": "7851-PHOTON",
+      "description": "CYGNUS THICKNESS GAUGE INTEGRATION KIT (ONLY) - PHOTON",
+      "quantity": 1,
+      "unit_price_usd": 1746,
+      "line_total_usd": 1746,
+      "expected_validation_status": "REQUIRES_REVIEW"
+    },
+    {
+      "line_id": "SQ-L5",
+      "sku": "5608",
+      "description": "CYGNUS THICKNESS GAUGE (ONLY) - ROVS/UTILITY CRAWLERS",
+      "quantity": 1,
+      "unit_price_usd": 10448,
+      "line_total_usd": 10448,
+      "expected_validation_status": "REQUIRES_REVIEW"
+    },
+    {
+      "line_id": "SQ-L6",
+      "sku": "8459",
+      "description": "SPARE BATTERY - PHOTON",
+      "quantity": 1,
+      "unit_price_usd": 787,
+      "line_total_usd": 787,
+      "expected_validation_status": "REQUIRES_REVIEW"
+    }
+  ],
+  "shipping_lines": [
+    {
+      "shipping_type": "LARGE_BOX",
+      "description": "Large Box Shipping Globally",
+      "quantity": 3,
+      "unit_price_usd": 2922,
+      "line_total_usd": 8766,
+      "destination": "GLOBAL"
+    }
+  ],
+  "shipping_usd": 8766,
+  "insurance": {
+    "description": "Shipping Insurance",
+    "quantity": 1,
+    "amount_usd": 1950,
+    "is_separate_line": true
+  },
+  "insurance_usd": 1950,
+  "total_usd": 88600,
+  "known_issues": [
+    {
+      "code": "SUPPLIER_PRICE_REQUIRES_VALIDATION",
+      "message": "メーカー見積の一部価格は SpaceOne Dealer Price として正しいとは限らない。DT40 / PT30 Current Manufacturer Value と照合する。",
+      "details": "Supplier Quote is a validation target, not Manufacturer Source of Truth."
+    },
+    {
+      "code": "MISSING_COMPONENT",
+      "message": "MAG + Cygnus 構成に必要な MAG 側 Cygnus Integration Kit が Supplier Quote に入っていない。",
+      "details": "7851-PHOTON is the PHOTON kit and is a different part. Do not add a guessed MAG kit SKU to this Supplier Quote."
+    },
+    {
+      "code": "SHIPPING_REQUIRES_CONFIGURATION_REVIEW",
+      "message": "Supplier Quote は Large Box ×3 としてまとめている。顧客提案の梱包構成へそのまま割り振らない。",
+      "details": "MAG uses Large Box ×2. PHOTON uses Large Box ×1 and Small Box ×1."
+    }
+  ],
+  "source_metadata": {
+    "document_title": "SPACEONE Co., Ltd - MAG, Photon, Cygnus Gauge",
+    "quote_created_by": "Christianne Stever",
+    "quote_created": "2026-09-25",
+    "quote_expires": "2026-10-25",
+    "requote_requested": true,
+    "role": "VALIDATION_TARGET",
+    "parser": null
+  }
+}

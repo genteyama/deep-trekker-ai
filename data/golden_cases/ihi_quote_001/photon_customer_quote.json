@@ -1,0 +1,84 @@
+{
+  "quote_number": "8195",
+  "case_id": "IHI_QUOTE_001",
+  "configuration_name": "PHOTON",
+  "quote_date": "2026-09-26",
+  "customer": "株式会社IHI検査計測",
+  "title": "DeepTrekker PHOTON（ROV）一式",
+  "currency": "JPY",
+  "lines": [
+    {
+      "line_id": "PH-L1",
+      "description": "DeepTrekker PHOTON BASE Package",
+      "quantity": 1,
+      "unit_price_jpy": 3540000,
+      "line_total_jpy": 3540000,
+      "manufacturer_sku": null,
+      "sku_source": "UNMAPPED"
+    },
+    {
+      "line_id": "PH-L2",
+      "description": "POWER PACK ASY, PHOTON",
+      "quantity": 1,
+      "unit_price_jpy": 160000,
+      "line_total_jpy": 160000,
+      "manufacturer_sku": null,
+      "sku_source": "UNMAPPED"
+    },
+    {
+      "line_id": "PH-L3",
+      "description": "THICKNESS GUAGE - CYGNUS",
+      "quantity": 1,
+      "unit_price_jpy": 2220000,
+      "line_total_jpy": 2220000,
+      "manufacturer_sku": null,
+      "sku_source": "UNMAPPED"
+    },
+    {
+      "line_id": "PH-L4",
+      "description": "THICKNESS GAUGE - CYGNUS INTEGRATION KIT",
+      "quantity": 1,
+      "unit_price_jpy": 370000,
+      "line_total_jpy": 370000,
+      "manufacturer_sku": null,
+      "sku_source": "UNMAPPED"
+    }
+  ],
+  "shipping": {
+    "description": "国際輸送費 カナダ→日本 大型梱包 ×1 小型梱包 ×1",
+    "boxes": [
+      {
+        "shipping_type": "LARGE_BOX",
+        "quantity": 1
+      },
+      {
+        "shipping_type": "SMALL_BOX",
+        "quantity": 1
+      }
+    ],
+    "price_jpy": 870000
+  },
+  "insurance": {
+    "included_in_sales_price": true,
+    "separate_line": false,
+    "note": "輸送時保険料は代金に含む。"
+  },
+  "lead_time": {
+    "text": "発注より3か月程度",
+    "as_of": "2026-09-26",
+    "kind": "QUOTE_SNAPSHOT",
+    "is_technical_fact": false,
+    "is_lead_time_master": false
+  },
+  "subtotal_ex_tax_jpy": 7160000,
+  "tax_jpy": 716000,
+  "total_jpy": 7876000,
+  "lead_time_note": "納期目安：発注より3か月程度（2026年9月26日現在）",
+  "insurance_note": "輸送時保険料は代金に含む。",
+  "source_metadata": {
+    "quote_number": "8195",
+    "issue_date": "2026-09-26",
+    "role": "EXPECTED_BUSINESS_OUTPUT",
+    "sku_printed_on_source": false
+  }
+}
