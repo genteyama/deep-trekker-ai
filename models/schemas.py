@@ -1069,6 +1069,7 @@ class QuoteDraft(BaseModel):
     lead_time_text: Optional[str] = None
     issue_date: Optional[str] = None
     valid_until: Optional[str] = None
+    auto_valid_until: bool = True
     issuer_snapshot: Optional[IssuerSnapshot] = None
     adjustments: list[QuoteAdjustment] = Field(default_factory=list)
     created_at: Optional[datetime] = None

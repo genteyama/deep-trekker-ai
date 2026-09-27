@@ -45,11 +45,9 @@ from agents.quote_builder import (
     customer_preview_rows,
 )
 from agents.quote_dates import (
-    add_one_calendar_month,
-    next_valid_until,
-    parse_quote_date,
-    tokyo_today,
-    valid_until_matches_auto_rule,
+    apply_date_widget_defaults,
+    date_widget_keys,
+    sync_auto_valid_until,
 )
 from agents.master_reconciliation import collect_manufacturer_candidates, reconcile_spaceone_master
 from agents.quote_control_agent import SkuMasterStore, diff_price_books, import_price_book
@@ -1060,9 +1058,15 @@ def _render_quote_builder(page: dict) -> None:
     st.caption(page["quote_builder_hint"])
     case = load_quote_golden_case(IHI_QUOTE_001)
     if st.button(page["ihi_photon_draft_button"], key="ihi_photon_draft"):
-        st.session_state["quote_draft"] = _build_ihi_draft_from_ui(page, case, "PHOTON")
+        draft = _build_ihi_draft_from_ui(page, case, "PHOTON")
+        st.session_state["quote_draft"] = draft
+        if draft is not None:
+            _init_date_widget_state(draft, overwrite=True)
     if st.button(page["ihi_mag_draft_button"], key="ihi_mag_draft"):
-        st.session_state["quote_draft"] = _build_ihi_draft_from_ui(page, case, "MAG")
+        draft = _build_ihi_draft_from_ui(page, case, "MAG")
+        st.session_state["quote_draft"] = draft
+        if draft is not None:
+            _init_date_widget_state(draft, overwrite=True)
     draft = st.session_state.get("quote_draft")
     if draft is None:
         st.text(page["no_quote_draft"])
@@ -1227,8 +1231,8 @@ def _render_quote_approval(page: dict) -> None:
             if st.button(page["photon_human_final_button"], key="photon_human_final"):
                 try:
                     apply_ihi_photon_human_final_fixture(draft)
-                    _sync_date_widgets_from_draft(draft, auto=False)
                     st.session_state["quote_draft"] = draft
+                    st.session_state[date_widget_keys(draft.quote_draft_id)["pending"]] = True
                     st.rerun()
                 except ValueError:
                     st.warning(page["approved_draft_locked"])
@@ -1410,44 +1414,51 @@ def _ensure_quote_approval_store() -> QuoteApprovalStore:
     return st.session_state["quote_approval_store"]
 
 
+def _on_issue_date_change(draft_id: str) -> None:
+    sync_auto_valid_until(st.session_state, draft_id)
+
+
+def _on_auto_valid_until_change(draft_id: str) -> None:
+    sync_auto_valid_until(st.session_state, draft_id)
+
+
+def _init_date_widget_state(draft, *, overwrite: bool = False) -> None:
+    apply_date_widget_defaults(st.session_state, draft, overwrite=overwrite)
+
+
 def _render_quote_date_inputs(page: dict, draft):
-    auto_key = f"input_auto_valid_{draft.quote_draft_id}"
-    issue_key = f"input_issue_date_{draft.quote_draft_id}"
-    valid_key = f"input_valid_until_{draft.quote_draft_id}"
-    issue_default = parse_quote_date(draft.issue_date) or tokyo_today()
-    valid_default = parse_quote_date(draft.valid_until) or add_one_calendar_month(issue_default)
-    if auto_key not in st.session_state:
-        st.session_state[auto_key] = valid_until_matches_auto_rule(issue_default, valid_default)
-    if issue_key not in st.session_state:
-        st.session_state[issue_key] = issue_default
-    if valid_key not in st.session_state:
-        st.session_state[valid_key] = valid_default
-    auto = st.checkbox(page["auto_valid_until_label"], key=auto_key)
-    issue_date = st.date_input(page["issue_date_label"], key=issue_key, format="YYYY/MM/DD")
-    if auto:
-        computed = next_valid_until(issue_date, auto=True)
-        if st.session_state.get(valid_key) != computed:
-            st.session_state[valid_key] = computed
-    valid_until = st.date_input(
-        page["valid_until_label"],
-        key=valid_key,
-        format="YYYY/MM/DD",
-        disabled=auto,
+    keys = date_widget_keys(draft.quote_draft_id)
+    if st.session_state.get(keys["pending"]):
+        _init_date_widget_state(draft, overwrite=True)
+        del st.session_state[keys["pending"]]
+    else:
+        _init_date_widget_state(draft, overwrite=False)
+    st.checkbox(
+        page["auto_valid_until_label"],
+        key=keys["auto"],
+        on_change=_on_auto_valid_until_change,
+        args=(draft.quote_draft_id,),
     )
+    st.date_input(
+        page["issue_date_label"],
+        key=keys["issue"],
+        format="YYYY/MM/DD",
+        on_change=_on_issue_date_change,
+        args=(draft.quote_draft_id,),
+    )
+    st.date_input(
+        page["valid_until_label"],
+        key=keys["valid"],
+        format="YYYY/MM/DD",
+        disabled=bool(st.session_state.get(keys["auto"], True)),
+    )
+    issue_date = st.session_state[keys["issue"]]
+    valid_until = st.session_state[keys["valid"]]
     if draft.status not in {QuoteDraftStatus.APPROVED, QuoteDraftStatus.SUPERSEDED}:
         apply_issue_date(draft, issue_date)
-        apply_valid_until(draft, valid_until if not auto else next_valid_until(issue_date, auto=True))
+        apply_valid_until(draft, valid_until)
+        draft.auto_valid_until = bool(st.session_state.get(keys["auto"], True))
     return issue_date, valid_until
-
-
-def _sync_date_widgets_from_draft(draft, *, auto: Optional[bool] = None) -> None:
-    issue = parse_quote_date(draft.issue_date) or tokyo_today()
-    valid = parse_quote_date(draft.valid_until) or add_one_calendar_month(issue)
-    st.session_state[f"input_issue_date_{draft.quote_draft_id}"] = issue
-    st.session_state[f"input_valid_until_{draft.quote_draft_id}"] = valid
-    if auto is None:
-        auto = valid_until_matches_auto_rule(issue, valid)
-    st.session_state[f"input_auto_valid_{draft.quote_draft_id}"] = auto
 
 
 def _display_percent(value, page: dict) -> str:

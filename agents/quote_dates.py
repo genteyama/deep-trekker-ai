@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import date, datetime
 from typing import Optional, Union
 from zoneinfo import ZoneInfo
@@ -62,3 +64,42 @@ def valid_until_matches_auto_rule(issue: Optional[date], valid_until: Optional[d
     if issue is None or valid_until is None:
         return False
     return valid_until == add_one_calendar_month(issue)
+
+
+def date_widget_keys(draft_id: str) -> dict[str, str]:
+    return {
+        "issue": f"input_issue_date_{draft_id}",
+        "valid": f"input_valid_until_{draft_id}",
+        "auto": f"auto_valid_until_{draft_id}",
+        "pending": f"pending_quote_date_sync_{draft_id}",
+    }
+
+
+def initial_date_widget_values(draft) -> tuple[date, date, bool]:
+    issue = parse_quote_date(getattr(draft, "issue_date", None)) or tokyo_today()
+    valid = parse_quote_date(getattr(draft, "valid_until", None)) or add_one_calendar_month(issue)
+    auto = getattr(draft, "auto_valid_until", None)
+    if auto is None:
+        auto = valid_until_matches_auto_rule(issue, valid)
+    return issue, valid, bool(auto)
+
+
+def apply_date_widget_defaults(session_state, draft, *, overwrite: bool = False) -> None:
+    keys = date_widget_keys(draft.quote_draft_id)
+    issue, valid, auto = initial_date_widget_values(draft)
+    if overwrite or keys["issue"] not in session_state:
+        session_state[keys["issue"]] = issue
+    if overwrite or keys["valid"] not in session_state:
+        session_state[keys["valid"]] = valid
+    if overwrite or keys["auto"] not in session_state:
+        session_state[keys["auto"]] = auto
+
+
+def sync_auto_valid_until(session_state, draft_id: str) -> None:
+    keys = date_widget_keys(draft_id)
+    if not session_state.get(keys["auto"], True):
+        return
+    issue = parse_quote_date(session_state.get(keys["issue"]))
+    if issue is None:
+        return
+    session_state[keys["valid"]] = add_one_calendar_month(issue)

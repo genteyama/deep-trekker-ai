@@ -205,3 +205,73 @@ def test_back_button_returns_to_home():
     at.button(key="back_to_home").click().run()
 
     assert at.title[0].value == "Deep Trekker 業務支援AI"
+
+
+def _quote_date_widget(elements, key):
+    matches = [item for item in elements if getattr(item, "key", None) == key]
+    assert matches, f"missing widget {key}"
+    return matches[0]
+
+
+def test_quote_date_widgets_do_not_raise_and_follow_auto_rule():
+    from datetime import date
+
+    from agents.quote_approval import apply_ihi_photon_human_final_fixture
+    from agents.quote_dates import add_one_calendar_month, date_widget_keys, tokyo_today
+    from tests.test_quote_builder import _photon_draft
+
+    at = _start_app()
+    at.button(key="open_quote_control").click().run()
+
+    draft = _photon_draft()
+    keys = date_widget_keys(draft.quote_draft_id)
+    at.session_state["quote_draft"] = draft
+    at.run()
+
+    assert not at.exception
+    assert at.session_state[keys["issue"]] == tokyo_today()
+    assert at.session_state[keys["valid"]] == add_one_calendar_month(tokyo_today())
+    assert at.session_state[keys["auto"]] is True
+
+    _quote_date_widget(at.date_input, keys["issue"]).set_value(date(2026, 9, 27)).run()
+    assert not at.exception
+    assert at.session_state[keys["valid"]] == date(2026, 10, 27)
+
+    _quote_date_widget(at.checkbox, keys["auto"]).set_value(False).run()
+    _quote_date_widget(at.date_input, keys["valid"]).set_value(date(2026, 10, 31)).run()
+    _quote_date_widget(at.date_input, keys["issue"]).set_value(date(2026, 11, 1)).run()
+    assert not at.exception
+    assert at.session_state[keys["valid"]] == date(2026, 10, 31)
+
+    _quote_date_widget(at.checkbox, keys["auto"]).set_value(True).run()
+    assert not at.exception
+    assert at.session_state[keys["valid"]] == date(2026, 12, 1)
+
+    apply_ihi_photon_human_final_fixture(at.session_state["quote_draft"])
+    at.session_state[keys["pending"]] = True
+    at.run()
+    assert not at.exception
+    assert at.session_state[keys["issue"]] == date(2026, 9, 26)
+    assert at.session_state[keys["valid"]] == date(2026, 10, 31)
+    assert at.session_state[keys["auto"]] is False
+
+
+def test_quote_date_human_final_button_does_not_raise_after_widgets():
+    from datetime import date
+
+    from agents.quote_dates import date_widget_keys
+    from tests.test_quote_builder import _photon_draft
+
+    at = _start_app()
+    at.button(key="open_quote_control").click().run()
+    draft = _photon_draft()
+    keys = date_widget_keys(draft.quote_draft_id)
+    at.session_state["quote_draft"] = draft
+    at.run()
+    assert not at.exception
+
+    at.button(key="photon_human_final").click().run()
+    assert not at.exception
+    assert at.session_state[keys["issue"]] == date(2026, 9, 26)
+    assert at.session_state[keys["valid"]] == date(2026, 10, 31)
+    assert at.session_state[keys["auto"]] is False

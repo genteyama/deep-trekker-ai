@@ -133,6 +133,7 @@ def build_quote_draft(
         remark_candidates=_remark_candidates(presentation),
         issue_date=default_issue_date().isoformat(),
         valid_until=default_valid_until().isoformat(),
+        auto_valid_until=True,
         created_at=captured,
         updated_at=captured,
         source_references=list(landed_scenario.source_references) + ["Quote Builder draft"],

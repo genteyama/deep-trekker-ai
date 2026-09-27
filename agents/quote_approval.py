@@ -157,6 +157,7 @@ def apply_ihi_photon_human_final_fixture(draft: QuoteDraft) -> QuoteDraft:
         apply_issuer_snapshot(draft, IssuerSnapshot.model_validate(fixture["issuer"]))
     if fixture.get("remarks"):
         apply_selected_remarks(draft, fixture["remarks"])
+    draft.auto_valid_until = False
     return draft
 
 
@@ -321,6 +322,7 @@ def create_revision_draft(
     store: Optional[QuoteApprovalStore] = None,
 ) -> QuoteDraft:
     from agents.quote_builder import refresh_quote_draft
+    from agents.quote_dates import parse_quote_date, valid_until_matches_auto_rule
     from models import ScenarioCompleteness
 
     next_version = snapshot.quote_version + 1
@@ -348,6 +350,10 @@ def create_revision_draft(
         lead_time_text=snapshot.lead_time_text,
         issue_date=snapshot.issue_date,
         valid_until=snapshot.valid_until,
+        auto_valid_until=valid_until_matches_auto_rule(
+            parse_quote_date(snapshot.issue_date),
+            parse_quote_date(snapshot.valid_until),
+        ),
         issuer_snapshot=(
             snapshot.issuer_snapshot.model_copy(deep=True) if snapshot.issuer_snapshot else None
         ),
