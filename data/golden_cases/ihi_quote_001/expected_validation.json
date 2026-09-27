@@ -44,33 +44,33 @@
     "line_validations": [
       {
         "sku": "9701-MAG-4K",
-        "expected_status": "REQUIRES_REVIEW",
-        "reason": "Compare to DT40 / PT30 Current Manufacturer Value. Do not treat the Supplier Quote price as Source of Truth."
+        "expected_status": "MSRP_MATCH",
+        "reason": "Supplier 35437 USD matches DT40 MSRP, not Current Dealer 21262.2 USD."
       },
       {
         "sku": "9735",
-        "expected_status": "REQUIRES_REVIEW",
-        "reason": "Compare to DT40 / PT30 Current Manufacturer Value. Do not treat the Supplier Quote price as Source of Truth."
+        "expected_status": "MSRP_MATCH",
+        "reason": "Supplier 12075 USD matches DT40 MSRP, not Current Dealer 7245 USD."
       },
       {
         "sku": "9680-BASE",
-        "expected_status": "REQUIRES_REVIEW",
-        "reason": "Compare to DT40 / PT30 Current Manufacturer Value. Do not treat the Supplier Quote price as Source of Truth."
+        "expected_status": "MSRP_MATCH",
+        "reason": "Supplier 17391 USD matches DT40 MSRP, not Current Dealer 10434.6 USD."
       },
       {
         "sku": "7851-PHOTON",
-        "expected_status": "REQUIRES_REVIEW",
-        "reason": "PHOTON Integration Kit is present. Price still requires DT40 / PT30 validation."
+        "expected_status": "MSRP_MATCH",
+        "reason": "PHOTON Integration Kit is present. Supplier 1746 USD matches DT40 MSRP, not Current Dealer 1047.6 USD."
       },
       {
         "sku": "5608",
-        "expected_status": "REQUIRES_REVIEW",
-        "reason": "Compare to DT40 / PT30 Current Manufacturer Value. Do not treat the Supplier Quote price as Source of Truth."
+        "expected_status": "NO_DEALER_DISCOUNT",
+        "reason": "DT40 notes state NO DEALER DISCOUNT and Supplier 10448 USD matches Current Manufacturer Value."
       },
       {
         "sku": "8459",
-        "expected_status": "REQUIRES_REVIEW",
-        "reason": "Compare to DT40 / PT30 Current Manufacturer Value. Do not treat the Supplier Quote price as Source of Truth."
+        "expected_status": "MSRP_MATCH",
+        "reason": "Supplier 787 USD matches DT40 MSRP, not Current Dealer 472.2 USD."
       }
     ]
   },

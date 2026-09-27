@@ -6,7 +6,9 @@ from openpyxl.utils.exceptions import InvalidFileException
 from agents.master_reconciliation import reconcile_spaceone_master
 from agents.quote_control_agent import SkuMasterStore, diff_price_books, import_price_book
 from agents.sku_link import build_sku_link_preview, try_manual_link
+from agents.supplier_quote_validation import load_official_manufacturer_price_books, validate_supplier_quote
 from data.golden_cases.loader import IHI_QUOTE_001, load_quote_golden_case
+from models import RequiredConfigurationItem, SupplierQuote
 from agents.update_inbox_agent import UpdateInboxStore, create_manual_candidate, organize_pasted_update
 from models import (
     LinkStatus,
@@ -465,6 +467,62 @@ def _render_golden_quote_cases(page: dict) -> None:
         st.write(f"{page['golden_shipping']}: {photon.get('shipping', {}).get('description')}")
         st.write(f"{page['golden_insurance']}: {photon.get('insurance_note')}")
         st.write(f"{page['golden_lead_time']}: {photon.get('lead_time_note')}")
+        _render_supplier_quote_validation(page, case)
+
+
+def _render_supplier_quote_validation(page: dict, case: dict) -> None:
+    st.markdown(f"**{page['golden_validation_label']}**")
+    if st.button(page["golden_validate_button"], key="validate_ihi_supplier_quote"):
+        books = load_official_manufacturer_price_books()
+        if not books:
+            st.session_state["ihi_supplier_validation"] = None
+            st.warning(page["golden_validation_no_books"])
+        else:
+            quote = SupplierQuote.model_validate(case["supplier_quote"])
+            required = [
+                RequiredConfigurationItem.model_validate(item) for item in case["required_configuration"]
+            ]
+            st.session_state["ihi_supplier_validation"] = validate_supplier_quote(
+                quote, *books, required_items=required
+            )
+    result = st.session_state.get("ihi_supplier_validation")
+    if result is None:
+        st.caption(page["golden_validation_hint"])
+        return
+    status_labels = page["golden_validation_statuses"]
+    st.write(f"{page['golden_overall_status']}: {status_labels.get(result.status.value, result.status.value)}")
+    st.write(f"{page['golden_supplier_total']}: {result.supplier_quote_total_usd:,} USD")
+    rows = []
+    for line in result.lines:
+        if line.line_kind.value != "PRODUCT":
+            continue
+        rows.append(
+            {
+                page["column_sku"]: line.sku or page["no_value"],
+                page["golden_supplier_price"]: _display_number(line.supplier_unit_price_usd, page),
+                page["golden_current_dealer"]: _display_number(line.manufacturer_dealer_price_usd, page),
+                page["golden_current_msrp"]: _display_number(line.manufacturer_msrp_usd, page),
+                page["column_status"]: status_labels.get(line.validation_status.value, line.validation_status.value),
+                page["golden_difference"]: _display_number(line.price_difference_vs_dealer, page),
+                page["golden_warning"]: "; ".join(line.warnings) or page["no_value"],
+            }
+        )
+    st.table(rows)
+    st.markdown(f"**{page['golden_missing_label']}**")
+    if result.known_configuration_issues:
+        for issue in result.known_configuration_issues:
+            st.write(f"{issue.code}: {issue.message}")
+    else:
+        st.text(page["no_value"])
+    st.markdown(f"**{page['golden_shipping']}**")
+    for line in result.lines:
+        if line.line_kind.value == "SHIPPING":
+            st.write(f"{line.description}: {line.quantity} x {_display_number(line.supplier_unit_price_usd, page)} USD")
+    st.markdown(f"**{page['golden_insurance']}**")
+    for line in result.lines:
+        if line.line_kind.value == "INSURANCE":
+            st.write(f"{line.description}: {_display_number(line.supplier_unit_price_usd, page)} USD")
+    st.caption(page["golden_validation_caption"])
 
 
 def _ensure_official_master() -> None:

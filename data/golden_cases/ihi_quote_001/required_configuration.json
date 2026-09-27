@@ -1,0 +1,15 @@
+[
+  {
+    "configuration_id": "IHI_QUOTE_001-MAG-CYGNUS-INTEGRATION",
+    "product": "MAG",
+    "required_sku": null,
+    "required_description": "MAG Cygnus Integration Kit",
+    "requirement_source": "HUMAN_VERIFIED",
+    "requirement_reference": "IHI_QUOTE_001",
+    "human_verified": true,
+    "match_markers": ["INTEGRATION"],
+    "exclude_skus": ["7851-PHOTON"],
+    "exclude_markers": ["PHOTON"],
+    "notes": "MAG + Cygnus requires a MAG-side Cygnus Integration Kit. 7851-PHOTON is a different part and does not satisfy this. Formal MAG SKU is not yet human-verified."
+  }
+]

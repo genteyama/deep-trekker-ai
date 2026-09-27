@@ -206,6 +206,70 @@ def previous_master_book() -> BytesIO:
     )
 
 
+def supplier_quote_validation_books() -> tuple[BytesIO, BytesIO]:
+    dt40 = build_workbook(
+        {
+            "PHOTON": [
+                ["Part Number", "Description", "MSRP", "DT40", "Notes:"],
+                ["DEALER-1", "Dealer priced item", 1000, 600, None],
+                ["MSRP-1", "Quoted at list", 2000, 1200, None],
+                ["MISMATCH-1", "Neither price", 3000, 1800, None],
+                ["5608", "CYGNUS", 10448, 10448, "***NO DEALER DISCOUNT"],
+                ["NDD-NUM-ONLY", "Dealer equals MSRP without note", 500, 500, None],
+                ["SPECIAL-1", "Special candidate", 800, 480, None],
+            ],
+            "REVOLUTION-OBSOLETE": [
+                ["Part Number", "Description", "MSRP", "DT40", "Notes:"],
+                ["7511-SC-BASE", "Obsolete package", 1000, 600, "obsolete"],
+            ],
+        }
+    )
+    pt30 = build_workbook(
+        {
+            "A-200": [
+                ["Part Number", "Description", "MSRP", "PT30", "Notes:"],
+                ["CONFLICT-1", "Conflict A", 100, 60, "note A"],
+            ],
+            "A-150": [
+                ["Part Number", "Description", "MSRP", "PT30", "Notes:"],
+                ["CONFLICT-1", "Conflict B", 200, 140, "note B"],
+            ],
+        }
+    )
+    return dt40, pt30
+
+
+def official_ihi_sku_snapshot_book() -> BytesIO:
+    return build_workbook(
+        {
+            "VAC & MAG": [
+                ["Part Number", "Description", "MSRP", "DT40", "Notes:"],
+                [
+                    "9701-MAG-4K",
+                    "MAG CRAWLER PACKAGE 4K",
+                    35437,
+                    21262.2,
+                    "75m Tether, Reel, 7\" LCD Controller, Carry Case, Sensors, MAG Wheels, Forward Facing 4K Body Camera, LED Lights",
+                ],
+                ["9735", "ELEVATING PAN TILT CAMERA KIT + LEDS - UTILITY CRAWLERS", 12075, 7245, None],
+                ["5608", "CYGNUS THICKNESS GAUGE", 10448, 10448, "***NO DEALER DISCOUNT"],
+            ],
+            "PHOTON": [
+                ["Part Number", "Description", "MSRP", "DT40", "Notes:"],
+                [
+                    "9680-BASE",
+                    "PHOTON BASE PACKAGE",
+                    17391,
+                    10434.6,
+                    "7\" Controller, 4K Camera, Lights, 1 Battery, Sensor Pod, Case, 150m Tether on reel, 1 Year Warranty",
+                ],
+                ["7851-PHOTON", "CYGNUS THICKNESS GAUGE INTEGRATION KIT (ONLY) - PHOTON", 1746, 1047.6, "USES RS485 COMS"],
+                ["8459", "SPARE BATTERY - PHOTON", 787, 472.2, "ONE (1) BATTERY PACK"],
+            ],
+        }
+    )
+
+
 def manufacturer_books_for_reconciliation() -> tuple[BytesIO, BytesIO]:
     dt40 = build_workbook(
         {

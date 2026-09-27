@@ -172,6 +172,20 @@ class SupplierQuoteValidationStatus(str, Enum):
     MISSING_COMPONENT = "MISSING_COMPONENT"
     SPECIAL_PRICE = "SPECIAL_PRICE"
     REQUIRES_REVIEW = "REQUIRES_REVIEW"
+    NON_PRODUCT_COST = "NON_PRODUCT_COST"
+
+
+class SupplierQuoteOverallStatus(str, Enum):
+    VALID = "VALID"
+    REVIEW_REQUIRED = "REVIEW_REQUIRED"
+    INVALID = "INVALID"
+
+
+class SupplierQuoteLineKind(str, Enum):
+    PRODUCT = "PRODUCT"
+    SHIPPING = "SHIPPING"
+    INSURANCE = "INSURANCE"
+    MISSING_COMPONENT = "MISSING_COMPONENT"
 
 
 class SkuMappingSource(str, Enum):

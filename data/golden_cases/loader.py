@@ -30,6 +30,7 @@ def load_quote_golden_case(slug: str = IHI_QUOTE_001) -> dict:
         "mag_customer_quote": load_json_file(case_dir / "mag_customer_quote.json"),
         "photon_customer_quote": load_json_file(case_dir / "photon_customer_quote.json"),
         "expected_validation": load_json_file(case_dir / "expected_validation.json"),
+        "required_configuration": load_json_file(case_dir / "required_configuration.json"),
     }
 
 

@@ -22,6 +22,8 @@ from models.enums import (
     SkuDuplicateClass,
     SkuMappingSource,
     SkuSourceStatus,
+    SupplierQuoteLineKind,
+    SupplierQuoteOverallStatus,
     SupplierQuoteValidationStatus,
     SuggestedQuestionStatus,
     UpdateCategory,
@@ -310,6 +312,67 @@ class CustomerQuoteInsurance(BaseModel):
     included_in_sales_price: bool = True
     separate_line: bool = False
     note: Optional[str] = None
+
+
+class RequiredConfigurationItem(BaseModel):
+    configuration_id: str
+    product: Optional[str] = None
+    required_sku: Optional[str] = None
+    required_description: Optional[str] = None
+    requirement_source: Optional[str] = None
+    requirement_reference: Optional[str] = None
+    human_verified: bool = False
+    match_markers: list[str] = Field(default_factory=list)
+    exclude_skus: list[str] = Field(default_factory=list)
+    exclude_markers: list[str] = Field(default_factory=list)
+    notes: Optional[str] = None
+
+
+class SupplierQuoteLineValidation(BaseModel):
+    line_id: Optional[str] = None
+    sku: Optional[str] = None
+    description: Optional[str] = None
+    quantity: Optional[int] = None
+    line_kind: SupplierQuoteLineKind = SupplierQuoteLineKind.PRODUCT
+    supplier_unit_price_usd: Optional[float] = None
+    manufacturer_msrp_usd: Optional[float] = None
+    manufacturer_dealer_price_usd: Optional[float] = None
+    dealer_rate: Optional[float] = None
+    manufacturer_notes: list[str] = Field(default_factory=list)
+    manufacturer_status: Optional[SkuSourceStatus] = None
+    validation_status: SupplierQuoteValidationStatus
+    price_difference_vs_dealer: Optional[float] = None
+    price_difference_vs_msrp: Optional[float] = None
+    warnings: list[str] = Field(default_factory=list)
+    source_reference: Optional[str] = None
+
+
+class SupplierQuoteValidationSummary(BaseModel):
+    product_lines: int = 0
+    dealer_match_count: int = 0
+    msrp_match_count: int = 0
+    no_dealer_discount_count: int = 0
+    price_mismatch_count: int = 0
+    sku_not_found_count: int = 0
+    requires_review_count: int = 0
+    missing_component_count: int = 0
+    special_price_count: int = 0
+    shipping_line_count: int = 0
+    insurance_line_count: int = 0
+
+
+class SupplierQuoteValidationResult(BaseModel):
+    supplier_quote_validation_id: str
+    quote_reference: Optional[str] = None
+    validated_at: Optional[datetime] = None
+    price_book_versions: dict = Field(default_factory=dict)
+    lines: list[SupplierQuoteLineValidation] = Field(default_factory=list)
+    summary: SupplierQuoteValidationSummary = Field(default_factory=SupplierQuoteValidationSummary)
+    known_configuration_issues: list[QuoteKnownIssue] = Field(default_factory=list)
+    status: SupplierQuoteOverallStatus = SupplierQuoteOverallStatus.REVIEW_REQUIRED
+    supplier_quote_total_usd: Optional[float] = None
+    uses_supplier_quote_as_product_cost: bool = False
+    manufacturer_cost_basis: str = "DT40_PT30_CURRENT_DEALER"
 
 
 class CustomerQuote(BaseModel):
