@@ -11,8 +11,16 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.page import PageMargins
 
+from agents.formal_quote_document import (
+    FormalQuoteDocumentError,
+    build_formal_quote_document,
+    format_document_amount,
+    format_document_date,
+    formal_quote_comparable,
+)
 from agents.quote_approval import generate_quote_outputs
 from agents.quote_dates import parse_quote_date
+from agents.quote_pdf import extract_pdf_text, pdf_page_info, render_formal_quote_pdf
 from models import (
     ApprovedQuoteExportBundle,
     ApprovedQuoteSnapshot,
@@ -47,8 +55,10 @@ INTERNAL_COLUMNS = (
 )
 CUSTOMER_FORBIDDEN_TERMS = (
     "Dealer",
+    "Dealer Price",
     "Landed Cost",
     "Gross Margin",
+    "Gross Profit",
     "DT40",
     "PT30",
     "Pricing Policy",
@@ -256,7 +266,8 @@ def export_spaceone_quote_excel(
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "見積書"
-    _write_spaceone_quote_sheet(sheet, snapshot, bundle, purpose)
+    document = _formal_document(snapshot, bundle.official_quote_number)
+    _write_spaceone_quote_sheet(sheet, snapshot, bundle, purpose, document)
     prepare_spaceone_quote_pdf_layout(sheet)
     workbook.save(path)
     leaked = scan_customer_workbook_leaks(path)
@@ -268,13 +279,63 @@ def export_spaceone_quote_excel(
         file_type=ExportFileType.SPACEONE_QUOTE_XLSX,
         path=path,
         purpose=purpose,
-        row_count=len(bundle.spaceone_quote_payload.lines),
-        subtotal=snapshot.subtotal_ex_tax_jpy,
-        tax=snapshot.tax_jpy,
-        total=snapshot.total_jpy,
+        row_count=len(document.customer_lines),
+        subtotal=document.subtotal,
+        tax=document.tax_amount,
+        total=document.total,
         pdf_layout_prepared=True,
     )
     _validate_spaceone_excel(path, snapshot, bundle, purpose)
+    return bundle, path
+
+
+def export_spaceone_quote_pdf(
+    snapshot: ApprovedQuoteSnapshot,
+    *,
+    output_dir: Optional[Path] = None,
+    official_quote_number: Optional[str] = None,
+    generated_by: Optional[str] = None,
+    purpose: ExportPurpose = ExportPurpose.FORMAL,
+    bundle: Optional[ApprovedQuoteExportBundle] = None,
+) -> tuple[ApprovedQuoteExportBundle, Path]:
+    snapshot = require_approved_snapshot(snapshot)
+    if snapshot.status != QuoteDraftStatus.APPROVED:
+        raise QuoteExportError("Formal SpaceOne quote PDF requires an APPROVED snapshot.")
+    bundle = bundle or build_export_bundle(
+        snapshot,
+        official_quote_number=official_quote_number,
+        generated_by=generated_by,
+    )
+    if purpose == ExportPurpose.FORMAL:
+        if not bundle.official_quote_number:
+            raise QuoteExportError("Formal SpaceOne quote PDF requires an official_quote_number.")
+        if not snapshot.issue_date:
+            raise QuoteExportError("Formal SpaceOne quote PDF requires issue_date.")
+        if not snapshot.valid_until:
+            raise QuoteExportError("Formal SpaceOne quote PDF requires valid_until.")
+        if snapshot.issuer_snapshot is None:
+            raise QuoteExportError("Formal SpaceOne quote PDF requires an issuer_snapshot.")
+    document = _formal_document(snapshot, bundle.official_quote_number)
+    directory = Path(output_dir) if output_dir else default_output_dir()
+    directory.mkdir(parents=True, exist_ok=True)
+    path = unique_output_path(directory, _filename(bundle, "spaceone_quote", ".pdf"))
+    render_formal_quote_pdf(document, path)
+    leaked = scan_customer_pdf_leaks(path)
+    if leaked:
+        path.unlink(missing_ok=True)
+        raise QuoteExportError(f"SpaceOne quote PDF contains internal terms: {sorted(leaked)}")
+    _validate_spaceone_pdf(path, document)
+    _append_manifest(
+        bundle,
+        file_type=ExportFileType.SPACEONE_QUOTE_PDF,
+        path=path,
+        purpose=purpose,
+        row_count=len(document.customer_lines),
+        subtotal=document.subtotal,
+        tax=document.tax_amount,
+        total=document.total,
+        pdf_layout_prepared=True,
+    )
     return bundle, path
 
 
@@ -308,6 +369,14 @@ def export_ihi_photon_files(
         generated_by=generated_by,
         purpose=spaceone_purpose,
     )
+    if spaceone_purpose == ExportPurpose.FORMAL:
+        bundle, paths["spaceone_quote_pdf"] = export_spaceone_quote_pdf(
+            snapshot,
+            output_dir=output_dir,
+            bundle=bundle,
+            generated_by=generated_by,
+            purpose=spaceone_purpose,
+        )
     return bundle, paths
 
 
@@ -358,6 +427,56 @@ def scan_customer_workbook_leaks(path: Path) -> set[str]:
             for value in row:
                 leaked.update(_forbidden_terms_in(value))
     return leaked
+
+
+def scan_customer_pdf_leaks(path: Path) -> set[str]:
+    return _forbidden_terms_in(extract_pdf_text(path))
+
+
+def assert_spaceone_excel_pdf_match(excel_path: Path, pdf_path: Path, document) -> None:
+    workbook = load_workbook(excel_path, data_only=True)
+    sheet = workbook["見積書"]
+    excel_values = [cell.value for row in sheet.iter_rows() for cell in row]
+    pdf_text = extract_pdf_text(pdf_path)
+    comparable = formal_quote_comparable(document)
+    if comparable["quote_number"] not in excel_values and comparable["quote_number"] not in " ".join(
+        str(item) for item in excel_values if item is not None
+    ):
+        raise QuoteExportError("Excel quote number does not match FormalQuoteDocument.")
+    if comparable["quote_number"] not in pdf_text:
+        raise QuoteExportError("PDF quote number does not match FormalQuoteDocument.")
+    if comparable["customer_name"] and f"{comparable['customer_name']} 御中" not in excel_values:
+        raise QuoteExportError("Excel customer does not match FormalQuoteDocument.")
+    if comparable["customer_name"] and comparable["customer_name"] not in pdf_text:
+        raise QuoteExportError("PDF customer does not match FormalQuoteDocument.")
+    if comparable["subject"] not in excel_values:
+        raise QuoteExportError("Excel subject does not match FormalQuoteDocument.")
+    if comparable["subject"] and comparable["subject"] not in pdf_text:
+        raise QuoteExportError("PDF subject does not match FormalQuoteDocument.")
+    for amount in (comparable["subtotal"], comparable["tax_amount"], comparable["total"]):
+        if amount not in excel_values:
+            raise QuoteExportError("Excel totals do not match FormalQuoteDocument.")
+        formatted = format_document_amount(amount)
+        if formatted not in pdf_text and str(int(round(amount))) not in pdf_text.replace(",", ""):
+            raise QuoteExportError("PDF totals do not match FormalQuoteDocument.")
+    for line in comparable["lines"]:
+        if line["item_name"] and line["item_name"] not in " ".join(str(item or "") for item in excel_values):
+            raise QuoteExportError("Excel customer line does not match FormalQuoteDocument.")
+        if line["item_name"] and line["item_name"] not in pdf_text:
+            raise QuoteExportError("PDF customer line does not match FormalQuoteDocument.")
+        if line["amount"] not in excel_values:
+            raise QuoteExportError("Excel line amount does not match FormalQuoteDocument.")
+        if format_document_amount(line["amount"]) not in pdf_text:
+            raise QuoteExportError("PDF line amount does not match FormalQuoteDocument.")
+    for remark in comparable["remarks"]:
+        if remark not in excel_values:
+            raise QuoteExportError("Excel remarks do not match FormalQuoteDocument.")
+        if remark not in pdf_text:
+            raise QuoteExportError("PDF remarks do not match FormalQuoteDocument.")
+    if format_document_date(comparable["issue_date"]) not in pdf_text:
+        raise QuoteExportError("PDF issue_date does not match FormalQuoteDocument.")
+    if format_document_date(comparable["valid_until"]) not in pdf_text:
+        raise QuoteExportError("PDF valid_until does not match FormalQuoteDocument.")
 
 
 def scan_customer_payload_leaks(payload: object) -> set[str]:
@@ -630,14 +749,21 @@ def _write_internal_summary_sheet(sheet, snapshot, bundle: ApprovedQuoteExportBu
     sheet.column_dimensions["B"].width = 24
 
 
+def _formal_document(snapshot: ApprovedQuoteSnapshot, official_quote_number: Optional[str]):
+    try:
+        return build_formal_quote_document(snapshot, official_quote_number=official_quote_number)
+    except FormalQuoteDocumentError as error:
+        raise QuoteExportError(str(error)) from error
+
+
 def _write_spaceone_quote_sheet(
     sheet,
     snapshot: ApprovedQuoteSnapshot,
     bundle: ApprovedQuoteExportBundle,
     purpose: ExportPurpose,
+    document,
 ) -> None:
-    payload = bundle.spaceone_quote_payload
-    quote_number = bundle.official_quote_number or bundle.quote_number_candidate or ""
+    quote_number = document.quote_number or bundle.official_quote_number or bundle.quote_number_candidate or ""
     if purpose == ExportPurpose.DEVELOPMENT:
         quote_number = f"{quote_number}（開発用）"
     title_font = Font(bold=True, size=18)
@@ -651,7 +777,7 @@ def _write_spaceone_quote_sheet(
     )
     sheet["A1"] = "見積書"
     sheet["A1"].font = title_font
-    issuer = snapshot.issuer_snapshot
+    issuer = document.issuer
     if issuer is not None:
         sheet["C1"] = issuer.company_name
         sheet["C2"] = issuer.address
@@ -660,17 +786,17 @@ def _write_spaceone_quote_sheet(
         for row in range(1, 5):
             sheet.cell(row, 3).alignment = Alignment(wrap_text=True)
     sheet["A6"] = "宛先"
-    sheet["B6"] = f"{payload.customer} 御中" if payload.customer else ""
+    sheet["B6"] = f"{document.customer_name} 御中" if document.customer_name else ""
     sheet["A7"] = "件名"
-    sheet["B7"] = payload.title
+    sheet["B7"] = document.subject
     sheet["A8"] = "見積番号"
     sheet["B8"] = quote_number
     sheet["A9"] = "発行日"
-    _write_excel_date(sheet["B9"], payload.issue_date or snapshot.issue_date)
+    _write_excel_date(sheet["B9"], document.issue_date or snapshot.issue_date)
     sheet["A10"] = "有効期限"
-    _write_excel_date(sheet["B10"], payload.valid_until or snapshot.valid_until)
+    _write_excel_date(sheet["B10"], document.valid_until or snapshot.valid_until)
     sheet["A12"] = "御見積金額"
-    sheet["B12"] = snapshot.total_jpy
+    sheet["B12"] = document.total
     sheet["B12"].number_format = '"¥"#,##0'
     sheet["B12"].font = Font(bold=True, size=14)
     for label_cell in ("A6", "A7", "A8", "A9", "A10", "A12"):
@@ -683,39 +809,39 @@ def _write_spaceone_quote_sheet(
         cell.fill = header_fill
         cell.border = thin
     current = header_row + 1
-    for line in payload.lines:
+    for line in document.customer_lines:
         item_text = line.item_name or ""
-        if line.item_detail:
-            item_text = f"{item_text}\n{line.item_detail}" if item_text else line.item_detail
+        if line.customer_description:
+            item_text = f"{item_text}\n{line.customer_description}" if item_text else line.customer_description
         name_cell = sheet.cell(current, 1, item_text)
         name_cell.alignment = Alignment(wrap_text=True, vertical="top")
         line_count = str(item_text).count("\n") + 1
         sheet.row_dimensions[current].height = max(18, 14 * line_count)
-        unit = sheet.cell(current, 2, line.unit_price_jpy)
+        unit = sheet.cell(current, 2, line.unit_price)
         unit.number_format = "#,##0"
         sheet.cell(current, 3, line.quantity)
-        amount = sheet.cell(current, 4, line.amount_jpy)
+        amount = sheet.cell(current, 4, line.amount)
         amount.number_format = "#,##0"
         for column in range(1, 5):
             sheet.cell(current, column).border = thin
         current += 1
     current += 1
     sheet.cell(current, 3, "小計").font = label_font
-    subtotal = sheet.cell(current, 4, snapshot.subtotal_ex_tax_jpy)
+    subtotal = sheet.cell(current, 4, document.subtotal)
     subtotal.number_format = "#,##0"
     current += 1
     sheet.cell(current, 3, "消費税").font = label_font
-    tax = sheet.cell(current, 4, snapshot.tax_jpy)
+    tax = sheet.cell(current, 4, document.tax_amount)
     tax.number_format = "#,##0"
     current += 1
     sheet.cell(current, 3, "合計").font = label_font
-    total = sheet.cell(current, 4, snapshot.total_jpy)
+    total = sheet.cell(current, 4, document.total)
     total.number_format = "#,##0"
     total.font = Font(bold=True)
     current += 2
     sheet.cell(current, 1, "備考").font = label_font
     current += 1
-    for remark in approved_remark_texts(snapshot):
+    for remark in document.remarks:
         sheet.merge_cells(start_row=current, start_column=1, end_row=current, end_column=4)
         cell = sheet.cell(current, 1, remark)
         cell.alignment = Alignment(wrap_text=True, vertical="top")
@@ -794,6 +920,44 @@ def _validate_spaceone_excel(
     shipping = next((item for item in snapshot.customer_lines_snapshot if item.line_kind == "SHIPPING"), None)
     if shipping and shipping.display_name not in " ".join(str(item or "") for item in flat):
         raise QuoteExportError("SpaceOne quote Excel is missing the customer shipping display.")
+
+
+def _validate_spaceone_pdf(path: Path, document) -> None:
+    if not path.exists() or path.stat().st_size == 0:
+        raise QuoteExportError("SpaceOne quote PDF is empty.")
+    info = pdf_page_info(path)
+    if info["page_count"] < 1:
+        raise QuoteExportError("SpaceOne quote PDF has no pages.")
+    first = info["pages"][0]
+    if first["height"] <= first["width"]:
+        raise QuoteExportError("SpaceOne quote PDF must be A4 portrait.")
+    if abs(first["width"] - 595.27) > 8 or abs(first["height"] - 841.89) > 8:
+        raise QuoteExportError("SpaceOne quote PDF page size must be A4.")
+    text = extract_pdf_text(path)
+    if not text.strip():
+        raise QuoteExportError("SpaceOne quote PDF contains no readable text.")
+    if document.quote_number and document.quote_number not in text:
+        raise QuoteExportError("SpaceOne quote PDF is missing the quote number.")
+    if document.customer_name and document.customer_name not in text:
+        raise QuoteExportError("SpaceOne quote PDF is missing the customer name.")
+    if format_document_amount(document.total) not in text:
+        raise QuoteExportError("SpaceOne quote PDF total does not match FormalQuoteDocument.")
+    if format_document_amount(document.subtotal) not in text:
+        raise QuoteExportError("SpaceOne quote PDF subtotal does not match FormalQuoteDocument.")
+    if format_document_amount(document.tax_amount) not in text:
+        raise QuoteExportError("SpaceOne quote PDF tax does not match FormalQuoteDocument.")
+    if format_document_date(document.issue_date) not in text:
+        raise QuoteExportError("SpaceOne quote PDF issue_date does not match FormalQuoteDocument.")
+    if format_document_date(document.valid_until) not in text:
+        raise QuoteExportError("SpaceOne quote PDF valid_until does not match FormalQuoteDocument.")
+    for line in document.customer_lines:
+        if line.item_name and line.item_name not in text:
+            raise QuoteExportError("SpaceOne quote PDF is missing a customer line.")
+        if format_document_amount(line.amount) not in text:
+            raise QuoteExportError("SpaceOne quote PDF line amount does not match FormalQuoteDocument.")
+    for remark in document.remarks:
+        if remark not in text:
+            raise QuoteExportError("SpaceOne quote PDF is missing an Approved remark.")
 
 
 def _append_manifest(

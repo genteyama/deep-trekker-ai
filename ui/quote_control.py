@@ -22,6 +22,7 @@ from agents.quote_export import (
     export_moneyforward_csv,
     export_moneyforward_tsv,
     export_spaceone_quote_excel,
+    export_spaceone_quote_pdf,
 )
 from agents.quote_builder import (
     apply_historical_acceptance_preview,
@@ -1061,21 +1062,44 @@ def _render_file_export(page: dict, snapshot) -> None:
     generated_by = st.text_input(page["generated_by_label"], value="弦", key="input_export_generated_by")
     columns = st.columns(2)
     with columns[0]:
-        if st.button(page["export_mf_tsv_button"], key="export_mf_tsv"):
-            _run_export(page, snapshot, export_moneyforward_tsv, official, generated_by, ExportPurpose.DEVELOPMENT)
-        if st.button(page["export_internal_button"], key="export_internal_xlsx"):
-            _run_export(page, snapshot, export_internal_calc_excel, official, generated_by, ExportPurpose.DEVELOPMENT)
-    with columns[1]:
-        if st.button(page["export_mf_csv_button"], key="export_mf_csv"):
-            _run_export(page, snapshot, export_moneyforward_csv, official, generated_by, ExportPurpose.DEVELOPMENT)
         if st.button(page["export_spaceone_button"], key="export_spaceone_xlsx"):
             _run_export(page, snapshot, export_spaceone_quote_excel, official, generated_by, ExportPurpose.FORMAL)
+        if st.button(page["export_internal_button"], key="export_internal_xlsx"):
+            _run_export(page, snapshot, export_internal_calc_excel, official, generated_by, ExportPurpose.DEVELOPMENT)
+        if st.button(page["export_mf_tsv_button"], key="export_mf_tsv"):
+            _run_export(page, snapshot, export_moneyforward_tsv, official, generated_by, ExportPurpose.DEVELOPMENT)
+    with columns[1]:
+        if st.button(page.get("export_spaceone_pdf_button", "SpaceOne見積 PDF"), key="export_spaceone_pdf"):
+            _run_pdf_export(page, snapshot, official, generated_by)
+        if st.button(page["export_mf_csv_button"], key="export_mf_csv"):
+            _run_export(page, snapshot, export_moneyforward_csv, official, generated_by, ExportPurpose.DEVELOPMENT)
     saved = st.session_state.get("quote_export_files") or []
     if not saved:
         st.text(page["no_export_yet"])
         return
     for item in saved:
         st.write(f"{page['export_saved']}: {item}")
+
+
+def _run_pdf_export(page: dict, snapshot, official: str, generated_by: str) -> None:
+    try:
+        bundle, path = export_spaceone_quote_pdf(
+            snapshot,
+            official_quote_number=official or None,
+            generated_by=generated_by or None,
+            purpose=ExportPurpose.FORMAL,
+        )
+        saved = list(st.session_state.get("quote_export_files") or [])
+        saved.append(str(path))
+        st.session_state["quote_export_files"] = saved
+        st.success(page.get("export_pdf_saved", "✓ PDFを生成しました"))
+        st.write(path.name)
+        st.write(f"{page['column_version']}: v{snapshot.quote_version}")
+        generated_at = bundle.generated_at
+        if hasattr(generated_at, "strftime"):
+            st.write(f"{page.get('export_generated_at_label', '生成日時')}: {generated_at.strftime('%Y/%m/%d %H:%M')}")
+    except QuoteExportError as error:
+        st.error(str(error))
 
 
 def _run_export(page: dict, snapshot, exporter, official: str, generated_by: str, purpose) -> None:

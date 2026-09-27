@@ -333,6 +333,7 @@ def test_quote_workspace_shows_only_selected_step_and_keeps_draft():
     at.run()
     assert any("帳票出力には承認が必要です" in (item or "") for item in [entry.value for entry in at.warning] + [entry.value for entry in at.text])
     assert not any(getattr(item, "key", None) == "export_spaceone_xlsx" for item in at.button)
+    assert not any(getattr(item, "key", None) == "export_spaceone_pdf" for item in at.button)
 
     ready = _ready_photon()
     _, snapshot = _approve(ready)
@@ -342,6 +343,7 @@ def test_quote_workspace_shows_only_selected_step_and_keeps_draft():
     at.run()
     assert not at.exception
     assert any(getattr(item, "key", None) == "export_spaceone_xlsx" for item in at.button)
+    assert any(getattr(item, "key", None) == "export_spaceone_pdf" for item in at.button)
     assert snapshot.total_jpy == 7876000
     assert abs(snapshot.gross_margin_rate - 0.29598) < 0.00001
     assert at.session_state["approved_quote_snapshot"].approved_quote_snapshot_id == snapshot.approved_quote_snapshot_id

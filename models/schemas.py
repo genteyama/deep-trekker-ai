@@ -1265,6 +1265,40 @@ class SpaceOneQuotePayload(BaseModel):
     remarks: list[str] = Field(default_factory=list)
 
 
+class FormalQuoteIssuer(BaseModel):
+    company_name: Optional[str] = None
+    address: Optional[str] = None
+    office_address: Optional[str] = None
+    telephone: Optional[str] = None
+
+
+class FormalQuoteLine(BaseModel):
+    item_name: Optional[str] = None
+    customer_description: Optional[str] = None
+    quantity: int = 1
+    unit_price: Optional[float] = None
+    amount: Optional[float] = None
+    remarks: Optional[str] = None
+
+
+class FormalQuoteDocument(BaseModel):
+    snapshot_id: str
+    snapshot_version: int
+    quote_number: Optional[str] = None
+    customer_name: Optional[str] = None
+    subject: Optional[str] = None
+    issue_date: Optional[str] = None
+    valid_until: Optional[str] = None
+    issuer: Optional[FormalQuoteIssuer] = None
+    customer_lines: list[FormalQuoteLine] = Field(default_factory=list)
+    subtotal: Optional[float] = None
+    tax_rate: Optional[float] = None
+    tax_amount: Optional[float] = None
+    total: Optional[float] = None
+    remarks: list[str] = Field(default_factory=list)
+    source_approved_snapshot_id: str
+
+
 class MoneyForwardQuoteRow(BaseModel):
     item_name: Optional[str] = None
     item_detail: Optional[str] = None
