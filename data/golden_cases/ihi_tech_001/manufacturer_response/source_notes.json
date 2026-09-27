@@ -1,0 +1,69 @@
+{
+  "response_golden_case_id": "IHI-TECH-001-MR-001",
+  "case_id": "IHI-TECH-001",
+  "display_name": "IHI検査計測 MAG Utility Crawler Manufacturer Response Validation",
+  "source_type": "HUMAN_VERIFIED_MANUFACTURER_RESPONSE_SUMMARY",
+  "is_raw_manufacturer_email": false,
+  "raw_response_available": false,
+  "raw_response_text": null,
+  "notes": "This file stores human-verified information obtained after Deep Trekker confirmation. It is not a Deep Trekker raw reply email. Do not treat SpaceOne customer-facing notes as manufacturer response raw text.",
+  "verified_statements": [
+    {
+      "statement_id": "mag_no_structure_self_position",
+      "summary": "MAG Utility Crawlerには、水深・高度・テザー繰出量などを利用して構造物上の自己位置を把握する機能はない。",
+      "must_not_reinterpret_as": ["GPSがない"]
+    },
+    {
+      "statement_id": "mag_cannot_transition_surfaces",
+      "summary": "MAGはタンク内部で、壁面から底面、天面から側面など、異なる面へ連続して移動できない。"
+    },
+    {
+      "statement_id": "manufacturer_recommends_rov_plus_gauge",
+      "summary": "水環境下のタンク内部における肉厚計測について、メーカーはROVと超音波肉厚計による方法を推奨した。",
+      "recommendation_origin": "MANUFACTURER_RECOMMENDED"
+    },
+    {
+      "statement_id": "photon_plus_cygnus_proposed",
+      "summary": "その候補として PHOTON + Cygnus Thickness Gauge が提案された。",
+      "recommendation_origin": "MANUFACTURER_RECOMMENDED",
+      "must_not_use_origin": ["AI_SUGGESTED", "CUSTOMER_REQUESTED", "SPACEONE_PROPOSAL"]
+    },
+    {
+      "statement_id": "mag_magnet_deployment_difficulty",
+      "summary": "MAGは磁力による吸着が強いため、タンク内部への投入、鋼板面への吸着、点検後の取り外しが運用上難しくなる場合がある。"
+    },
+    {
+      "statement_id": "mag_wheel_50lb",
+      "summary": "MAGのマグネットホイールは、無垢の鋼板面に対して1輪あたり50 lbというメーカー回答値がある。",
+      "manufacturer_stated_value": "50 lb per wheel",
+      "surface": "bare steel"
+    },
+    {
+      "statement_id": "cygnus_body_shareable",
+      "summary": "MAGとPHOTONの両方を運用する場合、Cygnus Thickness Gauge本体は1台を付け替えて使用できる。"
+    },
+    {
+      "statement_id": "integration_kit_required_per_vehicle",
+      "summary": "各機体専用のIntegration Kitはそれぞれ必要。"
+    },
+    {
+      "statement_id": "photon_has_depth_heading_attitude",
+      "summary": "PHOTON構成では水深値・方位・姿勢情報を確認できるため、MAGより水中でのおおまかな位置関係を把握しながら運用する案となった。"
+    }
+  ],
+  "spaceone_derived_values": [
+    {
+      "statement_id": "two_wheel_45kgf_reference",
+      "summary": "2輪を合計した約45 kgfは、SpaceOne側で1輪50 lbを単純合計した参考値である。",
+      "origin": "SPACEONE_SIMPLE_SUM",
+      "value": "約45kgf",
+      "must_not_become_manufacturer_guaranteed_total": true,
+      "must_not_become_technical_fact": true
+    }
+  ],
+  "product_origins": {
+    "MAG Utility Crawler": "CUSTOMER_REQUESTED",
+    "PHOTON": "MANUFACTURER_RECOMMENDED",
+    "PHOTON + Cygnus Thickness Gauge": "MANUFACTURER_RECOMMENDED"
+  }
+}

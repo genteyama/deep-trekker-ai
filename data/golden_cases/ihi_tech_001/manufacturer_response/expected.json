@@ -1,0 +1,175 @@
+{
+  "response_golden_case_id": "IHI-TECH-001-MR-001",
+  "case_id": "IHI-TECH-001",
+  "display_name": "IHI検査計測 MAG Utility Crawler Manufacturer Response Validation",
+  "stage": "AFTER_MANUFACTURER_RESPONSE",
+  "source_type": "HUMAN_VERIFIED_MANUFACTURER_RESPONSE_SUMMARY",
+  "raw_response_available": false,
+  "evaluation_policy": {
+    "missing_question_expected_status": "FAIL",
+    "all_questions_marked_answered": "FAIL",
+    "missing_follow_up_when_required": "FAIL",
+    "photon_origin_not_manufacturer_recommended": "FAIL",
+    "mag_origin_not_customer_requested": "FAIL",
+    "photon_marked_ai_suggested": "FAIL",
+    "45kgf_treated_as_manufacturer_guarantee": "FAIL"
+  },
+  "product_origins": {
+    "MAG Utility Crawler": "CUSTOMER_REQUESTED",
+    "PHOTON": "MANUFACTURER_RECOMMENDED",
+    "PHOTON + Cygnus Thickness Gauge": "MANUFACTURER_RECOMMENDED"
+  },
+  "question_expectations": [
+    {
+      "question_topic": "mag_cygnus_compatibility",
+      "expected_status": "ANSWERED",
+      "follow_up_required": false,
+      "expected_answer_topics": [
+        "cygnus_body_shareable",
+        "integration_kit_required_per_vehicle"
+      ],
+      "expected_follow_up_topics": [],
+      "source_basis": ["cygnus_body_shareable", "integration_kit_required_per_vehicle"],
+      "notes": "MAGとCygnusの組み合わせは可能。本体は共有でき、機体ごとのIntegration Kitは必要。"
+    },
+    {
+      "question_topic": "cygnus_elevated_pan_tilt_simultaneous",
+      "expected_status": "FOLLOW_UP_REQUIRED",
+      "follow_up_required": true,
+      "expected_answer_topics": [],
+      "expected_follow_up_topics": ["cygnus_elevated_pan_tilt_simultaneous"],
+      "source_basis": [],
+      "notes": "今回の確認済み情報には、CygnusとElevated Pan Tiltの同時搭載可否がない。ANSWEREDにしない。"
+    },
+    {
+      "question_topic": "underwater_tank_interior_suitability",
+      "expected_status": "PARTIAL",
+      "follow_up_required": true,
+      "expected_answer_topics": ["manufacturer_recommends_rov_plus_gauge"],
+      "expected_follow_up_topics": ["mag_remaining_tank_interior_constraints"],
+      "source_basis": ["manufacturer_recommends_rov_plus_gauge", "mag_magnet_deployment_difficulty"],
+      "notes": "この用途にはROV＋超音波肉厚計が推奨された。MAG適性の残り制約は追加確認とする。"
+    },
+    {
+      "question_topic": "mag_90_degree_surface_transition",
+      "expected_status": "ANSWERED",
+      "follow_up_required": false,
+      "expected_answer_topics": ["mag_cannot_transition_surfaces"],
+      "expected_follow_up_topics": [],
+      "source_basis": ["mag_cannot_transition_surfaces"],
+      "notes": "壁面から底面、天面から側面など、異なる面への連続移動はできない。"
+    },
+    {
+      "question_topic": "mag_position_awareness",
+      "expected_status": "ANSWERED",
+      "follow_up_required": false,
+      "expected_answer_topics": ["mag_no_structure_self_position"],
+      "expected_follow_up_topics": [],
+      "source_basis": ["mag_no_structure_self_position"],
+      "notes": "水深・高度・テザー繰出量などを利用した構造物上の自己位置把握機能はない。GPSがない、という意味には変換しない。"
+    },
+    {
+      "question_topic": "depth_information",
+      "expected_status": "FOLLOW_UP_REQUIRED",
+      "follow_up_required": true,
+      "expected_answer_topics": [],
+      "expected_follow_up_topics": ["mag_depth_value_availability"],
+      "source_basis": [],
+      "notes": "自己位置機能の回答から、MAGの水深値取得可否をANSWEREDにしない。PHOTONの水深表示は別情報。"
+    },
+    {
+      "question_topic": "tether_payout_or_travel_distance",
+      "expected_status": "FOLLOW_UP_REQUIRED",
+      "follow_up_required": true,
+      "expected_answer_topics": [],
+      "expected_follow_up_topics": ["mag_tether_payout_or_distance"],
+      "source_basis": [],
+      "notes": "自己位置の説明にテザーが出てきても、繰出長や走行距離の把握可否は未回答として残す。"
+    },
+    {
+      "question_topic": "heading_information",
+      "expected_status": "FOLLOW_UP_REQUIRED",
+      "follow_up_required": true,
+      "expected_answer_topics": [],
+      "expected_follow_up_topics": ["mag_heading_availability"],
+      "source_basis": [],
+      "notes": "PHOTONの方位情報はMAGの方位取得可否の回答ではない。"
+    },
+    {
+      "question_topic": "cygnus_measurement_position_recording",
+      "expected_status": "FOLLOW_UP_REQUIRED",
+      "follow_up_required": true,
+      "expected_answer_topics": [],
+      "expected_follow_up_topics": ["cygnus_measurement_position_recording"],
+      "source_basis": [],
+      "notes": "Cygnus測定位置を後から管理・記録する方法は、今回の確認済み情報にない。"
+    },
+    {
+      "question_topic": "manufacturer_recommended_configuration",
+      "expected_status": "ANSWERED",
+      "follow_up_required": false,
+      "expected_answer_topics": [
+        "manufacturer_recommends_rov_plus_gauge",
+        "photon_plus_cygnus_proposed"
+      ],
+      "expected_follow_up_topics": [],
+      "source_basis": ["manufacturer_recommends_rov_plus_gauge", "photon_plus_cygnus_proposed"],
+      "notes": "メーカー推奨はROV＋超音波肉厚計。候補はPHOTON + Cygnus。originはMANUFACTURER_RECOMMENDED。"
+    },
+    {
+      "question_topic": "estimated_lead_time_question",
+      "expected_status": "FOLLOW_UP_REQUIRED",
+      "follow_up_required": true,
+      "expected_answer_topics": [],
+      "expected_follow_up_topics": ["estimated_lead_time"],
+      "source_basis": [],
+      "notes": "納期の確認済み情報はない。具体数値を作らない。"
+    }
+  ],
+  "expected_unmatched_information": [
+    {
+      "topic_id": "mag_magnet_deployment_difficulty",
+      "aliases": ["磁力", "投入", "取り外し", "吸着"],
+      "source_basis": ["mag_magnet_deployment_difficulty"],
+      "notes": "元の11質問への直接回答ではない。投入・吸着・回収の運用注意。"
+    },
+    {
+      "topic_id": "mag_wheel_50lb",
+      "aliases": ["50 lb", "50lb", "1輪"],
+      "source_basis": ["mag_wheel_50lb"],
+      "notes": "メーカー回答値は無垢鋼板面で1輪あたり50 lb。約45kgfと混同しない。"
+    },
+    {
+      "topic_id": "photon_has_depth_heading_attitude",
+      "aliases": ["PHOTON", "水深値", "方位", "姿勢"],
+      "source_basis": ["photon_has_depth_heading_attitude"],
+      "notes": "PHOTON側の位置関係把握案。MAGの水深・方位質問をANSWEREDにしない。"
+    }
+  ],
+  "spaceone_derived_values": [
+    {
+      "topic_id": "two_wheel_45kgf_reference",
+      "value": "約45kgf",
+      "origin": "SPACEONE_SIMPLE_SUM",
+      "must_not_become_manufacturer_guaranteed_total": true,
+      "must_not_become_technical_fact": true
+    }
+  ],
+  "future_technical_fact_candidates": [
+    {
+      "topic_id": "mag_no_structure_self_position",
+      "requires_human_review": true,
+      "must_not_auto_set_confidence": ["SPACEONE_VERIFIED", "MANUFACTURER_CONFIRMED"]
+    },
+    {
+      "topic_id": "mag_cannot_transition_surfaces",
+      "requires_human_review": true,
+      "must_not_auto_set_confidence": ["SPACEONE_VERIFIED", "MANUFACTURER_CONFIRMED"]
+    },
+    {
+      "topic_id": "mag_wheel_50lb",
+      "requires_human_review": true,
+      "must_not_auto_set_confidence": ["SPACEONE_VERIFIED", "MANUFACTURER_CONFIRMED"]
+    }
+  ]
+}
