@@ -1,0 +1,97 @@
+{
+  "PHOTON": {
+    "customer": "株式会社IHI検査計測",
+    "title": "DeepTrekker PHOTON（ROV）一式",
+    "product_presentations": [
+      {
+        "sku": "9680-BASE",
+        "requirement_type": "BASE_PRODUCT",
+        "presentation_mode": "SEPARATE_LINE",
+        "display_name": "DeepTrekker PHOTON BASE Package",
+        "description": "DeepTrekker PHOTON BASE Package"
+      },
+      {
+        "sku": "8459",
+        "requirement_type": "SELECTED_OPTION",
+        "presentation_mode": "SEPARATE_LINE",
+        "display_name": "POWER PACK ASY, PHOTON",
+        "description": "POWER PACK ASY, PHOTON"
+      },
+      {
+        "sku": "5608",
+        "requirement_type": "SELECTED_OPTION",
+        "presentation_mode": "SEPARATE_LINE",
+        "display_name": "THICKNESS GUAGE - CYGNUS",
+        "description": "超音波肉厚計測機－本体セット"
+      },
+      {
+        "sku": "7851-PHOTON",
+        "requirement_type": "SELECTED_OPTION",
+        "presentation_mode": "SEPARATE_LINE",
+        "display_name": "THICKNESS GAUGE - CYGNUS INTEGRATION KIT",
+        "description": "THICKNESS GAUGE - CYGNUS INTEGRATION KIT"
+      }
+    ],
+    "shipping_display_name": "国際輸送費",
+    "shipping_description": "カナダ→日本 大型梱包×1個口、小型梱包×1個口",
+    "remarks": [
+      "納期目安：発注より3か月程度（2026年9月26日現在）",
+      "輸送時保険料は代金に含む。",
+      "為替変動により金額が変わる場合があります。",
+      "正式納期は発注後に確認します。"
+    ],
+    "remarks_kind": "GOLDEN_HISTORICAL_SNAPSHOT"
+  },
+  "MAG": {
+    "customer": "株式会社IHI検査計測",
+    "title": "DeepTrekker MAG Utility Crawler 一式",
+    "product_presentations": [
+      {
+        "sku": "9701-MAG-4K",
+        "requirement_type": "BASE_PRODUCT",
+        "presentation_mode": "SEPARATE_LINE",
+        "display_name": "MAG UTILITY CRAWLER PACKAGE 4K",
+        "description": "MAG UTILITY CRAWLER PACKAGE 4K"
+      },
+      {
+        "sku": "9735",
+        "requirement_type": "SELECTED_OPTION",
+        "presentation_mode": "SEPARATE_LINE",
+        "display_name": "ELEVATED PT CAMERA KIT",
+        "description": "ELEVATED PT CAMERA KIT"
+      },
+      {
+        "sku": "5608",
+        "requirement_type": "SELECTED_OPTION",
+        "presentation_mode": "SEPARATE_LINE",
+        "display_name": "THICKNESS GUAGE - CYGNUS",
+        "description": "超音波肉厚計測機－本体セット"
+      },
+      {
+        "sku": "2604",
+        "requirement_type": "SELECTED_OPTION",
+        "presentation_mode": "SEPARATE_LINE",
+        "display_name": "INTEGRATION KIT, POWER BRUSH CYGNUS GAUGE",
+        "description": "INTEGRATION KIT, POWER BRUSH CYGNUS GAUGE"
+      },
+      {
+        "sku": "2601",
+        "requirement_type": "REQUIRED_DEPENDENCY",
+        "required_by_sku": "2604",
+        "dependency_source": "DT40 / VAC & MAG / 2604 Notes REQUIRES 2601",
+        "presentation_mode": "UNDECIDED",
+        "display_name": "KIT, POWER BRUSH BASE",
+        "description": "KIT, POWER BRUSH BASE"
+      }
+    ],
+    "shipping_display_name": "国際輸送費",
+    "shipping_description": "カナダ→日本 大型梱包×2個口",
+    "remarks": [
+      "納期目安：発注より5か月程度（2026年9月26日現在）",
+      "輸送時保険料は代金に含む。",
+      "為替変動により金額が変わる場合があります。",
+      "正式納期は発注後に確認します。"
+    ],
+    "remarks_kind": "GOLDEN_HISTORICAL_SNAPSHOT"
+  }
+}

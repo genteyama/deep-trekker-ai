@@ -12,10 +12,14 @@ from models.enums import (
     MatchConfidence,
     MatchStatus,
     CostBasis,
+    CustomerPresentationMode,
     DomesticShippingMode,
+    FinalPriceStatus,
     HistoricalComparisonStatus,
     InsuranceMode,
     QuoteAdjustmentType,
+    QuoteDraftStatus,
+    RequirementType,
     ScenarioCompleteness,
     PriceBasis,
     PriceBookDiffType,
@@ -877,6 +881,8 @@ class QuoteAdjustment(BaseModel):
     adjustment_id: str
     line_id: Optional[str] = None
     adjustment_type: QuoteAdjustmentType = QuoteAdjustmentType.MANUAL
+    original_price_jpy: Optional[float] = None
+    final_price_jpy: Optional[float] = None
     amount_jpy: Optional[float] = None
     reason: Optional[str] = None
     entered_by: Optional[str] = None
@@ -960,6 +966,84 @@ class QuoteEconomicsResult(BaseModel):
     warnings: list[str] = Field(default_factory=list)
     comparisons: list[HistoricalPriceComparison] = Field(default_factory=list)
     economics_comparison: Optional[QuoteEconomicsComparison] = None
+
+
+class QuoteConfigurationLine(BaseModel):
+    line_id: str
+    manufacturer_sku: Optional[str] = None
+    manufacturer_description: Optional[str] = None
+    customer_display_name: Optional[str] = None
+    customer_description: Optional[str] = None
+    quantity: int = 1
+    requirement_type: RequirementType = RequirementType.MANUAL_COMPONENT
+    required_by_sku: Optional[str] = None
+    dependency_source: Optional[str] = None
+    manufacturer_price_snapshot: Optional[QuotePriceSnapshot] = None
+    landed_cost_jpy: Optional[float] = None
+    dealer_price_usd: Optional[float] = None
+    standard_sales_price_candidate_jpy: Optional[float] = None
+    standard_sales_price_candidate_id: Optional[str] = None
+    final_sales_price_jpy: Optional[float] = None
+    final_price_status: FinalPriceStatus = FinalPriceStatus.NOT_SET
+    customer_presentation_status: CustomerPresentationMode = CustomerPresentationMode.UNDECIDED
+    bundled_into_line_id: Optional[str] = None
+    warnings: list[str] = Field(default_factory=list)
+
+
+class CustomerQuoteLineDraft(BaseModel):
+    customer_quote_line_id: str
+    display_name: Optional[str] = None
+    description: Optional[str] = None
+    quantity: int = 1
+    unit_price_jpy: Optional[float] = None
+    amount_jpy: Optional[float] = None
+    source_configuration_line_ids: list[str] = Field(default_factory=list)
+    presentation_mode: CustomerPresentationMode = CustomerPresentationMode.SEPARATE_LINE
+    display_order: int = 0
+    notes: Optional[str] = None
+    pricing_source: Optional[str] = None
+    human_adjusted: bool = False
+    adjustment_reference: Optional[str] = None
+    historical_preview_unit_price_jpy: Optional[float] = None
+    line_kind: str = "PRODUCT"
+
+
+class QuoteDraftPricingContext(BaseModel):
+    exchange_rate: Optional[float] = None
+    tax_rate: Optional[float] = None
+    minimum_margin_reference: Optional[float] = None
+    landed_cost_policy_candidate_id: Optional[str] = None
+    shipping_snapshot_id: Optional[str] = None
+    pricing_policy_candidate_ids: list[str] = Field(default_factory=list)
+    manufacturer_price_snapshots: list[QuotePriceSnapshot] = Field(default_factory=list)
+    source_references: list[str] = Field(default_factory=list)
+
+
+class QuoteDraft(BaseModel):
+    quote_draft_id: str
+    case_id: Optional[str] = None
+    customer: Optional[str] = None
+    title: Optional[str] = None
+    configuration_name: Optional[str] = None
+    configuration_lines: list[QuoteConfigurationLine] = Field(default_factory=list)
+    customer_lines: list[CustomerQuoteLineDraft] = Field(default_factory=list)
+    shipping_lines: list[LandedCostShippingLine] = Field(default_factory=list)
+    exchange_rate: Optional[float] = None
+    pricing_context: QuoteDraftPricingContext = Field(default_factory=QuoteDraftPricingContext)
+    landed_cost_scenario_id: Optional[str] = None
+    subtotal_ex_tax_jpy: Optional[float] = None
+    tax_rate: Optional[float] = None
+    tax_jpy: Optional[float] = None
+    total_jpy: Optional[float] = None
+    economics_result: Optional[QuoteEconomicsResult] = None
+    completeness: ScenarioCompleteness = ScenarioCompleteness.INCOMPLETE
+    status: QuoteDraftStatus = QuoteDraftStatus.DRAFT
+    warnings: list[str] = Field(default_factory=list)
+    remarks: list[str] = Field(default_factory=list)
+    adjustments: list[QuoteAdjustment] = Field(default_factory=list)
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    source_references: list[str] = Field(default_factory=list)
 
 
 class CostScenario(BaseModel):

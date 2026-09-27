@@ -15,6 +15,15 @@ from agents.landed_cost import (
     september_dealer_update_shipping_rate,
     supplier_quote_shipping_rate,
 )
+from agents.quote_builder import (
+    apply_final_price,
+    apply_historical_acceptance_preview,
+    apply_presentation_mode,
+    apply_shipping_final_price,
+    apply_tax_rate,
+    build_ihi_quote_draft,
+    customer_preview_rows,
+)
 from agents.master_reconciliation import collect_manufacturer_candidates, reconcile_spaceone_master
 from agents.quote_control_agent import SkuMasterStore, diff_price_books, import_price_book
 from agents.pricing_policy import (
@@ -29,7 +38,9 @@ from agents.sku_link import build_sku_link_preview, try_manual_link
 from agents.supplier_quote_validation import load_official_manufacturer_price_books, validate_supplier_quote
 from data.golden_cases.loader import IHI_QUOTE_001, load_quote_golden_case
 from models import (
+    CustomerPresentationMode,
     DomesticShippingMode,
+    FinalPriceStatus,
     InsuranceMode,
     RequiredConfigurationItem,
     ShippingType,
@@ -111,6 +122,8 @@ def render_quote_control(texts: dict) -> None:
     _render_pricing_policy(page)
     st.divider()
     _render_landed_cost(page)
+    st.divider()
+    _render_quote_builder(page)
     st.divider()
     _render_update_inbox(page)
     _render_golden_quote_cases(page)
@@ -570,6 +583,11 @@ def _render_golden_quote_cases(page: dict) -> None:
         _render_supplier_quote_validation(page, case)
         _render_ihi_pricing_comparison(page, case)
         _render_ihi_landed_cost_cases(page, case)
+        st.markdown(f"**{page['section_quote_builder']}**")
+        if st.button(page["ihi_photon_draft_button"], key="golden_ihi_photon_draft"):
+            st.session_state["quote_draft"] = _build_ihi_draft_from_ui(page, case, "PHOTON")
+        if st.button(page["ihi_mag_draft_button"], key="golden_ihi_mag_draft"):
+            st.session_state["quote_draft"] = _build_ihi_draft_from_ui(page, case, "MAG")
 
 
 def _render_supplier_quote_validation(page: dict, case: dict) -> None:
@@ -1003,6 +1021,175 @@ def _parse_landed_inputs(page, rate_text, tax_text, insurance_rate_text, domesti
         "large_qty": large_qty,
         "small_qty": small_qty,
     }
+
+
+def _render_quote_builder(page: dict) -> None:
+    st.subheader(page["section_quote_builder"])
+    st.write(page["section_quote_builder_description"])
+    st.caption(page["quote_builder_hint"])
+    case = load_quote_golden_case(IHI_QUOTE_001)
+    if st.button(page["ihi_photon_draft_button"], key="ihi_photon_draft"):
+        st.session_state["quote_draft"] = _build_ihi_draft_from_ui(page, case, "PHOTON")
+    if st.button(page["ihi_mag_draft_button"], key="ihi_mag_draft"):
+        st.session_state["quote_draft"] = _build_ihi_draft_from_ui(page, case, "MAG")
+    draft = st.session_state.get("quote_draft")
+    if draft is None:
+        st.text(page["no_quote_draft"])
+        return
+    status_labels = page["draft_statuses"]
+    st.write(f"{page['draft_status_label']}: {status_labels.get(draft.status.value, draft.status.value)}")
+    st.write(f"{page['summary_completeness']}: {page['completeness'].get(draft.completeness.value, draft.completeness.value)}")
+    _render_internal_bom(page, draft)
+    _render_2601_choice(page, draft)
+    _render_customer_preview(page, draft)
+
+
+def _render_internal_bom(page: dict, draft) -> None:
+    st.markdown(f"**{page['internal_bom_label']}**")
+    presentation_labels = page["presentation_modes"]
+    st.table(
+        [
+            {
+                page["column_sku"]: line.manufacturer_sku or page["no_value"],
+                page["column_name_ja"]: line.manufacturer_description or page["no_value"],
+                page["column_requirement"]: line.requirement_type.value,
+                page["column_dealer_usd"]: _display_number(line.dealer_price_usd, page),
+                page["column_landed"]: _display_number(line.landed_cost_jpy, page),
+                page["column_sales_candidate"]: _display_number(line.standard_sales_price_candidate_jpy, page),
+                page["column_final_price"]: _display_number(line.final_sales_price_jpy, page),
+                page["column_presentation"]: presentation_labels.get(
+                    line.customer_presentation_status.value, line.customer_presentation_status.value
+                ),
+                page["golden_warning"]: "; ".join(line.warnings) or page["no_value"],
+            }
+            for line in draft.configuration_lines
+        ]
+    )
+    for line in draft.configuration_lines:
+        if line.customer_presentation_status != CustomerPresentationMode.SEPARATE_LINE:
+            continue
+        if st.button(page["use_standard_button"], key=f"use_standard_{line.line_id}"):
+            apply_final_price(draft, line.line_id, FinalPriceStatus.USE_STANDARD_CANDIDATE)
+            st.session_state["quote_draft"] = draft
+            st.rerun()
+        entered = st.text_input(page["manual_price_label"], key=f"manual_price_{line.line_id}")
+        if st.button(page["apply_manual_price_button"], key=f"apply_manual_{line.line_id}"):
+            try:
+                apply_final_price(
+                    draft,
+                    line.line_id,
+                    FinalPriceStatus.MANUAL_OVERRIDE,
+                    amount_jpy=float(entered),
+                    reason="UI manual override",
+                )
+                st.session_state["quote_draft"] = draft
+                st.rerun()
+            except (TypeError, ValueError):
+                st.warning(page["exchange_rate_invalid"])
+
+
+def _render_2601_choice(page: dict, draft) -> None:
+    target = next((line for line in draft.configuration_lines if line.manufacturer_sku == "2601"), None)
+    if target is None:
+        return
+    parent = next((line for line in draft.configuration_lines if line.manufacturer_sku == "2604"), None)
+    choice = st.radio(
+        page["dependency_choice_label"],
+        options=["UNDECIDED", "SEPARATE_LINE", "BUNDLED_WITH_PARENT"],
+        format_func=lambda key: {
+            "UNDECIDED": page["dependency_undecided"],
+            "SEPARATE_LINE": page["dependency_separate"],
+            "BUNDLED_WITH_PARENT": page["dependency_bundle"],
+        }[key],
+        key="input_2601_presentation",
+    )
+    if st.button(page["apply_2601_button"], key="apply_2601_presentation"):
+        apply_presentation_mode(
+            draft,
+            target.line_id,
+            CustomerPresentationMode(choice),
+            bundled_into_line_id=parent.line_id if choice == "BUNDLED_WITH_PARENT" and parent else None,
+        )
+        st.session_state["quote_draft"] = draft
+        st.rerun()
+
+
+def _render_customer_preview(page: dict, draft) -> None:
+    st.markdown(f"**{page['customer_preview_label']}**")
+    st.table(
+        [
+            {
+                page["column_item"]: row["display_name"],
+                page["column_item_detail"]: row["description"],
+                page["column_unit_price"]: _display_number(row["unit_price_jpy"], page),
+                page["column_qty"]: row["quantity"],
+                page["column_amount"]: _display_number(row["amount_jpy"], page),
+            }
+            for row in customer_preview_rows(draft)
+        ]
+    )
+    st.write(f"{page['golden_subtotal']}: {_display_number(draft.subtotal_ex_tax_jpy, page)}")
+    st.write(f"{page['column_import_tax']}: {_display_number(draft.tax_jpy, page)}")
+    st.write(f"{page['golden_total']}: {_display_number(draft.total_jpy, page)}")
+    st.markdown(f"**{page['remarks_label']}**")
+    st.caption(page["remarks_caption"])
+    for remark in draft.remarks:
+        st.write(remark)
+    tax_text = st.text_input(page["tax_rate_label"], key="input_draft_tax_rate")
+    if tax_text and st.button(page["apply_manual_price_button"], key="apply_draft_tax"):
+        try:
+            apply_tax_rate(draft, float(tax_text))
+            st.session_state["quote_draft"] = draft
+            st.rerun()
+        except (TypeError, ValueError):
+            st.warning(page["exchange_rate_invalid"])
+    shipping_text = st.text_input(page["shipping_price_label"], key="input_draft_shipping_price")
+    if shipping_text and st.button(page["apply_shipping_price_button"], key="apply_draft_shipping"):
+        try:
+            apply_shipping_final_price(draft, float(shipping_text))
+            st.session_state["quote_draft"] = draft
+            st.rerun()
+        except (TypeError, ValueError):
+            st.warning(page["exchange_rate_invalid"])
+
+
+def _build_ihi_draft_from_ui(page: dict, case: dict, configuration: str):
+    rate_text = st.session_state.get("input_landed_exchange_rate") or st.session_state.get("input_ihi_landed_rate") or "170"
+    try:
+        rate = float(rate_text)
+    except (TypeError, ValueError):
+        st.warning(page["exchange_rate_invalid"])
+        return None
+    books = load_official_manufacturer_price_books()
+    candidates = collect_manufacturer_candidates(*books) if books else []
+    dealer_values = resolve_ihi_dealer_values(candidates)
+    sales = st.session_state.get(SESSION_SALES_CANDIDATES) or []
+    policy = _extracted_landed_policy()
+    if policy is None or policy.import_tax_rate is None:
+        policy = policy_from_inputs(
+            import_tax_rate=_optional_float(st.session_state.get("input_landed_import_tax")),
+            insurance_mode=InsuranceMode.PERCENTAGE,
+            insurance_rate=_optional_float(st.session_state.get("input_landed_insurance_rate")),
+            shipping_markup_multiplier=_extracted_shipping_markup(),
+            domestic_shipping_mode=DomesticShippingMode.REVIEW_REQUIRED,
+        )
+    scenario, _economics = build_ihi_landed_cost_scenario(
+        configuration,
+        exchange_rate=rate,
+        policy=policy,
+        dealer_values=dealer_values,
+        sales_candidates=sales,
+        price_book_candidates=candidates,
+    )
+    quote = case["photon_customer_quote"] if configuration == "PHOTON" else case["mag_customer_quote"]
+    draft = build_ihi_quote_draft(
+        configuration,
+        scenario,
+        sales,
+        tax_rate=_optional_float(st.session_state.get("input_draft_tax_rate")),
+    )
+    apply_historical_acceptance_preview(draft, quote)
+    return draft
 
 
 def _ensure_official_master() -> None:
