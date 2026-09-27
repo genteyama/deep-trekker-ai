@@ -47,6 +47,66 @@ DEFAULT_MOCK_PAYLOAD = {
 }
 
 
+DEFAULT_RESPONSE_SUMMARY = (
+    "これは開発確認用の固定サンプルです。"
+    "入力されたメーカー回答を解析した結果ではありません。"
+)
+
+
+def build_default_manufacturer_response_payload(questions: Optional[list] = None) -> dict:
+    matches = []
+    for index, item in enumerate(questions or []):
+        question_id = item.get("question_id") or f"Q-MOCK-{index + 1}"
+        if index == 0:
+            matches.append(
+                {
+                    "question_id": question_id,
+                    "answer_summary": "開発用サンプルです。この質問には明確な回答があった体裁です。",
+                    "suggested_status": "ANSWERED",
+                    "follow_up_required": False,
+                    "follow_up_question": None,
+                    "confidence": "HIGH",
+                    "evidence_text": "開発用の固定根拠です。",
+                }
+            )
+        elif index == 1:
+            matches.append(
+                {
+                    "question_id": question_id,
+                    "answer_summary": "開発用サンプルです。一部だけ回答された体裁です。",
+                    "suggested_status": "PARTIAL",
+                    "follow_up_required": True,
+                    "follow_up_question": "残りの条件を確認してください。",
+                    "confidence": "MEDIUM",
+                    "evidence_text": "一部の説明だけが含まれている体裁です。",
+                }
+            )
+        else:
+            matches.append(
+                {
+                    "question_id": question_id,
+                    "answer_summary": None,
+                    "suggested_status": "FOLLOW_UP_REQUIRED",
+                    "follow_up_required": True,
+                    "follow_up_question": "この質問への回答が見当たりません。再確認してください。",
+                    "confidence": "LOW",
+                    "evidence_text": None,
+                }
+            )
+
+    return {
+        "response_summary": DEFAULT_RESPONSE_SUMMARY,
+        "matches": matches,
+        "unmatched_information": [
+            {
+                "summary": "質問されていない追加情報の開発用サンプルです。",
+                "original_text": "開発用の未対応情報です。TechnicalFactには登録しません。",
+            }
+        ],
+        "overall_follow_up_required": True,
+    }
+
+
 class MockTechnicalCaseProvider(TechnicalCaseProvider):
     name = "mock"
 
@@ -54,9 +114,13 @@ class MockTechnicalCaseProvider(TechnicalCaseProvider):
         self,
         payload: Optional[dict] = None,
         error: Optional[Exception] = None,
+        response_payload: Optional[dict] = None,
+        response_error: Optional[Exception] = None,
     ) -> None:
         self._payload = payload
         self._error = error
+        self._response_payload = response_payload
+        self._response_error = response_error
 
     def analyze_technical_case(
         self,
@@ -73,3 +137,17 @@ class MockTechnicalCaseProvider(TechnicalCaseProvider):
         if self._payload is not None:
             return self._payload
         return dict(DEFAULT_MOCK_PAYLOAD)
+
+    def analyze_manufacturer_response(
+        self,
+        questions: list,
+        response_text: Optional[str],
+        system_prompt: Optional[str] = None,
+    ) -> dict:
+        if self._response_error is not None:
+            if isinstance(self._response_error, ProviderError):
+                raise self._response_error
+            raise ProviderError(str(self._response_error))
+        if self._response_payload is not None:
+            return self._response_payload
+        return build_default_manufacturer_response_payload(questions)

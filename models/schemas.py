@@ -5,10 +5,12 @@ from pydantic import BaseModel, Field
 
 from models.enums import (
     FactConfidence,
+    MatchConfidence,
     QuestionStatus,
     QuestionTarget,
     RecommendationOrigin,
     RelationType,
+    SuggestedQuestionStatus,
     ValidationSeverity,
 )
 
@@ -44,6 +46,28 @@ class TechnicalQuestion(BaseModel):
     status: Optional[QuestionStatus] = None
     follow_up_required: bool = False
     created_at: Optional[datetime] = None
+
+
+class ResponseMatchCandidate(BaseModel):
+    question_id: str
+    answer_summary: Optional[str] = None
+    suggested_status: Optional[SuggestedQuestionStatus] = None
+    follow_up_required: bool = False
+    follow_up_question: Optional[str] = None
+    confidence: Optional[MatchConfidence] = None
+    evidence_text: Optional[str] = None
+
+
+class UnmatchedInformation(BaseModel):
+    summary: Optional[str] = None
+    original_text: Optional[str] = None
+
+
+class ManufacturerResponseAnalysis(BaseModel):
+    response_summary: Optional[str] = None
+    matches: list[ResponseMatchCandidate] = Field(default_factory=list)
+    unmatched_information: list[UnmatchedInformation] = Field(default_factory=list)
+    overall_follow_up_required: bool = False
 
 
 class TechnicalAnswer(BaseModel):

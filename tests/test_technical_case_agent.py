@@ -48,6 +48,19 @@ class AlternateProvider(TechnicalCaseProvider):
             "unresolved_items": [{"label": "水深", "notes": "未確認です。"}],
         }
 
+    def analyze_manufacturer_response(
+        self,
+        questions,
+        response_text=None,
+        system_prompt=None,
+    ) -> dict:
+        return {
+            "response_summary": "Alternate provider sample",
+            "matches": [],
+            "unmatched_information": [],
+            "overall_follow_up_required": True,
+        }
+
 
 def test_mock_provider_returns_fixed_payload():
     provider = MockTechnicalCaseProvider()

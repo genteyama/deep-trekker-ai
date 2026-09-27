@@ -16,6 +16,18 @@ class QuestionStatus(str, Enum):
     CLOSED = "CLOSED"
 
 
+class SuggestedQuestionStatus(str, Enum):
+    ANSWERED = "ANSWERED"
+    PARTIAL = "PARTIAL"
+    FOLLOW_UP_REQUIRED = "FOLLOW_UP_REQUIRED"
+
+
+class MatchConfidence(str, Enum):
+    HIGH = "HIGH"
+    MEDIUM = "MEDIUM"
+    LOW = "LOW"
+
+
 class FactConfidence(str, Enum):
     MANUFACTURER_CONFIRMED = "MANUFACTURER_CONFIRMED"
     SPACEONE_VERIFIED = "SPACEONE_VERIFIED"

@@ -44,7 +44,37 @@
       "section_manufacturer_checks": "Manufacturer confirmation needed",
       "section_technical_questions": "Technical questions",
       "section_unconfirmed": "Unconfirmed items",
-      "no_results": "No analysis results yet"
+      "no_results": "No analysis results yet",
+      "section_manufacturer_response": "Manufacturer response review",
+      "manufacturer_response_label": "Manufacturer response",
+      "organize_response_button": "Organize manufacturer response",
+      "response_mock_warning": "Development mock response matching is currently in use",
+      "response_review_label": "AI draft result — needs review",
+      "response_no_results": "No response matching results yet",
+      "response_error": "The manufacturer response could not be validated",
+      "response_no_questions": "There are no manufacturer questions. Analyze the inquiry first.",
+      "response_empty_text": "Enter the manufacturer response text.",
+      "suggested_status_label": "AI status candidate",
+      "answer_summary_label": "Answer summary",
+      "follow_up_needed_label": "Follow-up needed",
+      "follow_up_question_label": "Follow-up question",
+      "confidence_label": "Confidence",
+      "question_label": "Question",
+      "needed_yes": "Yes",
+      "needed_no": "No",
+      "unmatched_information_label": "Extra information not tied to a question",
+      "review_response_json": "Review matching data",
+      "review_original_response": "View original manufacturer response",
+      "suggested_status": {
+        "ANSWERED": "Answered",
+        "PARTIAL": "Partial",
+        "FOLLOW_UP_REQUIRED": "Follow-up needed"
+      },
+      "confidence": {
+        "HIGH": "High",
+        "MEDIUM": "Medium",
+        "LOW": "Low"
+      }
     }
   }
 }

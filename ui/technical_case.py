@@ -3,8 +3,13 @@ from typing import Optional
 import streamlit as st
 
 from agents.technical_case_agent import (
+    ERROR_EMPTY_RESPONSE,
+    ERROR_NO_QUESTIONS,
+    ManufacturerResponseRun,
+    QuestionMatchView,
     TechnicalCaseRun,
     get_active_provider_name,
+    run_manufacturer_response_analysis,
     run_technical_case_analysis,
 )
 from models import CaseRequirement, TechnicalQuestion
@@ -12,6 +17,7 @@ from ui.navigation import PAGE_HOME, set_current_page
 from ui.technical_case_flow import SESSION_ANALYSIS, SESSION_CASE, SESSION_INQUIRY
 
 SESSION_RUN = "technical_case_run"
+SESSION_RESPONSE_RUN = "manufacturer_response_run"
 RESULT_SECTIONS = (
     "section_summary",
     "section_requirements",
@@ -73,6 +79,9 @@ def render_technical_case(texts: dict) -> None:
     st.divider()
     st.subheader(page["section_results"])
     _render_run_result(page, st.session_state.get(SESSION_RUN))
+
+    st.divider()
+    _render_manufacturer_response_section(page, st.session_state.get(SESSION_RUN))
 
 
 def _render_run_result(page: dict, run: Optional[TechnicalCaseRun]) -> None:
@@ -159,6 +168,101 @@ def _render_unresolved_section(page: dict, run: TechnicalCaseRun) -> None:
                 st.write(f"- {label}: {item.notes}")
             else:
                 st.write(f"- {label}")
+
+
+def _render_manufacturer_response_section(
+    page: dict,
+    inquiry_run: Optional[TechnicalCaseRun],
+) -> None:
+    st.subheader(page["section_manufacturer_response"])
+    if get_active_provider_name() == "mock":
+        st.warning(page["response_mock_warning"])
+    st.caption(page["response_review_label"])
+
+    with st.form("manufacturer_response_review"):
+        response_text = st.text_area(
+            page["manufacturer_response_label"],
+            key="input_manufacturer_response",
+            height=180,
+        )
+        submitted = st.form_submit_button(
+            page["organize_response_button"],
+            key="organize_manufacturer_response",
+            type="primary",
+        )
+
+    if submitted:
+        questions = []
+        if inquiry_run and inquiry_run.success:
+            questions = list(inquiry_run.manufacturer_questions)
+        run = run_manufacturer_response_analysis(questions, response_text)
+        st.session_state[SESSION_RESPONSE_RUN] = run
+
+    _render_response_run(page, st.session_state.get(SESSION_RESPONSE_RUN))
+
+
+def _render_response_run(page: dict, run: Optional[ManufacturerResponseRun]) -> None:
+    if run is None:
+        st.text(page["response_no_results"])
+        return
+
+    if not run.success:
+        error_text = page["response_error"]
+        if run.error_code == ERROR_NO_QUESTIONS:
+            error_text = page["response_no_questions"]
+        elif run.error_code == ERROR_EMPTY_RESPONSE:
+            error_text = page["response_empty_text"]
+        st.error(error_text)
+        if run.error_details:
+            with st.expander(page["error_details_label"]):
+                st.text(run.error_details)
+        return
+
+    if run.response_summary:
+        st.write(run.response_summary)
+
+    for view in run.matches:
+        _render_match_card(page, view)
+
+    with st.container(border=True):
+        st.markdown(f"**{page['unmatched_information_label']}**")
+        if not run.unmatched_information:
+            st.text(page["no_results"])
+        else:
+            for item in run.unmatched_information:
+                summary = item.summary or page["unnamed_item"]
+                st.write(f"- {summary}")
+
+    if run.original_response_text:
+        with st.expander(page["review_original_response"]):
+            st.text(run.original_response_text)
+    if run.analysis_json is not None:
+        with st.expander(page["review_response_json"]):
+            st.json(run.analysis_json)
+
+
+def _render_match_card(page: dict, view: QuestionMatchView) -> None:
+    candidate = view.candidate
+    status_key = candidate.suggested_status.value if candidate.suggested_status else None
+    status_label = page["suggested_status"].get(status_key, page["unconfirmed_label"])
+    confidence_key = candidate.confidence.value if candidate.confidence else None
+    confidence_label = page["confidence"].get(confidence_key, page["no_value"])
+    follow_up_label = page["needed_yes"] if candidate.follow_up_required else page["needed_no"]
+
+    with st.container(border=True):
+        st.markdown(f"**{page['question_label']}**")
+        st.write(view.question.question or page["unnamed_item"])
+        st.markdown(f"**{page['suggested_status_label']}**")
+        st.write(status_label)
+        st.markdown(f"**{page['answer_summary_label']}**")
+        st.write(candidate.answer_summary or page["no_value"])
+        st.markdown(f"**{page['follow_up_needed_label']}**")
+        st.write(follow_up_label)
+        if candidate.follow_up_question:
+            st.markdown(f"**{page['follow_up_question_label']}**")
+            st.write(candidate.follow_up_question)
+        st.markdown(f"**{page['confidence_label']}**")
+        st.write(confidence_label)
 
 
 def _requirement_line(requirement: CaseRequirement, page: dict) -> str:

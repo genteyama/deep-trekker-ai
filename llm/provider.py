@@ -21,6 +21,15 @@ class TechnicalCaseProvider(ABC):
     ) -> dict:
         raise NotImplementedError
 
+    @abstractmethod
+    def analyze_manufacturer_response(
+        self,
+        questions: list,
+        response_text: Optional[str],
+        system_prompt: Optional[str] = None,
+    ) -> dict:
+        raise NotImplementedError
+
 
 def get_technical_case_provider(
     provider_name: Optional[str] = None,

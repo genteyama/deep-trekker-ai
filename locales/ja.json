@@ -44,7 +44,37 @@
       "section_manufacturer_checks": "メーカーへの確認が必要",
       "section_technical_questions": "技術質問",
       "section_unconfirmed": "未確認事項",
-      "no_results": "まだ解析結果はありません"
+      "no_results": "まだ解析結果はありません",
+      "section_manufacturer_response": "メーカー回答整理",
+      "manufacturer_response_label": "メーカー回答本文",
+      "organize_response_button": "メーカー回答を整理する",
+      "response_mock_warning": "現在は開発用Mock回答整理を使用しています",
+      "response_review_label": "AI整理結果・要確認",
+      "response_no_results": "まだ回答整理結果はありません",
+      "response_error": "メーカー回答の形式を確認できませんでした",
+      "response_no_questions": "メーカーへの確認事項がありません。先に問い合わせを解析してください。",
+      "response_empty_text": "メーカー回答本文を入力してください。",
+      "suggested_status_label": "AI判定候補",
+      "answer_summary_label": "回答要約",
+      "follow_up_needed_label": "追加確認の必要性",
+      "follow_up_question_label": "追加確認質問",
+      "confidence_label": "信頼度",
+      "question_label": "質問",
+      "needed_yes": "必要",
+      "needed_no": "不要",
+      "unmatched_information_label": "質問に含まれていない追加情報",
+      "review_response_json": "回答整理データを確認",
+      "review_original_response": "メーカー回答本文を見る",
+      "suggested_status": {
+        "ANSWERED": "回答あり",
+        "PARTIAL": "一部回答",
+        "FOLLOW_UP_REQUIRED": "追加確認が必要"
+      },
+      "confidence": {
+        "HIGH": "高い",
+        "MEDIUM": "中程度",
+        "LOW": "低い"
+      }
     }
   }
 }

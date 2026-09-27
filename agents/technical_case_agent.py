@@ -13,16 +13,30 @@ from llm.analysis_schema import (
     UnresolvedItem,
 )
 from llm.provider import ProviderError, TechnicalCaseProvider, get_technical_case_provider
-from models import Case, CaseRequirement, QuestionStatus, QuestionTarget, TechnicalQuestion
+from models import (
+    Case,
+    CaseRequirement,
+    ManufacturerResponseAnalysis,
+    MatchConfidence,
+    QuestionStatus,
+    QuestionTarget,
+    ResponseMatchCandidate,
+    SuggestedQuestionStatus,
+    TechnicalQuestion,
+    UnmatchedInformation,
+)
 from ui.technical_case_flow import build_case_from_inputs, normalize_optional_text
 
 logger = logging.getLogger(__name__)
 
 PROMPT_PATH = Path(__file__).resolve().parents[1] / "prompts" / "technical_case_agent.md"
+RESPONSE_PROMPT_PATH = Path(__file__).resolve().parents[1] / "prompts" / "manufacturer_response.md"
 SOURCE_AI_EXTRACTED = "AI_EXTRACTED_UNVERIFIED"
 ERROR_PROVIDER = "PROVIDER_ERROR"
 ERROR_VALIDATION = "VALIDATION_ERROR"
 ERROR_UNEXPECTED = "UNEXPECTED_ERROR"
+ERROR_NO_QUESTIONS = "NO_QUESTIONS"
+ERROR_EMPTY_RESPONSE = "EMPTY_RESPONSE"
 
 
 class TechnicalCaseRun:
@@ -59,8 +73,44 @@ class TechnicalCaseRun:
         self.error_details = error_details
 
 
+class ManufacturerResponseRun:
+    def __init__(
+        self,
+        success: bool,
+        provider_name: str,
+        original_response_text: Optional[str] = None,
+        response_summary: Optional[str] = None,
+        matches: Optional[list] = None,
+        unmatched_information: Optional[list[UnmatchedInformation]] = None,
+        overall_follow_up_required: bool = False,
+        analysis_json: Optional[dict] = None,
+        error_code: Optional[str] = None,
+        error_details: Optional[str] = None,
+    ) -> None:
+        self.success = success
+        self.provider_name = provider_name
+        self.original_response_text = original_response_text
+        self.response_summary = response_summary
+        self.matches = matches or []
+        self.unmatched_information = unmatched_information or []
+        self.overall_follow_up_required = overall_follow_up_required
+        self.analysis_json = analysis_json
+        self.error_code = error_code
+        self.error_details = error_details
+
+
+class QuestionMatchView:
+    def __init__(self, question: TechnicalQuestion, candidate: ResponseMatchCandidate) -> None:
+        self.question = question
+        self.candidate = candidate
+
+
 def load_system_prompt() -> str:
     return PROMPT_PATH.read_text(encoding="utf-8")
+
+
+def load_manufacturer_response_prompt() -> str:
+    return RESPONSE_PROMPT_PATH.read_text(encoding="utf-8")
 
 
 def get_active_provider_name(provider: Optional[TechnicalCaseProvider] = None) -> str:
@@ -202,3 +252,114 @@ def _failed_run(
         error_code=error_code,
         error_details=error_details,
     )
+
+
+def validate_manufacturer_response_payload(payload: object) -> ManufacturerResponseAnalysis:
+    return ManufacturerResponseAnalysis.model_validate(payload)
+
+
+def build_question_payloads(questions: list[TechnicalQuestion]) -> list[dict]:
+    payloads = []
+    for question in questions:
+        payloads.append(
+            {
+                "question_id": question.question_id,
+                "question": question.question,
+                "target": question.target.value if question.target else None,
+            }
+        )
+    return payloads
+
+
+def merge_response_matches(
+    questions: list[TechnicalQuestion],
+    analysis: ManufacturerResponseAnalysis,
+) -> list[QuestionMatchView]:
+    matches_by_id = {item.question_id: item for item in analysis.matches}
+    views = []
+    for question in questions:
+        candidate = matches_by_id.get(question.question_id)
+        if candidate is None:
+            candidate = ResponseMatchCandidate(
+                question_id=question.question_id,
+                answer_summary=None,
+                suggested_status=SuggestedQuestionStatus.FOLLOW_UP_REQUIRED,
+                follow_up_required=True,
+                follow_up_question=question.question,
+                confidence=MatchConfidence.LOW,
+                evidence_text=None,
+            )
+        views.append(QuestionMatchView(question=question, candidate=candidate))
+    return views
+
+
+def run_manufacturer_response_analysis(
+    questions: list[TechnicalQuestion],
+    response_text: Optional[str],
+    provider: Optional[TechnicalCaseProvider] = None,
+) -> ManufacturerResponseRun:
+    active_provider = provider or get_technical_case_provider()
+    original_text = normalize_optional_text(response_text)
+
+    if not questions:
+        return ManufacturerResponseRun(
+            success=False,
+            provider_name=active_provider.name,
+            original_response_text=original_text,
+            error_code=ERROR_NO_QUESTIONS,
+            error_details="No TechnicalQuestion items were provided.",
+        )
+    if original_text is None:
+        return ManufacturerResponseRun(
+            success=False,
+            provider_name=active_provider.name,
+            original_response_text=None,
+            error_code=ERROR_EMPTY_RESPONSE,
+            error_details="Manufacturer response text is empty.",
+        )
+
+    try:
+        payload = active_provider.analyze_manufacturer_response(
+            questions=build_question_payloads(questions),
+            response_text=original_text,
+            system_prompt=load_manufacturer_response_prompt(),
+        )
+        analysis = validate_manufacturer_response_payload(payload)
+        matches = merge_response_matches(questions, analysis)
+        return ManufacturerResponseRun(
+            success=True,
+            provider_name=active_provider.name,
+            original_response_text=original_text,
+            response_summary=analysis.response_summary,
+            matches=matches,
+            unmatched_information=list(analysis.unmatched_information),
+            overall_follow_up_required=analysis.overall_follow_up_required,
+            analysis_json=analysis.model_dump(mode="json"),
+        )
+    except ProviderError as error:
+        logger.exception("Manufacturer response provider failed")
+        return ManufacturerResponseRun(
+            success=False,
+            provider_name=active_provider.name,
+            original_response_text=original_text,
+            error_code=ERROR_PROVIDER,
+            error_details=str(error),
+        )
+    except ValidationError as error:
+        logger.exception("Manufacturer response validation failed")
+        return ManufacturerResponseRun(
+            success=False,
+            provider_name=active_provider.name,
+            original_response_text=original_text,
+            error_code=ERROR_VALIDATION,
+            error_details=str(error),
+        )
+    except Exception as error:
+        logger.exception("Manufacturer response analysis failed")
+        return ManufacturerResponseRun(
+            success=False,
+            provider_name=active_provider.name,
+            original_response_text=original_text,
+            error_code=ERROR_UNEXPECTED,
+            error_details=str(error),
+        )
