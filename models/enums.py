@@ -28,6 +28,10 @@ class MatchConfidence(str, Enum):
     LOW = "LOW"
 
 
+class AnswerSourceType(str, Enum):
+    MANUFACTURER_RESPONSE = "MANUFACTURER_RESPONSE"
+
+
 class FactConfidence(str, Enum):
     MANUFACTURER_CONFIRMED = "MANUFACTURER_CONFIRMED"
     SPACEONE_VERIFIED = "SPACEONE_VERIFIED"

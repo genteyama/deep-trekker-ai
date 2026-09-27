@@ -2,22 +2,36 @@ from typing import Optional
 
 import streamlit as st
 
+from agents.approval import (
+    ERROR_ALREADY_APPLIED,
+    ApprovalBoard,
+    HumanApprovalInput,
+    QuestionApprovalItem,
+    apply_human_approval,
+    build_approval_board,
+    summarize_approvals,
+)
 from agents.technical_case_agent import (
     ERROR_EMPTY_RESPONSE,
     ERROR_NO_QUESTIONS,
     ManufacturerResponseRun,
-    QuestionMatchView,
     TechnicalCaseRun,
     get_active_provider_name,
     run_manufacturer_response_analysis,
     run_technical_case_analysis,
 )
-from models import CaseRequirement, TechnicalQuestion
+from models import CaseRequirement, SuggestedQuestionStatus, TechnicalQuestion
 from ui.navigation import PAGE_HOME, set_current_page
 from ui.technical_case_flow import SESSION_ANALYSIS, SESSION_CASE, SESSION_INQUIRY
 
 SESSION_RUN = "technical_case_run"
 SESSION_RESPONSE_RUN = "manufacturer_response_run"
+SESSION_APPROVAL_BOARD = "manufacturer_approval_board"
+APPROVAL_STATUS_OPTIONS = (
+    SuggestedQuestionStatus.ANSWERED,
+    SuggestedQuestionStatus.PARTIAL,
+    SuggestedQuestionStatus.FOLLOW_UP_REQUIRED,
+)
 RESULT_SECTIONS = (
     "section_summary",
     "section_requirements",
@@ -197,11 +211,24 @@ def _render_manufacturer_response_section(
             questions = list(inquiry_run.manufacturer_questions)
         run = run_manufacturer_response_analysis(questions, response_text)
         st.session_state[SESSION_RESPONSE_RUN] = run
+        st.session_state[SESSION_APPROVAL_BOARD] = (
+            build_approval_board(run) if run.success else None
+        )
 
-    _render_response_run(page, st.session_state.get(SESSION_RESPONSE_RUN))
+    _render_response_run(
+        page,
+        st.session_state.get(SESSION_RESPONSE_RUN),
+        st.session_state.get(SESSION_APPROVAL_BOARD),
+        inquiry_run,
+    )
 
 
-def _render_response_run(page: dict, run: Optional[ManufacturerResponseRun]) -> None:
+def _render_response_run(
+    page: dict,
+    run: Optional[ManufacturerResponseRun],
+    board: Optional[ApprovalBoard],
+    inquiry_run: Optional[TechnicalCaseRun],
+) -> None:
     if run is None:
         st.text(page["response_no_results"])
         return
@@ -221,8 +248,12 @@ def _render_response_run(page: dict, run: Optional[ManufacturerResponseRun]) -> 
     if run.response_summary:
         st.write(run.response_summary)
 
-    for view in run.matches:
-        _render_match_card(page, view)
+    if board:
+        st.text_input(page["approver_label"], key="input_approver")
+        st.caption(page["approver_hint"])
+        for item in board.items:
+            _render_approval_card(page, item, board, inquiry_run)
+        _render_approval_summary(page, board)
 
     with st.container(border=True):
         st.markdown(f"**{page['unmatched_information_label']}**")
@@ -241,28 +272,110 @@ def _render_response_run(page: dict, run: Optional[ManufacturerResponseRun]) -> 
             st.json(run.analysis_json)
 
 
-def _render_match_card(page: dict, view: QuestionMatchView) -> None:
-    candidate = view.candidate
+def _render_approval_card(
+    page: dict,
+    item: QuestionApprovalItem,
+    board: ApprovalBoard,
+    inquiry_run: Optional[TechnicalCaseRun],
+) -> None:
+    candidate = item.ai_candidate
     status_key = candidate.suggested_status.value if candidate.suggested_status else None
-    status_label = page["suggested_status"].get(status_key, page["unconfirmed_label"])
-    confidence_key = candidate.confidence.value if candidate.confidence else None
-    confidence_label = page["confidence"].get(confidence_key, page["no_value"])
-    follow_up_label = page["needed_yes"] if candidate.follow_up_required else page["needed_no"]
+    question_id = item.question.question_id
 
     with st.container(border=True):
+        state_label = page["applied_label"] if item.is_applied else page["pending_label"]
+        st.caption(f"{page['response_review_label']} / {state_label}")
         st.markdown(f"**{page['question_label']}**")
-        st.write(view.question.question or page["unnamed_item"])
+        st.write(item.question.question or page["unnamed_item"])
         st.markdown(f"**{page['suggested_status_label']}**")
-        st.write(status_label)
+        st.write(page["suggested_status"].get(status_key, page["unconfirmed_label"]))
         st.markdown(f"**{page['answer_summary_label']}**")
         st.write(candidate.answer_summary or page["no_value"])
         st.markdown(f"**{page['follow_up_needed_label']}**")
-        st.write(follow_up_label)
+        st.write(page["needed_yes"] if candidate.follow_up_required else page["needed_no"])
         if candidate.follow_up_question:
             st.markdown(f"**{page['follow_up_question_label']}**")
             st.write(candidate.follow_up_question)
         st.markdown(f"**{page['confidence_label']}**")
-        st.write(confidence_label)
+        confidence_key = candidate.confidence.value if candidate.confidence else None
+        st.write(page["confidence"].get(confidence_key, page["no_value"]))
+        if candidate.evidence_text:
+            st.markdown(f"**{page['evidence_label']}**")
+            st.write(candidate.evidence_text)
+
+        if item.is_applied:
+            st.success(page["applied_message"])
+            return
+
+        st.markdown(f"**{page['human_review_label']}**")
+        default_status = candidate.suggested_status or SuggestedQuestionStatus.FOLLOW_UP_REQUIRED
+        with st.form(f"approve_{question_id}"):
+            selected_status = st.selectbox(
+                page["suggested_status_label"],
+                options=list(APPROVAL_STATUS_OPTIONS),
+                index=list(APPROVAL_STATUS_OPTIONS).index(default_status),
+                format_func=lambda value: page["suggested_status"][value.value],
+                key=f"edit_status_{question_id}",
+            )
+            approved_answer = st.text_area(
+                page["answer_summary_label"],
+                value=candidate.answer_summary or "",
+                key=f"edit_answer_{question_id}",
+            )
+            follow_up_required = st.checkbox(
+                page["follow_up_needed_label"],
+                value=candidate.follow_up_required,
+                key=f"edit_follow_up_{question_id}",
+            )
+            follow_up_question = st.text_area(
+                page["follow_up_question_label"],
+                value=candidate.follow_up_question or "",
+                key=f"edit_follow_up_question_{question_id}",
+            )
+            submitted = st.form_submit_button(
+                page["apply_button"],
+                key=f"apply_{question_id}",
+            )
+
+        if submitted:
+            result = apply_human_approval(
+                board,
+                question_id,
+                HumanApprovalInput(
+                    approved_status=selected_status,
+                    approved_answer=approved_answer,
+                    follow_up_required=follow_up_required,
+                    follow_up_question=follow_up_question,
+                    approved_by=st.session_state.get("input_approver"),
+                ),
+            )
+            if result.success and result.item:
+                _sync_inquiry_question(inquiry_run, result.item.question)
+                st.success(page["applied_message"])
+                st.rerun()
+            elif result.error_code == ERROR_ALREADY_APPLIED:
+                st.warning(page["already_applied"])
+
+
+def _render_approval_summary(page: dict, board: ApprovalBoard) -> None:
+    summary = summarize_approvals(board)
+    with st.container(border=True):
+        st.markdown(f"**{page['summary_label']}**")
+        st.write(f"{page['summary_total']}: {summary['total']}")
+        st.write(f"{page['summary_applied']}: {summary['applied']}")
+        st.write(f"{page['summary_pending']}: {summary['pending']}")
+        st.write(f"{page['suggested_status']['ANSWERED']}: {summary['answered']}")
+        st.write(f"{page['suggested_status']['PARTIAL']}: {summary['partial']}")
+        st.write(f"{page['suggested_status']['FOLLOW_UP_REQUIRED']}: {summary['follow_up_required']}")
+
+
+def _sync_inquiry_question(inquiry_run: Optional[TechnicalCaseRun], question: TechnicalQuestion) -> None:
+    if inquiry_run is None:
+        return
+    for index, current in enumerate(inquiry_run.manufacturer_questions):
+        if current.question_id == question.question_id:
+            inquiry_run.manufacturer_questions[index] = question
+            return
 
 
 def _requirement_line(requirement: CaseRequirement, page: dict) -> str:

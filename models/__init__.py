@@ -1,4 +1,5 @@
 from models.enums import (
+    AnswerSourceType,
     FactConfidence,
     MatchConfidence,
     QuestionStatus,
@@ -10,6 +11,7 @@ from models.enums import (
 )
 from models.sample import create_sample_case, sample_case_json
 from models.schemas import (
+    ApprovalRecord,
     Case,
     CaseRequirement,
     Configuration,
@@ -30,6 +32,8 @@ from models.schemas import (
 )
 
 __all__ = [
+    "AnswerSourceType",
+    "ApprovalRecord",
     "Case",
     "CaseRequirement",
     "Configuration",

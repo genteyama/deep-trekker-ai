@@ -74,7 +74,20 @@
         "HIGH": "高い",
         "MEDIUM": "中程度",
         "LOW": "低い"
-      }
+      },
+      "human_review_label": "人による確認・修正",
+      "apply_button": "この内容で反映",
+      "applied_message": "確認済みとして反映しました",
+      "applied_label": "反映済み",
+      "pending_label": "未反映",
+      "already_applied": "この質問は反映済みです",
+      "approver_label": "確認者",
+      "approver_hint": "空欄でも構いません。人名は自動では入れません。",
+      "summary_label": "回答整理状況",
+      "summary_total": "全質問数",
+      "summary_applied": "反映済み",
+      "summary_pending": "未反映",
+      "evidence_label": "根拠テキスト"
     }
   }
 }

@@ -74,7 +74,20 @@
         "HIGH": "High",
         "MEDIUM": "Medium",
         "LOW": "Low"
-      }
+      },
+      "human_review_label": "Human review and edits",
+      "apply_button": "Apply this review",
+      "applied_message": "Applied as reviewed",
+      "applied_label": "Applied",
+      "pending_label": "Pending",
+      "already_applied": "This question has already been applied",
+      "approver_label": "Reviewer",
+      "approver_hint": "This can be left blank. A person name is not generated.",
+      "summary_label": "Response review status",
+      "summary_total": "Questions",
+      "summary_applied": "Applied",
+      "summary_pending": "Pending",
+      "evidence_label": "Evidence"
     }
   }
 }

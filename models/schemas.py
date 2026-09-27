@@ -70,6 +70,20 @@ class ManufacturerResponseAnalysis(BaseModel):
     overall_follow_up_required: bool = False
 
 
+class ApprovalRecord(BaseModel):
+    approval_id: str
+    question_id: str
+    approved_status: SuggestedQuestionStatus
+    approved_answer: Optional[str] = None
+    approved_follow_up_required: bool = False
+    approved_follow_up_question: Optional[str] = None
+    approved_at: Optional[datetime] = None
+    approved_by: Optional[str] = None
+    ai_suggested_status: Optional[SuggestedQuestionStatus] = None
+    ai_suggested_answer: Optional[str] = None
+    ai_suggested_follow_up_question: Optional[str] = None
+
+
 class TechnicalAnswer(BaseModel):
     answer_id: str
     question_id: str

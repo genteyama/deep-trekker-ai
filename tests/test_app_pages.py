@@ -74,6 +74,26 @@ def test_manufacturer_response_button_shows_mock_matches():
     assert at.error.len == 0
 
 
+def test_apply_button_marks_manufacturer_question_applied():
+    at = _start_app()
+    at.button(key="open_technical_case").click().run()
+    at.text_area(key="input_customer_inquiry").set_value("管内点検の相談です。")
+    at.button(key="analyze_inquiry").click().run()
+    at.text_area(key="input_manufacturer_response").set_value("メーカーからの返信サンプルです。")
+    at.button(key="organize_manufacturer_response").click().run()
+
+    apply_buttons = [button for button in at.button if button.label == "この内容で反映"]
+    assert apply_buttons
+    apply_buttons[0].click().run()
+
+    visible_text = [item.value for item in at.text] + [item.value for item in at.markdown]
+    success_text = [item.value for item in at.success]
+
+    assert "確認済みとして反映しました" in success_text
+    assert "反映済み" in " ".join([item.value for item in at.caption] + visible_text)
+    assert "未反映: 0" in visible_text
+
+
 def test_back_button_returns_to_home():
     at = _start_app()
     at.button(key="open_technical_case").click().run()
