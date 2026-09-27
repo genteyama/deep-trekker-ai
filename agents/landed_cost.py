@@ -29,11 +29,11 @@ SHIPPING_SNAPSHOT_PATH = (
     Path(__file__).resolve().parents[1] / "data" / "golden_cases" / "ihi_quote_001" / "shipping_snapshots.json"
 )
 IHI_KNOWN_PRODUCTS = {
-    "MAG": ("9701-MAG-4K", "9735", "5608"),
+    "MAG": ("9701-MAG-4K", "9735", "5608", "2604", "2601"),
     "PHOTON": ("9680-BASE", "8459", "5608", "7851-PHOTON"),
 }
 IHI_UNRESOLVED = {
-    "MAG": ("MAG Cygnus Integration Kit",),
+    "MAG": (),
     "PHOTON": (),
 }
 IHI_SHIPPING = {
@@ -294,9 +294,13 @@ def build_ihi_landed_cost_scenario(
     key = configuration.upper()
     products = IHI_KNOWN_PRODUCTS[key]
     unresolved = list(IHI_UNRESOLVED[key])
+    from_master = dealer_values_from_candidates(price_book_candidates or [], products)
     product_inputs = []
     for sku in products:
-        values = dealer_values[sku]
+        values = from_master.get(sku) or dealer_values.get(sku)
+        if values is None or values.get("dealer_price_usd") is None:
+            unresolved.append(f"{sku} Current Dealer")
+            continue
         product_inputs.append(
             {
                 "sku": sku,
@@ -369,11 +373,14 @@ def ihi_historical_sales_totals(quote: dict) -> dict:
 
 def resolve_ihi_dealer_values(candidates: Optional[Sequence[SKUMasterCandidate]] = None) -> dict[str, dict]:
     skus = list(IHI_KNOWN_PRODUCTS["MAG"]) + list(IHI_KNOWN_PRODUCTS["PHOTON"])
-    if candidates:
-        values = dealer_values_from_candidates(candidates, skus)
-        if all(sku in values and values[sku].get("dealer_price_usd") is not None for sku in set(skus)):
-            return values
-    return {sku: dict(item) for sku, item in IHI_DEVELOPMENT_DEALER_VALUES.items()}
+    values = dealer_values_from_candidates(candidates or [], skus)
+    for sku in skus:
+        if sku in values and values[sku].get("dealer_price_usd") is not None:
+            continue
+        fallback = IHI_DEVELOPMENT_DEALER_VALUES.get(sku)
+        if fallback:
+            values[sku] = dict(fallback)
+    return values
 
 
 def dealer_values_from_candidates(candidates: Sequence[SKUMasterCandidate], skus: Sequence[str]) -> dict[str, dict]:

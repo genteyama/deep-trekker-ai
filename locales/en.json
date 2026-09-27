@@ -284,7 +284,8 @@
       "comparison_statuses": {
         "MATCH": "MATCH",
         "DIFFERENCE": "DIFFERENCE",
-        "NOT_COMPARABLE": "NOT_COMPARABLE"
+        "NOT_COMPARABLE": "NOT_COMPARABLE",
+        "MISSING_IN_HISTORICAL_QUOTE": "MISSING_IN_HISTORICAL_QUOTE"
       },
       "sku_link_preview_label": "SKU link migration preview",
       "no_sku_links": "No SKU link preview yet.",

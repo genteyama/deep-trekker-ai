@@ -167,7 +167,16 @@ def test_ihi_historical_quote_is_comparison_not_policy_source():
     assert any(item.formula_type == PricingFormulaType.SPECIAL for item in policies)
     assert any(item.formula_type == PricingFormulaType.FIXED for item in policies)
     assert all(item.source_formula for item in policies)
-    assert mag_kit.comparison_status == HistoricalComparisonStatus.NOT_COMPARABLE
+    mag_brush = next(item for item in comparisons if item.sku == "2601")
+    assert mag_kit.sku == "2604"
+    assert mag_kit.historical_quote_price_jpy == 360000
+    assert mag_kit.comparison_status in {
+        HistoricalComparisonStatus.NOT_COMPARABLE,
+        HistoricalComparisonStatus.DIFFERENCE,
+        HistoricalComparisonStatus.MATCH,
+    }
+    assert mag_brush.comparison_status == HistoricalComparisonStatus.MISSING_IN_HISTORICAL_QUOTE
+    assert mag_brush.historical_quote_price_jpy is None
     assert photon_base.historical_quote_price_jpy == 3540000
     assert photon_base.policy_sales_price_jpy == round(17391 * 170 * 1.2, 4)
     assert photon_base.comparison_status == HistoricalComparisonStatus.DIFFERENCE

@@ -80,8 +80,11 @@ def test_mag_integration_kit_is_missing_from_supplier_quote():
     assert missing["code"] == "MISSING_COMPONENT"
     assert missing["present_in_supplier_quote"] is False
     assert missing["present_in_mag_customer_quote"] is True
-    assert missing["expected_manufacturer_sku"] is None
+    assert missing["expected_manufacturer_sku"] == "2604"
+    assert expected["missing_components"][1]["expected_manufacturer_sku"] == "2601"
+    assert expected["missing_components"][1]["present_in_mag_customer_quote"] is False
     assert all(line.sku != "7851-PHOTON" or "PHOTON" in (line.description or "") for line in supplier.lines)
+    assert not any(line.sku in {"2604", "2601"} for line in supplier.lines)
     assert not any("POWER BRUSH" in (line.description or "") for line in supplier.lines)
     assert mag_kit.manufacturer_sku is None
     assert mag_kit.sku_source == SkuMappingSource.UNMAPPED
@@ -170,8 +173,16 @@ def test_customer_quote_lines_do_not_invent_source_skus():
         for item in expected["human_verified_sku_mappings"]
         if item["expected_manufacturer_sku"] == "7851-PHOTON"
     )
-    assert mag_kit_mapping["expected_manufacturer_sku"] is None
+    assert mag_kit_mapping["expected_manufacturer_sku"] == "2604"
+    assert mag_kit_mapping["historical_price_jpy"] == 360000
     assert mag_kit_mapping["expected_status"] == "MISSING_COMPONENT"
+    brush_base = next(
+        item
+        for item in expected["human_verified_sku_mappings"]
+        if item["expected_manufacturer_sku"] == "2601"
+    )
+    assert brush_base["historical_price_jpy"] is None
+    assert brush_base["expected_status"] == "MISSING_IN_HISTORICAL_QUOTE"
     assert photon_kit_mapping["sku_source"] == "HUMAN_VERIFIED"
 
 

@@ -267,6 +267,7 @@ class HistoricalComparisonStatus(str, Enum):
     MATCH = "MATCH"
     DIFFERENCE = "DIFFERENCE"
     NOT_COMPARABLE = "NOT_COMPARABLE"
+    MISSING_IN_HISTORICAL_QUOTE = "MISSING_IN_HISTORICAL_QUOTE"
 
 
 class SkuMappingSource(str, Enum):

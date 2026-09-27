@@ -333,6 +333,8 @@ class RequiredConfigurationItem(BaseModel):
     requirement_source: Optional[str] = None
     requirement_reference: Optional[str] = None
     human_verified: bool = False
+    depends_on_sku: Optional[str] = None
+    dependency_source: Optional[str] = None
     match_markers: list[str] = Field(default_factory=list)
     exclude_skus: list[str] = Field(default_factory=list)
     exclude_markers: list[str] = Field(default_factory=list)

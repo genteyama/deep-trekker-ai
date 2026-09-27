@@ -253,6 +253,14 @@ def official_ihi_sku_snapshot_book() -> BytesIO:
                 ],
                 ["9735", "ELEVATING PAN TILT CAMERA KIT + LEDS - UTILITY CRAWLERS", 12075, 7245, None],
                 ["5608", "CYGNUS THICKNESS GAUGE", 10448, 10448, "***NO DEALER DISCOUNT"],
+                [
+                    "2604",
+                    "INTEGRATION KIT, POWER BRUSH CYGNUS GAUGE",
+                    1707,
+                    1024.20,
+                    "REQUIRES 2601",
+                ],
+                ["2601", "KIT, POWER BRUSH BASE", 945, 567, None],
             ],
             "PHOTON": [
                 ["Part Number", "Description", "MSRP", "DT40", "Notes:"],

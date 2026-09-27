@@ -237,6 +237,20 @@ def _missing_component_line(item: RequiredConfigurationItem) -> SupplierQuoteLin
     )
 
 
+def manufacturer_package_includes_component(
+    package_notes: Optional[str],
+    *,
+    sku: Optional[str] = None,
+    markers: Optional[Sequence[str]] = None,
+) -> bool:
+    text = (package_notes or "").upper()
+    if sku and sku.upper() in text:
+        return True
+    if markers and all(marker.upper() in text for marker in markers):
+        return True
+    return False
+
+
 def _requirement_is_present(quote: SupplierQuote, item: RequiredConfigurationItem) -> bool:
     for line in quote.lines:
         sku = line.sku or ""

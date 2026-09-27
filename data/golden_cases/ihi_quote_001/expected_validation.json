@@ -16,13 +16,29 @@
     {
       "code": "MISSING_COMPONENT",
       "configuration": "MAG + Cygnus",
-      "description": "MAG Cygnus Integration Kit",
+      "description": "INTEGRATION KIT, POWER BRUSH CYGNUS GAUGE",
       "customer_quote_line": "INTEGRATION KIT, POWER BRUSH CYGNUS GAUGE",
       "present_in_supplier_quote": false,
       "present_in_mag_customer_quote": true,
-      "expected_manufacturer_sku": null,
-      "sku_source": "UNMAPPED",
-      "note": "7851-PHOTON is the PHOTON Integration Kit and is a different part. Do not add a guessed MAG kit SKU to the Supplier Quote."
+      "expected_manufacturer_sku": "2604",
+      "sku_source": "HUMAN_VERIFIED",
+      "requirement_source": "MANUFACTURER_PRICE_BOOK",
+      "requirement_reference": "DT40 / VAC & MAG",
+      "note": "DT40 VAC & MAG lists 2604. 7851-PHOTON is a different part. Do not add this SKU to the Supplier Quote."
+    },
+    {
+      "code": "MISSING_COMPONENT",
+      "configuration": "MAG + Cygnus",
+      "description": "KIT, POWER BRUSH BASE",
+      "customer_quote_line": null,
+      "present_in_supplier_quote": false,
+      "present_in_mag_customer_quote": false,
+      "expected_manufacturer_sku": "2601",
+      "sku_source": "MANUFACTURER_SOURCE",
+      "requirement_source": "MANUFACTURER_PRICE_BOOK",
+      "requirement_reference": "DT40 / VAC & MAG",
+      "historical_status": "MISSING_IN_HISTORICAL_QUOTE",
+      "note": "DT40 notes on 2604 say REQUIRES 2601. Historical MAG 8194 has no independent 2601 line. 360,000 JPY is not interpreted as including 2601."
     }
   ],
   "supplier_quote_expectations": {
@@ -99,10 +115,20 @@
     {
       "quote": "MAG",
       "customer_line_description": "INTEGRATION KIT, POWER BRUSH CYGNUS GAUGE",
-      "expected_manufacturer_sku": null,
-      "sku_source": "UNMAPPED",
+      "expected_manufacturer_sku": "2604",
+      "sku_source": "HUMAN_VERIFIED",
       "expected_status": "MISSING_COMPONENT",
-      "basis": "Present on the SpaceOne MAG quote and missing from the Supplier Quote. Formal SKU is not guessed."
+      "historical_price_jpy": 360000,
+      "basis": "Customer MAG 8194 line matches the DT40 description for 2604. The quote PDF does not print a SKU. This mapping does not change the historical 360,000 JPY."
+    },
+    {
+      "quote": "MAG",
+      "customer_line_description": null,
+      "expected_manufacturer_sku": "2601",
+      "sku_source": "MANUFACTURER_SOURCE",
+      "expected_status": "MISSING_IN_HISTORICAL_QUOTE",
+      "historical_price_jpy": null,
+      "basis": "DT40 notes on 2604 say REQUIRES 2601. Historical MAG 8194 has no independent 2601 sales line. Do not invent a historical price or treat 360,000 JPY as including 2601."
     },
     {
       "quote": "PHOTON",

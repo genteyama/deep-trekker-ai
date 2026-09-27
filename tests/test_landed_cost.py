@@ -391,7 +391,9 @@ def test_ihi_mag_is_incomplete_and_photon_can_be_built():
     )
 
     assert mag.status == ScenarioCompleteness.INCOMPLETE
-    assert "MAG Cygnus Integration Kit" in mag.unresolved_components
+    assert "MAG Cygnus Integration Kit" not in mag.unresolved_components
+    assert any("2604" in item for item in mag.unresolved_components)
+    assert any("2601" in item for item in mag.unresolved_components)
     assert mag_econ.gross_margin_rate is None
     assert mag.adjustments == []
     assert [line.shipping_type for line in mag.shipping_lines] == [ShippingType.LARGE_BOX]

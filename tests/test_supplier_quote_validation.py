@@ -186,7 +186,13 @@ def test_ihi_supplier_quote_validates_against_dt40_without_changing_master_or_to
     assert product["7851-PHOTON"].description and "PHOTON" in product["7851-PHOTON"].description
     assert result.summary.msrp_match_count == 5
     assert result.summary.no_dealer_discount_count == 1
-    assert result.summary.missing_component_count == 1
+    assert result.summary.missing_component_count == 2
+    missing_skus = {
+        line.sku
+        for line in result.lines
+        if line.validation_status == SupplierQuoteValidationStatus.MISSING_COMPONENT
+    }
+    assert missing_skus == {"2604", "2601"}
     assert result.summary.shipping_line_count == 1
     assert result.summary.insurance_line_count == 1
     assert result.summary.shipping_line_count + result.summary.insurance_line_count == 2

@@ -1,15 +1,30 @@
 [
   {
-    "configuration_id": "IHI_QUOTE_001-MAG-CYGNUS-INTEGRATION",
+    "configuration_id": "IHI_QUOTE_001-MAG-2604",
     "product": "MAG",
-    "required_sku": null,
-    "required_description": "MAG Cygnus Integration Kit",
-    "requirement_source": "HUMAN_VERIFIED",
-    "requirement_reference": "IHI_QUOTE_001",
+    "required_sku": "2604",
+    "required_description": "INTEGRATION KIT, POWER BRUSH CYGNUS GAUGE",
+    "requirement_source": "MANUFACTURER_PRICE_BOOK",
+    "requirement_reference": "DT40 / VAC & MAG",
     "human_verified": true,
-    "match_markers": ["INTEGRATION"],
+    "depends_on_sku": "2601",
+    "dependency_source": "DT40 notes: REQUIRES 2601",
+    "match_markers": ["INTEGRATION KIT", "POWER BRUSH", "CYGNUS"],
     "exclude_skus": ["7851-PHOTON"],
     "exclude_markers": ["PHOTON"],
-    "notes": "MAG + Cygnus requires a MAG-side Cygnus Integration Kit. 7851-PHOTON is a different part and does not satisfy this. Formal MAG SKU is not yet human-verified."
+    "notes": "DT40 VAC & MAG lists 2604 as INTEGRATION KIT, POWER BRUSH CYGNUS GAUGE and notes REQUIRES 2601. This is a manufacturer price-book dependency, not a fabricated technical answer. 7851-PHOTON is a different part."
+  },
+  {
+    "configuration_id": "IHI_QUOTE_001-MAG-2601",
+    "product": "MAG",
+    "required_sku": "2601",
+    "required_description": "KIT, POWER BRUSH BASE",
+    "requirement_source": "MANUFACTURER_PRICE_BOOK",
+    "requirement_reference": "DT40 / VAC & MAG",
+    "human_verified": true,
+    "match_markers": ["POWER BRUSH BASE"],
+    "exclude_skus": ["2604", "7851-PHOTON"],
+    "exclude_markers": ["INTEGRATION", "PHOTON"],
+    "notes": "Required because DT40 notes on 2604 say REQUIRES 2601. 9701-MAG-4K package notes do not list 2601. Historical MAG 8194 has no independent 2601 sales line. Do not treat 360,000 JPY as including 2601."
   }
 ]

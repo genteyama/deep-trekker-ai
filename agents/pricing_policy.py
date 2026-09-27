@@ -193,15 +193,32 @@ def compare_ihi_historical_prices(
         sheet = _sheet_for_configuration(line.get("quote"))
         candidate = by_sheet_sku.get((sheet, sku))
         historical = line.get("historical_price_jpy")
-        if candidate is None or candidate.raw_sales_price_jpy is None or historical is None:
+        if historical is None:
             results.append(
                 HistoricalPriceComparison(
                     sku=sku,
                     item_name=line.get("customer_line_description"),
                     quote_number=line.get("quote_number"),
                     configuration_name=line.get("quote"),
+                    comparison_status=HistoricalComparisonStatus.MISSING_IN_HISTORICAL_QUOTE,
+                    notes=(
+                        "DT40 dependency is recorded. Historical Customer Quote has no independent sales line. "
+                        "This is an audit, not a verdict that the past quote is wrong. "
+                        "360,000 JPY is not treated as including this SKU."
+                    ),
+                )
+            )
+            continue
+        if candidate is None or candidate.raw_sales_price_jpy is None:
+            results.append(
+                HistoricalPriceComparison(
+                    sku=sku,
+                    item_name=line.get("customer_line_description"),
+                    quote_number=line.get("quote_number"),
+                    configuration_name=line.get("quote"),
+                    historical_quote_price_jpy=float(historical),
                     comparison_status=HistoricalComparisonStatus.NOT_COMPARABLE,
-                    notes="Sales Price Candidate is not available for this historical line.",
+                    notes="Sales Price Candidate is not available for this historical line. Historical price is kept for mapping only.",
                 )
             )
             continue

@@ -92,8 +92,8 @@
     },
     {
       "code": "MISSING_COMPONENT",
-      "message": "MAG + Cygnus 構成に必要な MAG 側 Cygnus Integration Kit が Supplier Quote に入っていない。",
-      "details": "7851-PHOTON is the PHOTON kit and is a different part. Do not add a guessed MAG kit SKU to this Supplier Quote."
+      "message": "MAG + Cygnus 構成について、DT40 記載の 2604 と dependency 2601 が Supplier Quote に入っていない。",
+      "details": "DT40 VAC & MAG lists 2604 INTEGRATION KIT, POWER BRUSH CYGNUS GAUGE (REQUIRES 2601) and 2601 KIT, POWER BRUSH BASE. 7851-PHOTON is a different part. Do not add these SKUs to this Supplier Quote."
     },
     {
       "code": "SHIPPING_REQUIRES_CONFIGURATION_REVIEW",
