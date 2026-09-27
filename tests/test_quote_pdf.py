@@ -12,7 +12,7 @@ from agents.quote_export import (
     scan_customer_pdf_leaks,
     unique_output_path,
 )
-from agents.quote_pdf import extract_pdf_text, pdf_page_info, render_formal_quote_pdf
+from agents.quote_pdf import extract_pdf_text, pdf_page_info, render_formal_quote_pdf, resolve_pdf_fonts
 from models import ExportFileType, ExportPurpose, QuoteDraftStatus
 from repositories.sqlite_quote_repository import SqliteQuoteRepository
 from tests.test_quote_approval import _approve, _ready_photon
@@ -176,6 +176,19 @@ def test_pdf_module_does_not_touch_pricing_or_landed_cost():
     lowered = source.lower()
     for item in forbidden:
         assert item.lower() not in lowered
+
+
+def test_pdf_font_falls_back_to_cid_when_path_is_unset_or_invalid(monkeypatch, tmp_path):
+    monkeypatch.delenv("SPACEONE_PDF_FONT_PATH", raising=False)
+    regular, bold, source = resolve_pdf_fonts()
+    assert source == "cid"
+    assert regular == "HeiseiKakuGo-W5"
+    assert bold == "HeiseiKakuGo-W5"
+
+    monkeypatch.setenv("SPACEONE_PDF_FONT_PATH", str(tmp_path / "missing.ttf"))
+    regular, bold, source = resolve_pdf_fonts()
+    assert source == "cid"
+    assert regular == "HeiseiKakuGo-W5"
 
 
 def test_unique_pdf_path_helper_does_not_overwrite(tmp_path):

@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import Optional
+import os
 import struct
 
 from reportlab.lib import colors
@@ -9,6 +10,7 @@ from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.cidfonts import UnicodeCIDFont
+from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import (
     Image,
     KeepTogether,
@@ -23,16 +25,29 @@ from agents.formal_quote_document import format_document_amount, format_document
 from models import FormalQuoteDocument
 
 JAPANESE_FONT = "HeiseiKakuGo-W5"
+EMBEDDED_FONT = "SpaceOneEmbeddedJP"
+EMBEDDED_FONT_BOLD = "SpaceOneEmbeddedJP-Bold"
+FONT_PATH_ENV = "SPACEONE_PDF_FONT_PATH"
+FONT_BOLD_PATH_ENV = "SPACEONE_PDF_FONT_BOLD_PATH"
 MIN_FONT_SIZE = 8
 SPACEONE_LOGO = Path(__file__).resolve().parents[1] / "assets" / "branding" / "spaceone_logo.png"
 SPACEONE_SEAL = Path(__file__).resolve().parents[1] / "assets" / "branding" / "spaceone_seal.png"
 
 
+def resolve_pdf_fonts() -> tuple[str, str, str]:
+    configured = (os.getenv(FONT_PATH_ENV) or "").strip()
+    bold_configured = (os.getenv(FONT_BOLD_PATH_ENV) or "").strip()
+    if configured:
+        try:
+            return _register_embedded_font(Path(configured), Path(bold_configured) if bold_configured else None)
+        except (OSError, ValueError, KeyError, RuntimeError):
+            pass
+    return _register_cid_font()
+
+
 def register_japanese_font() -> str:
-    names = set(pdfmetrics.getRegisteredFontNames())
-    if JAPANESE_FONT not in names:
-        pdfmetrics.registerFont(UnicodeCIDFont(JAPANESE_FONT))
-    return JAPANESE_FONT
+    regular, _bold, _source = resolve_pdf_fonts()
+    return regular
 
 
 def render_formal_quote_pdf(
@@ -42,10 +57,10 @@ def render_formal_quote_pdf(
     logo_path: Optional[Path] = None,
     seal_path: Optional[Path] = None,
 ) -> Path:
-    font = register_japanese_font()
+    regular, bold, _source = resolve_pdf_fonts()
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    styles = _styles(font)
+    styles = _styles(regular, bold)
     story = []
     story.append(_header_table(document, styles, logo_path if logo_path is not None else SPACEONE_LOGO))
     story.append(Spacer(1, 8))
@@ -112,19 +127,24 @@ def escape_pdf_text(value: Optional[str]) -> str:
     )
 
 
-def _styles(font: str) -> dict:
+def _styles(regular: str, bold: str) -> dict:
     return {
-        "title": ParagraphStyle("title", fontName=font, fontSize=18, leading=22, alignment=TA_CENTER, textColor=colors.HexColor("#123A56")),
-        "label": ParagraphStyle("label", fontName=font, fontSize=9, leading=12, textColor=colors.HexColor("#4A5B67")),
-        "body": ParagraphStyle("body", fontName=font, fontSize=10, leading=14, textColor=colors.HexColor("#1A2330")),
-        "small": ParagraphStyle("small", fontName=font, fontSize=9, leading=12, textColor=colors.HexColor("#1A2330")),
-        "item": ParagraphStyle("item", fontName=font, fontSize=9, leading=12, alignment=TA_LEFT, textColor=colors.HexColor("#1A2330")),
-        "qty": ParagraphStyle("qty", fontName=font, fontSize=9, leading=12, alignment=TA_CENTER, textColor=colors.HexColor("#1A2330")),
-        "money": ParagraphStyle("money", fontName=font, fontSize=9, leading=12, alignment=TA_RIGHT, textColor=colors.HexColor("#1A2330")),
-        "amount": ParagraphStyle("amount", fontName=font, fontSize=13, leading=18, alignment=TA_LEFT, textColor=colors.HexColor("#123A56")),
-        "section": ParagraphStyle("section", fontName=font, fontSize=11, leading=14, textColor=colors.HexColor("#123A56")),
-        "remark": ParagraphStyle("remark", fontName=font, fontSize=9, leading=13, alignment=TA_LEFT, textColor=colors.HexColor("#1A2330")),
-        "right": ParagraphStyle("right", fontName=font, fontSize=9, leading=12, alignment=TA_RIGHT, textColor=colors.HexColor("#1A2330")),
+        "title": ParagraphStyle("title", fontName=bold, fontSize=18, leading=22, alignment=TA_CENTER, textColor=colors.HexColor("#123A56")),
+        "label": ParagraphStyle("label", fontName=regular, fontSize=9, leading=12, textColor=colors.HexColor("#4A5B67")),
+        "body": ParagraphStyle("body", fontName=regular, fontSize=10, leading=14, textColor=colors.HexColor("#1A2330")),
+        "small": ParagraphStyle("small", fontName=regular, fontSize=9, leading=12, textColor=colors.HexColor("#1A2330")),
+        "item": ParagraphStyle("item", fontName=regular, fontSize=9, leading=12, alignment=TA_LEFT, textColor=colors.HexColor("#1A2330")),
+        "item_name": ParagraphStyle("item_name", fontName=bold, fontSize=9, leading=12, alignment=TA_LEFT, textColor=colors.HexColor("#123A56")),
+        "qty": ParagraphStyle("qty", fontName=regular, fontSize=9, leading=12, alignment=TA_CENTER, textColor=colors.HexColor("#1A2330")),
+        "money": ParagraphStyle("money", fontName=regular, fontSize=9, leading=12, alignment=TA_RIGHT, textColor=colors.HexColor("#1A2330")),
+        "amount": ParagraphStyle("amount", fontName=bold, fontSize=13, leading=18, alignment=TA_LEFT, textColor=colors.HexColor("#123A56")),
+        "section": ParagraphStyle("section", fontName=bold, fontSize=11, leading=14, textColor=colors.HexColor("#123A56")),
+        "total_label": ParagraphStyle("total_label", fontName=bold, fontSize=11, leading=14, textColor=colors.HexColor("#123A56")),
+        "total_money": ParagraphStyle("total_money", fontName=bold, fontSize=11, leading=14, alignment=TA_RIGHT, textColor=colors.HexColor("#123A56")),
+        "remark": ParagraphStyle("remark", fontName=regular, fontSize=9, leading=13, alignment=TA_LEFT, textColor=colors.HexColor("#1A2330")),
+        "right": ParagraphStyle("right", fontName=regular, fontSize=9, leading=12, alignment=TA_RIGHT, textColor=colors.HexColor("#1A2330")),
+        "font_regular": regular,
+        "font_bold": bold,
     }
 
 
@@ -215,12 +235,9 @@ def _lines_table(document: FormalQuoteDocument, styles: dict) -> Table:
         Paragraph("金額", styles["label"]),
     ]]
     for line in document.customer_lines:
-        name = escape_pdf_text(line.item_name or "")
-        detail = escape_pdf_text(line.customer_description or "")
-        item = name if not detail else f"{name}<br/>{detail}"
         data.append(
             [
-                Paragraph(item, styles["item"]),
+                _item_name_cell(line, styles),
                 Paragraph(str(line.quantity), styles["qty"]),
                 Paragraph(format_document_amount(line.unit_price), styles["money"]),
                 Paragraph(format_document_amount(line.amount), styles["money"]),
@@ -230,7 +247,7 @@ def _lines_table(document: FormalQuoteDocument, styles: dict) -> Table:
     table.setStyle(
         TableStyle(
             [
-                ("FONTNAME", (0, 0), (-1, -1), JAPANESE_FONT),
+                ("FONTNAME", (0, 0), (-1, -1), styles["font_regular"]),
                 ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F3F6F8")),
                 ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#123A56")),
                 ("VALIGN", (0, 0), (-1, -1), "TOP"),
@@ -248,18 +265,65 @@ def _lines_table(document: FormalQuoteDocument, styles: dict) -> Table:
     return table
 
 
+def _item_name_cell(line, styles: dict) -> Paragraph:
+    name = escape_pdf_text(line.item_name or "")
+    detail = escape_pdf_text(line.customer_description or "")
+    bold = styles["font_bold"]
+    if name and detail:
+        return Paragraph(f'<font name="{bold}"><b>{name}</b></font><br/>{detail}', styles["item"])
+    if name:
+        return Paragraph(f'<font name="{bold}"><b>{name}</b></font>', styles["item"])
+    return Paragraph(detail, styles["item"])
+
+
+def _register_cid_font() -> tuple[str, str, str]:
+    names = set(pdfmetrics.getRegisteredFontNames())
+    if JAPANESE_FONT not in names:
+        pdfmetrics.registerFont(UnicodeCIDFont(JAPANESE_FONT))
+    pdfmetrics.registerFontFamily(
+        JAPANESE_FONT,
+        normal=JAPANESE_FONT,
+        bold=JAPANESE_FONT,
+        italic=JAPANESE_FONT,
+        boldItalic=JAPANESE_FONT,
+    )
+    return JAPANESE_FONT, JAPANESE_FONT, "cid"
+
+
+def _register_embedded_font(path: Path, bold_path: Optional[Path]) -> tuple[str, str, str]:
+    if not path.is_file():
+        raise ValueError("configured PDF font path does not exist")
+    names = set(pdfmetrics.getRegisteredFontNames())
+    if EMBEDDED_FONT not in names:
+        pdfmetrics.registerFont(TTFont(EMBEDDED_FONT, str(path), subfontIndex=0))
+    bold_name = EMBEDDED_FONT
+    if bold_path is not None and bold_path.is_file():
+        if EMBEDDED_FONT_BOLD not in names:
+            pdfmetrics.registerFont(TTFont(EMBEDDED_FONT_BOLD, str(bold_path), subfontIndex=0))
+        bold_name = EMBEDDED_FONT_BOLD
+    pdfmetrics.registerFontFamily(
+        EMBEDDED_FONT,
+        normal=EMBEDDED_FONT,
+        bold=bold_name,
+        italic=EMBEDDED_FONT,
+        boldItalic=bold_name,
+    )
+    return EMBEDDED_FONT, bold_name, "embedded"
+
+
 def _totals_table(document: FormalQuoteDocument, styles: dict) -> Table:
     rows = [
         [Paragraph("小計", styles["label"]), Paragraph(format_document_amount(document.subtotal), styles["money"])],
         [Paragraph("消費税", styles["label"]), Paragraph(format_document_amount(document.tax_amount), styles["money"])],
-        [Paragraph("合計", styles["section"]), Paragraph(format_document_amount(document.total), styles["money"])],
+        [Paragraph("合計", styles["total_label"]), Paragraph(format_document_amount(document.total), styles["total_money"])],
     ]
     table = Table(rows, colWidths=[395, 80])
     table.setStyle(
         TableStyle(
             [
                 ("ALIGN", (1, 0), (1, -1), "RIGHT"),
-                ("LINEABOVE", (0, 0), (-1, 0), 0.5, colors.HexColor("#123A56")),
+                ("LINEABOVE", (0, 0), (-1, 0), 1.25, colors.HexColor("#123A56")),
+                ("LINEABOVE", (0, 2), (-1, 2), 0.7, colors.HexColor("#123A56")),
                 ("TOPPADDING", (0, 0), (-1, -1), 3),
                 ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
                 ("LEFTPADDING", (0, 0), (-1, -1), 4),
