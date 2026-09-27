@@ -1,16 +1,20 @@
 {
   "app_title": "Deep Trekker Operations Support AI",
   "app_description": "Supports sales, technical, and quoting work for Deep Trekker / PipeTrekker.",
-  "menu_label": "Menu",
+  "hero_english": "Sales, Technical & Quote Management",
+  "menu_label": "Work menu",
+  "open_label": "Open",
   "coming_soon": "Coming soon",
   "back_to_home": "Back to home",
   "agents": {
     "technical_case": {
       "name": "Sales & Technical Intake AI",
+      "english": "Technical Support",
       "description": "Supports technical inquiries, requirement gathering, and manufacturer confirmation"
     },
     "quote_control": {
       "name": "Quote & Price Control Agent",
+      "english": "Quote & Price Control",
       "description": "Supports price checks, configuration review, and quote estimates"
     }
   },
@@ -430,7 +434,37 @@
         "metric_final": "Final sales",
         "metric_profit": "Gross profit",
         "metric_margin": "Gross margin",
-        "no_current_step_detail": "This step is available after a quote draft is created."
+        "no_current_step_detail": "This step is available after a quote draft is created.",
+        "unset_label": "Not set",
+        "warning_title": "Items need review",
+        "warning_details": "Warning details",
+        "warning_kinds": {
+          "final_price": "Final sales price not set: {count}",
+          "shipping": "Customer shipping price not set",
+          "tax": "Tax rate not set",
+          "margin": "Gross margin is pending because the draft is incomplete",
+          "presentation": "Customer presentation undecided: {count}",
+          "required": "Required component unresolved: {count}",
+          "landed": "Landed cost not set: {count}",
+          "snapshot": "Manufacturer snapshot missing: {count}",
+          "other": "Other review items: {count}"
+        },
+        "save_draft_button": "Save draft",
+        "saved_label": "Saved",
+        "saving_label": "Saving...",
+        "save_failed": "Draft save failed",
+        "recent_drafts_label": "Recent drafts",
+        "no_recent_drafts": "No saved drafts yet.",
+        "new_quote_label": "Create a new quote",
+        "resume_draft_button": "Resume work",
+        "resume_failed": "The draft could not be opened.",
+        "updated_at_label": "Updated",
+        "status_prefix": "Status: ",
+        "column_status": "Status",
+        "status_review": "Needs review",
+        "status_complete": "Complete",
+        "status_approved": "Approved",
+        "check_item_label": "Check item"
       },
       "ihi_pricing_comparison_label": "IHI pricing comparison",
       "ihi_pricing_comparison_hint": "IHI customer quotes are historical output, not a pricing policy source.",

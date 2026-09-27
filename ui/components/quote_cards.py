@@ -23,7 +23,9 @@ def render_configuration_card(page: dict, line) -> None:
             f"{presentation_labels.get(line.customer_presentation_status.value, line.customer_presentation_status.value)}"
         )
         if line.warnings:
-            st.warning("\n".join(line.warnings))
+            with st.expander(workspace.get("warning_details", "警告の詳細"), expanded=False):
+                for item in line.warnings:
+                    st.caption(item)
         with st.expander(workspace["see_details"], expanded=False):
             st.write(
                 f"{page['column_requirement']}："

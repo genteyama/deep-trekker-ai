@@ -19,6 +19,11 @@ outputs/*
 # Streamlit
 .streamlit/secrets.toml
 
+# Local runtime database
+runtime/*.sqlite3
+runtime/*.sqlite3-*
+*.sqlite3
+
 # OS / editor
 .DS_Store
 .idea/

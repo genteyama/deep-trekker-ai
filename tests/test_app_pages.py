@@ -345,3 +345,71 @@ def test_quote_workspace_shows_only_selected_step_and_keeps_draft():
     assert snapshot.total_jpy == 7876000
     assert abs(snapshot.gross_margin_rate - 0.29598) < 0.00001
     assert at.session_state["approved_quote_snapshot"].approved_quote_snapshot_id == snapshot.approved_quote_snapshot_id
+
+
+def test_saved_draft_can_be_resumed_after_session_is_cleared():
+    from datetime import date
+
+    from agents.quote_approval import apply_ihi_photon_human_final_fixture
+    from agents.quote_dates import date_widget_keys
+    from repositories.sqlite_quote_repository import SqliteQuoteRepository
+    from tests.test_quote_builder import _photon_draft
+
+    draft = _photon_draft()
+    apply_ihi_photon_human_final_fixture(draft)
+    repo = SqliteQuoteRepository()
+    repo.save_draft(
+        draft,
+        {
+            "step": 4,
+            "confirm_configuration": True,
+            "confirm_presentation": True,
+            "confirm_sales_price": True,
+            "confirm_remarks": False,
+            "selected_remarks": list(draft.remarks),
+            "auto_valid_until": False,
+        },
+    )
+
+    at = _start_app()
+    at.button(key="open_quote_control").click().run()
+    resume = next((button for button in at.button if button.label == "作業を再開"), None)
+    assert resume is not None
+    resume.click().run()
+
+    keys = date_widget_keys(draft.quote_draft_id)
+    assert not at.exception
+    assert at.session_state["quote_draft"].total_jpy == 7876000
+    assert at.session_state["quote_draft"].issue_date == "2026-09-26"
+    assert at.session_state["quote_draft"].valid_until == "2026-10-31"
+    assert at.session_state["quote_workspace_step"] == 4
+    assert at.session_state["confirm_configuration"] is True
+    assert at.session_state[keys["issue"]] == date(2026, 9, 26)
+    assert at.session_state[keys["valid"]] == date(2026, 10, 31)
+    assert any(getattr(item, "key", None) == "save_quote_draft" for item in at.button)
+
+
+def test_new_quote_buttons_remain_after_draft_is_created():
+    from tests.test_quote_builder import _photon_draft
+
+    at = _start_app()
+    at.button(key="open_quote_control").click().run()
+    at.session_state["quote_draft"] = _photon_draft()
+    at.session_state["quote_workspace_step"] = 1
+    at.run()
+
+    assert not at.exception
+    assert at.session_state["quote_draft"] is not None
+    assert any(button.label == "IHI PHOTON 見積ドラフト" for button in at.button)
+    assert any(button.label == "IHI MAG 見積ドラフト" for button in at.button)
+    assert any(expander.label == "新しい見積を作成" for expander in at.expander)
+    assert any(getattr(item, "key", None) == "save_quote_draft" for item in at.button)
+
+
+def test_brand_logos_are_local_assets():
+    from ui.theme import BRAND_LOGOS, DEEPTREKKER_LOGO, PIPETREKKER_LOGO, SPACEONE_LOGO
+
+    assert DEEPTREKKER_LOGO.exists()
+    assert PIPETREKKER_LOGO.exists()
+    assert SPACEONE_LOGO.exists()
+    assert all(path.exists() and path.suffix == ".png" for path, _alt in BRAND_LOGOS)

@@ -1,16 +1,20 @@
 {
   "app_title": "Deep Trekker 業務支援AI",
   "app_description": "Deep Trekker / PipeTrekkerの営業・技術・見積業務を支援します。",
-  "menu_label": "メニュー",
+  "hero_english": "Sales, Technical & Quote Management",
+  "menu_label": "業務メニュー",
+  "open_label": "開く",
   "coming_soon": "準備中",
   "back_to_home": "トップへ戻る",
   "agents": {
     "technical_case": {
       "name": "営業・技術受付AI",
+      "english": "Technical Support",
       "description": "技術相談、要件整理、メーカー確認を支援"
     },
     "quote_control": {
       "name": "見積・価格管理AI",
+      "english": "Quote & Price Control",
       "description": "価格確認、構成チェック、見積試算を支援"
     }
   },
@@ -430,7 +434,37 @@
         "metric_final": "最終売価",
         "metric_profit": "粗利額",
         "metric_margin": "粗利率",
-        "no_current_step_detail": "この工程の詳細は、見積ドラフト作成後に表示されます。"
+        "no_current_step_detail": "この工程の詳細は、見積ドラフト作成後に表示されます。",
+        "unset_label": "未設定",
+        "warning_title": "要確認があります",
+        "warning_details": "警告の詳細",
+        "warning_kinds": {
+          "final_price": "最終販売価格 未設定：{count}件",
+          "shipping": "顧客向けShipping価格 未設定",
+          "tax": "消費税率 未設定",
+          "margin": "見積未完成のため粗利率は未確定",
+          "presentation": "顧客向け表示 未決定：{count}件",
+          "required": "必須構成 未解決：{count}件",
+          "landed": "仕入原価 未設定：{count}件",
+          "snapshot": "メーカー価格Snapshot 未取得：{count}件",
+          "other": "その他の要確認：{count}件"
+        },
+        "save_draft_button": "下書き保存",
+        "saved_label": "保存済み",
+        "saving_label": "保存中...",
+        "save_failed": "⚠ 下書き保存に失敗しました",
+        "recent_drafts_label": "最近の下書き",
+        "no_recent_drafts": "保存済みの下書きはありません。",
+        "new_quote_label": "新しい見積を作成",
+        "resume_draft_button": "作業を再開",
+        "resume_failed": "下書きを開けませんでした。",
+        "updated_at_label": "最終更新",
+        "status_prefix": "状態：",
+        "column_status": "状態",
+        "status_review": "要確認",
+        "status_complete": "完了",
+        "status_approved": "承認済み",
+        "check_item_label": "確認項目"
       },
       "ihi_pricing_comparison_label": "IHI Pricing Comparison",
       "ihi_pricing_comparison_hint": "IHI Customer QuoteはHistorical Outputです。PolicyのSourceではありません。",

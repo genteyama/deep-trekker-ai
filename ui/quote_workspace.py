@@ -23,17 +23,30 @@ from agents.quote_builder import (
 from agents.quote_dates import date_widget_keys, format_quote_date
 from data.golden_cases.loader import IHI_QUOTE_001, load_quote_golden_case
 from models import CustomerPresentationMode, FinalPriceStatus, QuoteDraftStatus
+from repositories.quote_repository import QuoteRepositoryError
+from ui.components.portal import (
+    render_portal_section_title,
+    render_product_choice_card,
+    render_recent_draft_list,
+    resume_draft_into_session,
+)
 from ui.components.quote_action_bar import render_quote_action_bar
 from ui.components.quote_cards import (
     render_configuration_card,
-    render_customer_line_card,
     render_price_adjustment,
 )
 from ui.components.quote_header import render_quote_header
 from ui.components.quote_stepper import render_quote_stepper
-from ui.components.quote_summary import render_costing_summary
+from ui.components.quote_summary import render_costing_summary, render_summary_cards
 from ui.components.warning_panel import render_validation_warnings, render_warning_panel
 from ui.quote_format import display_number, display_percent, display_yen
+from ui.quote_persistence import (
+    SESSION_SAVE_ERROR,
+    SESSION_SAVE_STATUS,
+    get_quote_repository,
+    maybe_autosave,
+    save_draft_now,
+)
 from ui.quote_steps import (
     SESSION_QUOTE_STEP,
     customer_facing_preview,
@@ -64,34 +77,61 @@ def render_quote_workspace(page: dict, helpers: dict) -> None:
             _render_step_export(page, helpers, None, snapshot)
         elif current != 1:
             st.info(page["workspace"]["no_current_step_detail"])
-    elif current == 1:
-        _render_step_configuration(page, draft)
-    elif current == 2:
-        _render_step_costing(page, draft)
-    elif current == 3:
-        _render_step_customer(page, draft)
-    elif current == 4:
-        _render_step_review(page, helpers, draft, snapshot)
     else:
-        _render_step_export(page, helpers, draft, snapshot)
+        with st.expander(page["workspace"].get("new_quote_label", "新しい見積を作成"), expanded=False):
+            _render_new_quote_buttons(page, helpers)
+        if current == 1:
+            _render_step_configuration(page, draft)
+        elif current == 2:
+            _render_step_costing(page, draft)
+        elif current == 3:
+            _render_step_customer(page, draft)
+        elif current == 4:
+            _render_step_review(page, helpers, draft, snapshot)
+        else:
+            _render_step_export(page, helpers, draft, snapshot)
     st.divider()
-    next_step = render_quote_action_bar(page, current)
+    next_step, save_clicked = render_quote_action_bar(page, current, can_save=draft is not None)
+    if save_clicked and draft is not None:
+        _save_draft(page, draft, manual=True)
+    elif draft is not None:
+        _save_draft(page, draft, manual=False)
     if next_step != current:
         st.session_state[SESSION_QUOTE_STEP] = next_step
         st.rerun()
 
 
 def _render_draft_start(page: dict, helpers) -> None:
+    workspace = page["workspace"]
+    render_portal_section_title(workspace.get("recent_drafts_label", "最近の下書き"))
+    items = get_quote_repository().list_recent_drafts(limit=8)
+    render_recent_draft_list(
+        page,
+        items,
+        resume_key_prefix="resume_draft_",
+        on_resume=lambda draft_id, version: _resume_draft(page, helpers, draft_id, version),
+    )
+    st.markdown("<hr class='section-rule' />", unsafe_allow_html=True)
     st.subheader(page["section_quote_builder"])
+    st.caption(workspace.get("new_quote_label", "新しい見積を作成"))
+    _render_new_quote_buttons(page, helpers)
+    if st.session_state.get("quote_draft") is None and not items:
+        st.text(page["no_quote_draft"])
+
+
+def _render_new_quote_buttons(page: dict, helpers) -> None:
     st.write(page["section_quote_builder_description"])
     st.caption(page["quote_builder_hint"])
     case = load_quote_golden_case(IHI_QUOTE_001)
-    if st.button(page["ihi_photon_draft_button"], key="ihi_photon_draft"):
-        _create_draft(page, helpers, case, "PHOTON")
-    if st.button(page["ihi_mag_draft_button"], key="ihi_mag_draft"):
-        _create_draft(page, helpers, case, "MAG")
-    if st.session_state.get("quote_draft") is None:
-        st.text(page["no_quote_draft"])
+    left, right = st.columns(2)
+    with left:
+        render_product_choice_card("PHOTON", page["ihi_photon_draft_button"])
+        if st.button(page["ihi_photon_draft_button"], key="ihi_photon_draft"):
+            _create_draft(page, helpers, case, "PHOTON")
+    with right:
+        render_product_choice_card("MAG", page["ihi_mag_draft_button"])
+        if st.button(page["ihi_mag_draft_button"], key="ihi_mag_draft"):
+            _create_draft(page, helpers, case, "MAG")
 
 
 def _create_draft(page: dict, helpers, case: dict, configuration: str) -> None:
@@ -100,12 +140,31 @@ def _create_draft(page: dict, helpers, case: dict, configuration: str) -> None:
     if draft is not None:
         helpers["init_date_widgets"](draft, overwrite=True)
         st.session_state[SESSION_QUOTE_STEP] = 1
+        _save_draft(page, draft, manual=True)
         st.rerun()
 
 
 def _render_step_configuration(page: dict, draft) -> None:
-    st.subheader(page["workspace"]["step_configuration"])
+    workspace = page["workspace"]
+    st.subheader(workspace["step_configuration"])
     render_warning_panel(page, draft)
+    empty = workspace.get("unset_label", "未設定")
+    presentation_labels = page["presentation_modes"]
+    st.table(
+        [
+            {
+                page["column_sku"]: line.manufacturer_sku or empty,
+                page["column_name_ja"]: line.manufacturer_description or empty,
+                page["column_qty"]: line.quantity,
+                page["column_presentation"]: presentation_labels.get(
+                    line.customer_presentation_status.value,
+                    line.customer_presentation_status.value,
+                ),
+                workspace.get("column_status", "状態"): _line_status_label(workspace, line),
+            }
+            for line in draft.configuration_lines
+        ]
+    )
     for line in draft.configuration_lines:
         render_configuration_card(page, line)
     _render_2601_choice(page, draft)
@@ -141,7 +200,7 @@ def _render_step_costing(page: dict, draft) -> None:
     st.subheader(page["workspace"]["step_costing"])
     render_warning_panel(page, draft)
     render_costing_summary(page, draft)
-    empty = page["no_value"]
+    empty = page["workspace"].get("unset_label", "未設定")
     st.table(
         [
             {
@@ -211,13 +270,29 @@ def _render_step_costing(page: dict, draft) -> None:
 
 def _render_step_customer(page: dict, draft) -> None:
     st.subheader(page["workspace"]["step_customer"])
+    empty = page["workspace"].get("unset_label", "未設定")
     rows = customer_facing_preview(draft)
-    for row in rows:
-        render_customer_line_card(page, row)
-    st.divider()
-    st.write(f"{page['golden_subtotal']}：{display_yen(draft.subtotal_ex_tax_jpy, page['no_value'])}")
-    st.write(f"{page['column_import_tax']}：{display_yen(draft.tax_jpy, page['no_value'])}")
-    st.write(f"{page['golden_total']}：{display_yen(draft.total_jpy, page['no_value'])}")
+    st.table(
+        [
+            {
+                page["column_item"]: row.get("display_name") or empty,
+                page["column_item_detail"]: row.get("description") or empty,
+                page["column_qty"]: row.get("quantity") or 1,
+                page["column_unit_price"]: display_yen(row.get("unit_price_jpy"), empty),
+                page["column_amount"]: display_yen(row.get("amount_jpy"), empty),
+            }
+            for row in rows
+        ]
+    )
+    st.markdown("<hr class='section-rule' />", unsafe_allow_html=True)
+    render_summary_cards(
+        [
+            (page["golden_subtotal"], display_yen(draft.subtotal_ex_tax_jpy, None)),
+            (page["column_import_tax"], display_yen(draft.tax_jpy, None)),
+            (page["golden_total"], display_yen(draft.total_jpy, None)),
+        ],
+        unset_label=empty,
+    )
     tax_text = st.text_input(page["tax_rate_label"], key="input_draft_tax_rate")
     if tax_text and st.button(page["apply_manual_price_button"], key="apply_draft_tax"):
         try:
@@ -248,6 +323,15 @@ def _render_step_review(page: dict, helpers, draft, snapshot) -> None:
     confirm_sales_price = st.checkbox(page["confirm_sales_price"], key="confirm_sales_price")
     confirm_remarks = st.checkbox(page["confirm_remarks"], key="confirm_remarks")
     save_review_widget_state(st.session_state)
+    _render_confirmation_table(
+        page,
+        {
+            page["confirm_configuration"]: confirm_configuration,
+            page["confirm_presentation"]: confirm_presentation,
+            page["confirm_sales_price"]: confirm_sales_price,
+            page["confirm_remarks"]: confirm_remarks,
+        },
+    )
     if draft.configuration_name == "PHOTON" and draft.status != QuoteDraftStatus.APPROVED:
         if st.button(page["photon_human_final_button"], key="photon_human_final"):
             try:
@@ -302,14 +386,22 @@ def _render_step_review(page: dict, helpers, draft, snapshot) -> None:
             st.session_state["approved_quote_snapshot"] = snapshot
             st.session_state["quote_outputs"] = generate_quote_outputs(snapshot)
             st.session_state[SESSION_QUOTE_STEP] = 5
+            try:
+                get_quote_repository().save_snapshot(snapshot)
+                _save_draft(page, draft, manual=True)
+            except QuoteRepositoryError as error:
+                st.session_state[SESSION_SAVE_ERROR] = str(error)
+                st.error(page["workspace"].get("save_failed", str(error)))
             st.rerun()
         except (QuoteApprovalError, ValueError) as error:
             st.error(str(error))
     if snapshot is not None and st.button(page["create_revision_button"], key="create_quote_revision"):
         revision = create_revision_draft(snapshot, store=store)
+        helpers["init_date_widgets"](revision, overwrite=True)
         st.session_state["quote_draft"] = revision
         st.session_state["quote_approval_validation"] = None
         st.session_state[SESSION_QUOTE_STEP] = 1
+        _save_draft(page, revision, manual=True)
         st.rerun()
 
 
@@ -439,3 +531,49 @@ def render_quote_debug_details(page: dict) -> None:
         st.write(f"{page['quote_number_candidate_label']}: {snapshot.quote_number_candidate or page['no_value']}")
         for item in snapshot.source_references:
             st.caption(item)
+
+
+def _save_draft(page: dict, draft, *, manual: bool) -> None:
+    workspace = page["workspace"]
+    st.session_state[SESSION_SAVE_STATUS] = "saving"
+    try:
+        if manual:
+            save_draft_now(get_quote_repository(), draft, st.session_state)
+        else:
+            maybe_autosave(get_quote_repository(), draft, st.session_state)
+    except QuoteRepositoryError as error:
+        st.session_state[SESSION_SAVE_ERROR] = str(error)
+        st.error(workspace.get("save_failed", str(error)))
+
+
+def _resume_draft(page: dict, helpers, quote_draft_id: str, version: int) -> None:
+    if resume_draft_into_session(
+        quote_draft_id,
+        version,
+        init_dates=helpers["init_date_widgets"],
+    ):
+        st.rerun()
+    st.error(page["workspace"].get("resume_failed", "下書きを開けませんでした。"))
+
+
+def _line_status_label(workspace: dict, line) -> str:
+    if line.customer_presentation_status.value == "UNDECIDED" or line.final_sales_price_jpy is None:
+        return workspace.get("unset_label", "未設定")
+    if line.warnings:
+        return workspace.get("status_review", "要確認")
+    return workspace.get("status_complete", "完了")
+
+
+def _render_confirmation_table(page: dict, checks: dict) -> None:
+    workspace = page["workspace"]
+    st.table(
+        [
+            {
+                workspace.get("check_item_label", "確認項目"): label,
+                workspace.get("column_status", "状態"): (
+                    workspace.get("check_ok", "OK") if checked else workspace.get("check_pending", "未確認")
+                ),
+            }
+            for label, checked in checks.items()
+        ]
+    )

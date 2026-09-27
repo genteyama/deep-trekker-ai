@@ -32,6 +32,8 @@ def save_review_widget_state(session) -> None:
     for key in REVIEW_WIDGET_KEYS:
         if key in session:
             session[persist_review_key(key)] = session[key]
+
+
 QUOTE_STEP_IDS = (1, 2, 3, 4, 5)
 STEP_KEYS = {
     1: "configuration",

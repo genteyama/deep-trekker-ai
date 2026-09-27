@@ -9,6 +9,7 @@ from ui.home import render_home
 from ui.navigation import PAGE_QUOTE_CONTROL, PAGE_TECHNICAL_CASE, get_current_page, init_navigation
 from ui.quote_control import render_quote_control
 from ui.technical_case import render_technical_case
+from ui.theme import apply_light_theme, render_brand_header
 
 load_dotenv()
 
@@ -31,8 +32,10 @@ def main() -> None:
 
     st.set_page_config(
         page_title=texts["app_title"],
-        layout="centered",
+        layout="wide",
     )
+    apply_light_theme()
+    render_brand_header()
     init_navigation()
 
     current_page = get_current_page()
