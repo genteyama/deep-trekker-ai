@@ -5,8 +5,12 @@ import json
 
 from agents.quote_builder import (
     apply_final_price,
+    apply_issue_date,
+    apply_issuer_snapshot,
+    apply_selected_remarks,
     apply_shipping_final_price,
     apply_tax_rate,
+    apply_valid_until,
     inspect_quote_economics,
 )
 from models import (
@@ -15,6 +19,8 @@ from models import (
     FinalPriceStatus,
     InternalQuoteTransferPayload,
     InternalQuoteTransferRow,
+    InternalShippingEconomicsRow,
+    IssuerSnapshot,
     MoneyForwardQuotePayload,
     MoneyForwardQuoteRow,
     QuoteApproval,
@@ -133,12 +139,25 @@ def apply_human_final_price_inputs(
 
 def apply_ihi_photon_human_final_fixture(draft: QuoteDraft) -> QuoteDraft:
     fixture = load_photon_human_final_input()
-    return apply_human_final_price_inputs(
+    apply_human_final_price_inputs(
         draft,
         line_prices_jpy=fixture["line_prices_jpy"],
         shipping_price_jpy=fixture["shipping_price_jpy"],
         tax_rate=fixture["tax_rate"],
     )
+    for line in draft.configuration_lines:
+        candidate = (fixture.get("standard_sales_candidates_jpy") or {}).get(line.manufacturer_sku or "")
+        if candidate is not None and line.standard_sales_price_candidate_jpy is None:
+            line.standard_sales_price_candidate_jpy = candidate
+    if fixture.get("issue_date"):
+        apply_issue_date(draft, fixture["issue_date"])
+    if fixture.get("valid_until"):
+        apply_valid_until(draft, fixture["valid_until"])
+    if fixture.get("issuer"):
+        apply_issuer_snapshot(draft, IssuerSnapshot.model_validate(fixture["issuer"]))
+    if fixture.get("remarks"):
+        apply_selected_remarks(draft, fixture["remarks"])
+    return draft
 
 
 def classify_warning(message: str) -> QuoteWarningSeverity:
@@ -327,7 +346,11 @@ def create_revision_draft(
         remarks=[item.text for item in snapshot.remarks if item.selected],
         remark_candidates=[item.model_copy(deep=True) for item in snapshot.remarks],
         lead_time_text=snapshot.lead_time_text,
+        issue_date=snapshot.issue_date,
         valid_until=snapshot.valid_until,
+        issuer_snapshot=(
+            snapshot.issuer_snapshot.model_copy(deep=True) if snapshot.issuer_snapshot else None
+        ),
         source_references=list(snapshot.source_references) + [f"Revised from {snapshot.approved_quote_snapshot_id}"],
     )
     refresh_quote_draft(draft)
@@ -369,6 +392,8 @@ def generate_quote_outputs(snapshot: ApprovedQuoteSnapshot) -> QuoteOutputBundle
 
 def build_internal_transfer_payload(snapshot: ApprovedQuoteSnapshot) -> InternalQuoteTransferPayload:
     rows = []
+    product_landed = 0.0
+    product_landed_complete = True
     for line in snapshot.configuration_snapshot:
         quantity = line.quantity or 1
         dealer_amount = None if line.dealer_price_usd is None else round(line.dealer_price_usd * quantity, 4)
@@ -379,6 +404,10 @@ def build_internal_transfer_payload(snapshot: ApprovedQuoteSnapshot) -> Internal
             gross_profit = round(sales_amount - line.landed_cost_jpy, 4)
             if sales_amount:
                 gross_margin = round(gross_profit / sales_amount, 6)
+        if line.landed_cost_jpy is None:
+            product_landed_complete = False
+        else:
+            product_landed += line.landed_cost_jpy
         rows.append(
             InternalQuoteTransferRow(
                 part_number=line.manufacturer_sku,
@@ -400,12 +429,76 @@ def build_internal_transfer_payload(snapshot: ApprovedQuoteSnapshot) -> Internal
                 requirement_type=line.requirement_type,
             )
         )
+    product_sales = 0.0
+    product_sales_complete = True
+    shipping_sales = None
+    for line in snapshot.customer_lines_snapshot:
+        if line.line_kind == "SHIPPING":
+            shipping_sales = line.amount_jpy
+            continue
+        if line.amount_jpy is None:
+            product_sales_complete = False
+            continue
+        product_sales += line.amount_jpy
+    shipping_cost = 0.0
+    shipping_cost_complete = True
+    shipping_rows = []
+    for line in snapshot.shipping_snapshot:
+        quantity = line.quantity or 1
+        usd_amount = None if line.rate_usd is None else round(line.rate_usd * quantity, 4)
+        shipping_rows.append(
+            InternalShippingEconomicsRow(
+                shipping_type=line.shipping_type.value if line.shipping_type else None,
+                quantity=quantity,
+                usd_rate=line.rate_usd,
+                usd_amount=usd_amount,
+                exchange_rate=line.exchange_rate,
+                cost_jpy=line.cost_jpy,
+                standard_sales_candidate_jpy=line.sales_price_candidate_jpy,
+                final_sales_price_jpy=None,
+                source_snapshot_id=snapshot.approved_quote_snapshot_id,
+                line_role="COMPONENT",
+            )
+        )
+        if line.cost_jpy is None:
+            shipping_cost_complete = False
+        else:
+            shipping_cost += line.cost_jpy
+    shipping_cost_total = round(shipping_cost, 4) if shipping_cost_complete else None
+    if snapshot.shipping_snapshot:
+        shipping_gp = None
+        shipping_gm = None
+        if shipping_sales is not None and shipping_cost_total is not None:
+            shipping_gp = round(shipping_sales - shipping_cost_total, 4)
+            if shipping_sales:
+                shipping_gm = round(shipping_gp / shipping_sales, 6)
+        shipping_rows.append(
+            InternalShippingEconomicsRow(
+                shipping_type="INTERNATIONAL_SHIPPING",
+                quantity=1,
+                usd_rate=None,
+                usd_amount=None,
+                exchange_rate=snapshot.exchange_rate,
+                cost_jpy=shipping_cost_total,
+                standard_sales_candidate_jpy=None,
+                final_sales_price_jpy=shipping_sales,
+                gross_profit_jpy=shipping_gp,
+                gross_margin_rate=shipping_gm,
+                source_snapshot_id=snapshot.approved_quote_snapshot_id,
+                line_role="AGGREGATE",
+            )
+        )
     return InternalQuoteTransferPayload(
         source_approved_quote_snapshot_id=snapshot.approved_quote_snapshot_id,
         rows=rows,
+        shipping_rows=shipping_rows,
+        product_sales_ex_tax_jpy=round(product_sales, 4) if product_sales_complete else None,
+        shipping_sales_ex_tax_jpy=shipping_sales,
         customer_subtotal_ex_tax_jpy=snapshot.subtotal_ex_tax_jpy,
         customer_tax_jpy=snapshot.tax_jpy,
         customer_total_jpy=snapshot.total_jpy,
+        product_landed_cost_jpy=round(product_landed, 4) if product_landed_complete else None,
+        shipping_cost_jpy=shipping_cost_total,
         total_landed_cost_jpy=snapshot.total_landed_cost_jpy,
         gross_profit_jpy=snapshot.gross_profit_jpy,
         gross_margin_rate=snapshot.gross_margin_rate,
@@ -420,12 +513,12 @@ def build_spaceone_quote_payload(snapshot: ApprovedQuoteSnapshot) -> SpaceOneQuo
         title=snapshot.title,
         quote_number_candidate=snapshot.quote_number_candidate,
         official_quote_number=snapshot.official_quote_number,
-        issue_date=snapshot.approved_at.date().isoformat(),
+        issue_date=snapshot.issue_date,
         valid_until=snapshot.valid_until,
         lines=[
             SpaceOneQuoteLine(
                 item_name=line.display_name,
-                item_detail=line.description,
+                item_detail=_customer_description(line.description),
                 unit_price_jpy=line.unit_price_jpy,
                 quantity=line.quantity,
                 amount_jpy=line.amount_jpy,
@@ -447,7 +540,7 @@ def build_moneyforward_payload(snapshot: ApprovedQuoteSnapshot) -> MoneyForwardQ
     rows = [
         MoneyForwardQuoteRow(
             item_name=line.display_name,
-            item_detail=line.description,
+            item_detail=_customer_description(line.description),
             unit_price_jpy=line.unit_price_jpy,
             quantity=line.quantity,
             amount_jpy=line.amount_jpy,
@@ -537,7 +630,11 @@ def _build_approved_snapshot(
         gross_margin_rate=economics.gross_margin_rate if economics else None,
         remarks=remarks,
         lead_time_text=draft.lead_time_text,
+        issue_date=draft.issue_date,
         valid_until=draft.valid_until,
+        issuer_snapshot=(
+            draft.issuer_snapshot.model_copy(deep=True) if draft.issuer_snapshot else None
+        ),
         quote_number_candidate=candidate,
         official_quote_number=None,
         source_references=list(draft.source_references) + ["ApprovedQuoteSnapshot"],
@@ -590,6 +687,13 @@ def _collect_keys(value: object) -> set[str]:
         for item in value:
             keys.update(_collect_keys(item))
     return keys
+
+
+def _customer_description(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    cleaned = value.strip()
+    return cleaned or None
 
 
 def _tsv_cell(value: Optional[str]) -> str:

@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Optional, Sequence
 import json
 
+from agents.quote_dates import default_issue_date, default_valid_until, to_iso_date
 from models import (
     CustomerPresentationMode,
     CustomerQuoteLineDraft,
@@ -17,6 +18,7 @@ from models import (
     QuoteEconomicsResult,
     QuotePriceSnapshot,
     QuoteRemark,
+    IssuerSnapshot,
     RemarkSource,
     RequirementType,
     SalesPriceCandidate,
@@ -129,6 +131,8 @@ def build_quote_draft(
         tax_rate=tax_rate,
         remarks=[],
         remark_candidates=_remark_candidates(presentation),
+        issue_date=default_issue_date().isoformat(),
+        valid_until=default_valid_until().isoformat(),
         created_at=captured,
         updated_at=captured,
         source_references=list(landed_scenario.source_references) + ["Quote Builder draft"],
@@ -295,9 +299,21 @@ def apply_lead_time_text(draft: QuoteDraft, text: Optional[str]) -> QuoteDraft:
     return draft
 
 
-def apply_valid_until(draft: QuoteDraft, value: Optional[str]) -> QuoteDraft:
+def apply_valid_until(draft: QuoteDraft, value) -> QuoteDraft:
     ensure_draft_editable(draft)
-    draft.valid_until = value
+    draft.valid_until = to_iso_date(value)
+    return draft
+
+
+def apply_issue_date(draft: QuoteDraft, value) -> QuoteDraft:
+    ensure_draft_editable(draft)
+    draft.issue_date = to_iso_date(value)
+    return draft
+
+
+def apply_issuer_snapshot(draft: QuoteDraft, issuer: IssuerSnapshot) -> QuoteDraft:
+    ensure_draft_editable(draft)
+    draft.issuer_snapshot = issuer.model_copy(deep=True)
     return draft
 
 

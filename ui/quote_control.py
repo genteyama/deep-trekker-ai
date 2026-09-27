@@ -24,9 +24,17 @@ from agents.quote_approval import (
     generate_quote_outputs,
     validate_for_approval,
 )
+from agents.quote_export import (
+    QuoteExportError,
+    export_internal_calc_excel,
+    export_moneyforward_csv,
+    export_moneyforward_tsv,
+    export_spaceone_quote_excel,
+)
 from agents.quote_builder import (
     apply_final_price,
     apply_historical_acceptance_preview,
+    apply_issue_date,
     apply_lead_time_text,
     apply_presentation_mode,
     apply_selected_remarks,
@@ -35,6 +43,13 @@ from agents.quote_builder import (
     apply_valid_until,
     build_ihi_quote_draft,
     customer_preview_rows,
+)
+from agents.quote_dates import (
+    add_one_calendar_month,
+    next_valid_until,
+    parse_quote_date,
+    tokyo_today,
+    valid_until_matches_auto_rule,
 )
 from agents.master_reconciliation import collect_manufacturer_candidates, reconcile_spaceone_master
 from agents.quote_control_agent import SkuMasterStore, diff_price_books, import_price_book
@@ -52,6 +67,7 @@ from data.golden_cases.loader import IHI_QUOTE_001, load_quote_golden_case
 from models import (
     CustomerPresentationMode,
     DomesticShippingMode,
+    ExportPurpose,
     FinalPriceStatus,
     InsuranceMode,
     QuoteDraftStatus,
@@ -1178,6 +1194,7 @@ def _render_quote_approval(page: dict) -> None:
     if draft is None:
         st.text(page["no_quote_draft"])
         if snapshot is None:
+            _render_file_export(page, None)
             return
     else:
         status_labels = page["draft_statuses"]
@@ -1201,7 +1218,7 @@ def _render_quote_approval(page: dict) -> None:
             key="input_selected_remarks",
         )
         lead_time = st.text_input(page["lead_time_label"], value=draft.lead_time_text or "", key="input_lead_time")
-        valid_until = st.text_input(page["valid_until_label"], value=draft.valid_until or "", key="input_valid_until")
+        issue_date, valid_until = _render_quote_date_inputs(page, draft)
         confirm_configuration = st.checkbox(page["confirm_configuration"], key="confirm_configuration")
         confirm_presentation = st.checkbox(page["confirm_presentation"], key="confirm_presentation")
         confirm_sales_price = st.checkbox(page["confirm_sales_price"], key="confirm_sales_price")
@@ -1210,6 +1227,7 @@ def _render_quote_approval(page: dict) -> None:
             if st.button(page["photon_human_final_button"], key="photon_human_final"):
                 try:
                     apply_ihi_photon_human_final_fixture(draft)
+                    _sync_date_widgets_from_draft(draft, auto=False)
                     st.session_state["quote_draft"] = draft
                     st.rerun()
                 except ValueError:
@@ -1218,6 +1236,7 @@ def _render_quote_approval(page: dict) -> None:
             try:
                 apply_selected_remarks(draft, selected_remarks)
                 apply_lead_time_text(draft, lead_time or None)
+                apply_issue_date(draft, issue_date or None)
                 apply_valid_until(draft, valid_until or None)
             except ValueError:
                 st.warning(page["approved_draft_locked"])
@@ -1246,6 +1265,7 @@ def _render_quote_approval(page: dict) -> None:
             try:
                 apply_selected_remarks(draft, selected_remarks)
                 apply_lead_time_text(draft, lead_time or None)
+                apply_issue_date(draft, issue_date or None)
                 apply_valid_until(draft, valid_until or None)
                 approval, snapshot = approve_quote(
                     draft,
@@ -1274,6 +1294,7 @@ def _render_quote_approval(page: dict) -> None:
     snapshot = st.session_state.get("approved_quote_snapshot")
     if snapshot is None:
         st.text(page["no_approved_snapshot"])
+        _render_file_export(page, None)
         return
     st.markdown(f"**{page['output_preview_label']}**")
     st.write(f"{page['quote_number_candidate_label']}: {snapshot.quote_number_candidate or page['no_value']}")
@@ -1335,12 +1356,98 @@ def _render_quote_approval(page: dict) -> None:
         )
         st.text_area(page["mf_tsv_label"], value=outputs.moneyforward.tsv_preview, height=180)
         st.write(f"{page['golden_total']}: {_display_number(outputs.moneyforward.total_jpy, page)}")
+    _render_file_export(page, snapshot)
+
+
+def _render_file_export(page: dict, snapshot) -> None:
+    st.markdown(f"**{page['section_file_export']}**")
+    st.write(page["section_file_export_description"])
+    st.caption(f"{page['export_development_label']} / {page['export_formal_label']}")
+    if snapshot is None:
+        st.text(page["export_requires_snapshot"])
+        return
+    official = st.text_input(page["official_quote_number_label"], key="input_official_quote_number")
+    st.caption(page["official_quote_number_caption"])
+    generated_by = st.text_input(page["generated_by_label"], value="弦", key="input_export_generated_by")
+    columns = st.columns(2)
+    with columns[0]:
+        if st.button(page["export_mf_tsv_button"], key="export_mf_tsv"):
+            _run_export(page, snapshot, export_moneyforward_tsv, official, generated_by, ExportPurpose.DEVELOPMENT)
+        if st.button(page["export_internal_button"], key="export_internal_xlsx"):
+            _run_export(page, snapshot, export_internal_calc_excel, official, generated_by, ExportPurpose.DEVELOPMENT)
+    with columns[1]:
+        if st.button(page["export_mf_csv_button"], key="export_mf_csv"):
+            _run_export(page, snapshot, export_moneyforward_csv, official, generated_by, ExportPurpose.DEVELOPMENT)
+        if st.button(page["export_spaceone_button"], key="export_spaceone_xlsx"):
+            _run_export(page, snapshot, export_spaceone_quote_excel, official, generated_by, ExportPurpose.FORMAL)
+    saved = st.session_state.get("quote_export_files") or []
+    if not saved:
+        st.text(page["no_export_yet"])
+        return
+    for item in saved:
+        st.write(f"{page['export_saved']}: {item}")
+
+
+def _run_export(page: dict, snapshot, exporter, official: str, generated_by: str, purpose) -> None:
+    try:
+        _bundle, path = exporter(
+            snapshot,
+            official_quote_number=official or None,
+            generated_by=generated_by or None,
+            purpose=purpose,
+        )
+        saved = list(st.session_state.get("quote_export_files") or [])
+        saved.append(str(path))
+        st.session_state["quote_export_files"] = saved
+        st.success(f"{page['export_saved']}: {path.name}")
+    except QuoteExportError as error:
+        st.error(str(error))
 
 
 def _ensure_quote_approval_store() -> QuoteApprovalStore:
     if "quote_approval_store" not in st.session_state:
         st.session_state["quote_approval_store"] = QuoteApprovalStore()
     return st.session_state["quote_approval_store"]
+
+
+def _render_quote_date_inputs(page: dict, draft):
+    auto_key = f"input_auto_valid_{draft.quote_draft_id}"
+    issue_key = f"input_issue_date_{draft.quote_draft_id}"
+    valid_key = f"input_valid_until_{draft.quote_draft_id}"
+    issue_default = parse_quote_date(draft.issue_date) or tokyo_today()
+    valid_default = parse_quote_date(draft.valid_until) or add_one_calendar_month(issue_default)
+    if auto_key not in st.session_state:
+        st.session_state[auto_key] = valid_until_matches_auto_rule(issue_default, valid_default)
+    if issue_key not in st.session_state:
+        st.session_state[issue_key] = issue_default
+    if valid_key not in st.session_state:
+        st.session_state[valid_key] = valid_default
+    auto = st.checkbox(page["auto_valid_until_label"], key=auto_key)
+    issue_date = st.date_input(page["issue_date_label"], key=issue_key, format="YYYY/MM/DD")
+    if auto:
+        computed = next_valid_until(issue_date, auto=True)
+        if st.session_state.get(valid_key) != computed:
+            st.session_state[valid_key] = computed
+    valid_until = st.date_input(
+        page["valid_until_label"],
+        key=valid_key,
+        format="YYYY/MM/DD",
+        disabled=auto,
+    )
+    if draft.status not in {QuoteDraftStatus.APPROVED, QuoteDraftStatus.SUPERSEDED}:
+        apply_issue_date(draft, issue_date)
+        apply_valid_until(draft, valid_until if not auto else next_valid_until(issue_date, auto=True))
+    return issue_date, valid_until
+
+
+def _sync_date_widgets_from_draft(draft, *, auto: Optional[bool] = None) -> None:
+    issue = parse_quote_date(draft.issue_date) or tokyo_today()
+    valid = parse_quote_date(draft.valid_until) or add_one_calendar_month(issue)
+    st.session_state[f"input_issue_date_{draft.quote_draft_id}"] = issue
+    st.session_state[f"input_valid_until_{draft.quote_draft_id}"] = valid
+    if auto is None:
+        auto = valid_until_matches_auto_rule(issue, valid)
+    st.session_state[f"input_auto_valid_{draft.quote_draft_id}"] = auto
 
 
 def _display_percent(value, page: dict) -> str:

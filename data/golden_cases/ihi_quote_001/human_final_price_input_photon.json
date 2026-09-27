@@ -1,15 +1,37 @@
 {
   "configuration": "PHOTON",
   "source": "HUMAN_FINAL_PRICE_INPUT",
-  "note": "Historical IHI prices entered as human final prices for approval acceptance. Not auto-adopted from Golden Quote.",
+  "note": "Historical IHI values entered as human-verified approval inputs. Not auto-adopted for new quotes and not recalculated at export.",
   "line_prices_jpy": {
     "9680-BASE": 3540000,
     "8459": 160000,
     "5608": 2220000,
     "7851-PHOTON": 370000
   },
+  "standard_sales_candidates_jpy": {
+    "9680-BASE": 3547764,
+    "8459": 160548,
+    "5608": 2309008,
+    "7851-PHOTON": 371025
+  },
   "shipping_price_jpy": 870000,
   "tax_rate": 0.1,
+  "issue_date": "2026-09-26",
+  "valid_until": "2026-10-31",
+  "remarks": [
+    "＜納期目安＞発注より3ヵ月程度（2026年9月26日現在）",
+    "※１：導入講習は実施場所により別途交通費諸経費がかかる場合があります。",
+    "※本見積書の価格は、為替レートの変動により変更される可能性があります。",
+    "※センサー等の組み込み工賃、輸送時保険料は代金に含まれます。",
+    "※納期はご発注確定後改めてお知らせいたします。"
+  ],
+  "issuer": {
+    "company_name": "株式会社スペースワン",
+    "address": "福島県郡山市香久池1-17-3",
+    "office_address": "東京営業所：東京都台東区上野1-20-1-5F",
+    "telephone": "TEL: 024-954-9930",
+    "source_reference": "IHI_QUOTE_001 Golden Historical Issuer Snapshot"
+  },
   "expected_subtotal_ex_tax_jpy": 7160000,
   "expected_tax_jpy": 716000,
   "expected_total_jpy": 7876000

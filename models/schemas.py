@@ -21,6 +21,9 @@ from models.enums import (
     QuoteDraftStatus,
     QuoteWarningSeverity,
     RemarkSource,
+    ExportBundleStatus,
+    ExportFileType,
+    ExportPurpose,
     RequirementType,
     ScenarioCompleteness,
     PriceBasis,
@@ -1032,6 +1035,14 @@ class QuoteRemark(BaseModel):
     selected: bool = False
 
 
+class IssuerSnapshot(BaseModel):
+    company_name: Optional[str] = None
+    address: Optional[str] = None
+    office_address: Optional[str] = None
+    telephone: Optional[str] = None
+    source_reference: Optional[str] = None
+
+
 class QuoteDraft(BaseModel):
     quote_draft_id: str
     quote_version: int = 1
@@ -1056,7 +1067,9 @@ class QuoteDraft(BaseModel):
     remarks: list[str] = Field(default_factory=list)
     remark_candidates: list[QuoteRemark] = Field(default_factory=list)
     lead_time_text: Optional[str] = None
+    issue_date: Optional[str] = None
     valid_until: Optional[str] = None
+    issuer_snapshot: Optional[IssuerSnapshot] = None
     adjustments: list[QuoteAdjustment] = Field(default_factory=list)
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
@@ -1167,7 +1180,9 @@ class ApprovedQuoteSnapshot(BaseModel):
     gross_margin_rate: Optional[float] = None
     remarks: list[QuoteRemark] = Field(default_factory=list)
     lead_time_text: Optional[str] = None
+    issue_date: Optional[str] = None
     valid_until: Optional[str] = None
+    issuer_snapshot: Optional[IssuerSnapshot] = None
     quote_number_candidate: Optional[str] = None
     official_quote_number: Optional[str] = None
     source_references: list[str] = Field(default_factory=list)
@@ -1193,12 +1208,32 @@ class InternalQuoteTransferRow(BaseModel):
     requirement_type: Optional[RequirementType] = None
 
 
+class InternalShippingEconomicsRow(BaseModel):
+    shipping_type: Optional[str] = None
+    quantity: Optional[int] = None
+    usd_rate: Optional[float] = None
+    usd_amount: Optional[float] = None
+    exchange_rate: Optional[float] = None
+    cost_jpy: Optional[float] = None
+    standard_sales_candidate_jpy: Optional[float] = None
+    final_sales_price_jpy: Optional[float] = None
+    gross_profit_jpy: Optional[float] = None
+    gross_margin_rate: Optional[float] = None
+    source_snapshot_id: Optional[str] = None
+    line_role: str = "COMPONENT"
+
+
 class InternalQuoteTransferPayload(BaseModel):
     source_approved_quote_snapshot_id: str
     rows: list[InternalQuoteTransferRow] = Field(default_factory=list)
+    shipping_rows: list[InternalShippingEconomicsRow] = Field(default_factory=list)
+    product_sales_ex_tax_jpy: Optional[float] = None
+    shipping_sales_ex_tax_jpy: Optional[float] = None
     customer_subtotal_ex_tax_jpy: Optional[float] = None
     customer_tax_jpy: Optional[float] = None
     customer_total_jpy: Optional[float] = None
+    product_landed_cost_jpy: Optional[float] = None
+    shipping_cost_jpy: Optional[float] = None
     total_landed_cost_jpy: Optional[float] = None
     gross_profit_jpy: Optional[float] = None
     gross_margin_rate: Optional[float] = None
@@ -1252,3 +1287,35 @@ class QuoteOutputBundle(BaseModel):
     internal_transfer: InternalQuoteTransferPayload
     spaceone_quote: SpaceOneQuotePayload
     moneyforward: MoneyForwardQuotePayload
+
+
+class ExportFileManifest(BaseModel):
+    file_type: ExportFileType
+    filename: str
+    purpose: ExportPurpose = ExportPurpose.DEVELOPMENT
+    approved_snapshot_id: str
+    quote_version: int
+    generated_at: datetime
+    subtotal_ex_tax: Optional[float] = None
+    tax: Optional[float] = None
+    total: Optional[float] = None
+    row_count: int = 0
+    sha256: Optional[str] = None
+    pdf_layout_prepared: bool = False
+
+
+class ApprovedQuoteExportBundle(BaseModel):
+    export_bundle_id: str
+    approved_quote_snapshot_id: str
+    case_id: Optional[str] = None
+    quote_version: int
+    official_quote_number: Optional[str] = None
+    quote_number_candidate: Optional[str] = None
+    generated_at: datetime
+    generated_by: Optional[str] = None
+    moneyforward_payload: MoneyForwardQuotePayload
+    internal_transfer_payload: InternalQuoteTransferPayload
+    spaceone_quote_payload: SpaceOneQuotePayload
+    file_manifest: list[ExportFileManifest] = Field(default_factory=list)
+    status: ExportBundleStatus = ExportBundleStatus.VALIDATED
+    warnings: list[str] = Field(default_factory=list)

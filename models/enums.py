@@ -276,6 +276,24 @@ class QuoteWarningSeverity(str, Enum):
     WARNING = "WARNING"
 
 
+class ExportPurpose(str, Enum):
+    DEVELOPMENT = "DEVELOPMENT"
+    FORMAL = "FORMAL"
+
+
+class ExportFileType(str, Enum):
+    MONEYFORWARD_TSV = "MONEYFORWARD_TSV"
+    MONEYFORWARD_CSV = "MONEYFORWARD_CSV"
+    INTERNAL_CALC_XLSX = "INTERNAL_CALC_XLSX"
+    SPACEONE_QUOTE_XLSX = "SPACEONE_QUOTE_XLSX"
+
+
+class ExportBundleStatus(str, Enum):
+    VALIDATED = "VALIDATED"
+    GENERATED = "GENERATED"
+    BLOCKED = "BLOCKED"
+
+
 class RequirementType(str, Enum):
     BASE_PRODUCT = "BASE_PRODUCT"
     SELECTED_OPTION = "SELECTED_OPTION"

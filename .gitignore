@@ -12,6 +12,10 @@ env/
 # Tests
 .pytest_cache/
 
+# Generated quote files
+outputs/*
+!outputs/.gitkeep
+
 # Streamlit
 .streamlit/secrets.toml
 
