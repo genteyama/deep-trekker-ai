@@ -8,6 +8,7 @@ from models.enums import (
     FactConfidence,
     FactScope,
     MatchConfidence,
+    MatchStatus,
     PriceBookDiffType,
     QuestionStatus,
     QuestionTarget,
@@ -372,6 +373,110 @@ class UpdateCandidate(BaseModel):
     status: RecordStatus = RecordStatus.CANDIDATE
     notes: Optional[str] = None
     target_master: Optional[str] = None
+
+
+class CellReference(BaseModel):
+    workbook: Optional[str] = None
+    workbook_id: Optional[str] = None
+    sheet: Optional[str] = None
+    cell: Optional[str] = None
+    formula: Optional[str] = None
+
+
+class SpaceOneValues(BaseModel):
+    name_ja: Optional[str] = None
+    name_en: Optional[str] = None
+    description: Optional[str] = None
+    manufacturer_msrp_usd: Optional[float] = None
+    manufacturer_dealer_price_usd: Optional[float] = None
+    sales_price: Optional[float] = None
+    notes: Optional[str] = None
+    category: Optional[str] = None
+
+
+class ManufacturerValues(BaseModel):
+    sku: Optional[str] = None
+    description: Optional[str] = None
+    msrp_usd: Optional[float] = None
+    dealer_price_usd: Optional[float] = None
+    dealer_rate: Optional[float] = None
+    notes: list[str] = Field(default_factory=list)
+    source_status: Optional[SkuSourceStatus] = None
+    source_price_book: Optional[str] = None
+    source_sheets: list[str] = Field(default_factory=list)
+
+
+class RecommendedChange(BaseModel):
+    field: str
+    current_value: Optional[float] = None
+    manufacturer_value: Optional[float] = None
+
+
+class SpaceOneMasterItem(BaseModel):
+    spaceone_item_id: str
+    source_sheet: Optional[str] = None
+    source_row: Optional[int] = None
+    spaceone_sku: Optional[str] = None
+    normalized_sku: Optional[str] = None
+    sku_cell_type: Optional[str] = None
+    sku_raw: Optional[str] = None
+    part_number_invalid: bool = False
+    is_legacy_shipping: bool = False
+    old_reference: Optional[CellReference] = None
+    values: SpaceOneValues = Field(default_factory=SpaceOneValues)
+
+
+class SpaceOneMasterImportResult(BaseModel):
+    source_name: Optional[str] = None
+    imported_at: Optional[datetime] = None
+    items: list[SpaceOneMasterItem] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class MasterReconciliationIssue(BaseModel):
+    code: str
+    message: str
+    details: Optional[str] = None
+
+
+class MasterReconciliationResult(BaseModel):
+    spaceone_item_id: str
+    source_sheet: Optional[str] = None
+    source_row: Optional[int] = None
+    spaceone_sku: Optional[str] = None
+    normalized_sku: Optional[str] = None
+    manufacturer_price_book: Optional[str] = None
+    manufacturer_candidate: Optional[SKUMasterCandidate] = None
+    primary_status: MatchStatus
+    issues: list[MasterReconciliationIssue] = Field(default_factory=list)
+    old_reference: Optional[CellReference] = None
+    current_spaceone_values: SpaceOneValues = Field(default_factory=SpaceOneValues)
+    manufacturer_values: Optional[ManufacturerValues] = None
+    recommended_changes: list[RecommendedChange] = Field(default_factory=list)
+    old_msrp: Optional[float] = None
+    new_msrp: Optional[float] = None
+    old_dealer_price: Optional[float] = None
+    new_dealer_price: Optional[float] = None
+
+
+class MasterReconciliationSummary(BaseModel):
+    total_rows: int = 0
+    compared_rows: int = 0
+    exact_match: int = 0
+    price_mismatch: int = 0
+    price_missing: int = 0
+    sku_not_found: int = 0
+    part_number_invalid: int = 0
+    obsolete_only: int = 0
+    needs_review: int = 0
+    multiple_spaceone_rows: int = 0
+    source_price_conflict: int = 0
+    legacy_shipping: int = 0
+
+
+class MasterReconciliationReport(BaseModel):
+    summary: MasterReconciliationSummary = Field(default_factory=MasterReconciliationSummary)
+    results: list[MasterReconciliationResult] = Field(default_factory=list)
 
 
 class CostScenario(BaseModel):

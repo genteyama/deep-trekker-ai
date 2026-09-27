@@ -206,6 +206,84 @@ def previous_master_book() -> BytesIO:
     )
 
 
+def manufacturer_books_for_reconciliation() -> tuple[BytesIO, BytesIO]:
+    dt40 = build_workbook(
+        {
+            "PHOTON": [
+                ["Part Number", "Description", "MSRP", "DT40", "Notes:"],
+                ["9680-BASE", "PHOTON BASE PACKAGE", 17391, 10434.6, "Base"],
+                ["8459", "POWER PACK", 787, 472.2, None],
+                ["7851-PHOTON", "CYGNUS INTEGRATION", 1746, 1047.6, None],
+                ["11490", "ALL TERRAIN WHEELS", 1945, 1361.5, None],
+                ["5608", "CYGNUS", 10448, 10448, "NO DEALER DISCOUNT"],
+            ],
+            "REVOLUTION-OBSOLETE": [
+                ["Part Number", "Description", "MSRP", "DT40", "Notes:"],
+                ["7511-SC-BASE", "Obsolete package", 1000, 600, "obsolete"],
+            ],
+        }
+    )
+    pt30 = build_workbook(
+        {
+            "A-200": [
+                ["Part Number", "Description", "MSRP", "PT30", "Notes:"],
+                ["10800S", "A-200S", 52500, 36750, None],
+                ["CONFLICT-1", "Conflict A", 100, 60, "note A"],
+            ],
+            "A-150": [
+                ["Part Number", "Description", "MSRP", "PT30", "Notes:"],
+                ["CONFLICT-1", "Conflict B", 200, 140, "note B"],
+            ],
+        }
+    )
+    return dt40, pt30
+
+
+def spaceone_master_book() -> BytesIO:
+    workbook = Workbook()
+    photon = workbook.active
+    photon.title = "PHOTON"
+    photon.append(
+        [None, "Part Number", "製品名", "内容", "価格", None, None, None, None, None, None, None, None, None, None, None, None, "スペースワン設定価格"]
+    )
+    photon.append([None, "DTマスター\n価格表より", None, None, "定価", "卸値"])
+    rows = [
+        (3, "PHOTON", "9680-BASE", "PHOTON 基本構成", "日本語説明", 17391, 10434.6, 3540000),
+        (5, None, "9680-EXPEET", "EXPERT誤記", None, 26575, 15948, None),
+        (7, None, 8459.0, "パワーパック", None, 787, 472.2, 160000),
+        (9, None, datetime(9757, 2, 1), "BRIDGE BOX", None, 3280, 1968, None),
+        (11, None, "7851-PHOTON", "Cygnus取付", None, None, None, 370000),
+        (13, None, "11490", "全地形ホイール", None, 77000, 68701.1, None),
+        (15, None, "5608", "Cygnus 1", None, 10448, 10448, 2220000),
+        (17, None, "5608", "Cygnus 2 別用途", None, 10448, 10448, 2220000),
+        (19, None, "MISSING-SKU", "存在しない", None, 10, 6, None),
+        (21, None, "7511-SC-BASE", "廃番候補", None, 1000, 600, None),
+        (23, None, "CONFLICT-1", "価格Conflict", None, 100, 60, None),
+        (25, None, None, "キャビブラスター輸送費", "パレット", 9980, 9980, None),
+    ]
+    for row_number, category, sku, name, content, msrp, dealer, sales in rows:
+        photon.cell(row_number, 1, category)
+        photon.cell(row_number, 2, sku)
+        photon.cell(row_number, 3, name)
+        photon.cell(row_number, 4, content)
+        photon.cell(row_number, 5, msrp)
+        photon.cell(row_number, 6, dealer)
+        if sales is not None:
+            photon.cell(row_number + 1, 18, sales)
+    photon["E3"] = (
+        '=IFERROR(IMPORTRANGE("https://docs.google.com/spreadsheets/d/'
+        '1xVJqlhF-sqMKJ3bnZ5hYjP2lTiYMl_5VaODFBL5CIx4/edit","PHOTON!D10"),17391)'
+    )
+    photon["E13"] = (
+        '=IFERROR(IMPORTRANGE("https://docs.google.com/spreadsheets/d/'
+        '1xVJqlhF-sqMKJ3bnZ5hYjP2lTiYMl_5VaODFBL5CIx4/edit","PHOTON!D40"),77000)'
+    )
+    buffer = BytesIO()
+    workbook.save(buffer)
+    buffer.seek(0)
+    return buffer
+
+
 def write_fixture_files(directory: Path = FIXTURE_DIR) -> dict:
     directory.mkdir(parents=True, exist_ok=True)
     files = {

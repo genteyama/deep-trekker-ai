@@ -3,21 +3,25 @@ from typing import Optional
 import streamlit as st
 from openpyxl.utils.exceptions import InvalidFileException
 
+from agents.master_reconciliation import reconcile_spaceone_master
 from agents.quote_control_agent import SkuMasterStore, diff_price_books, import_price_book
 from agents.update_inbox_agent import UpdateInboxStore, create_manual_candidate, organize_pasted_update
 from models import (
+    MatchStatus,
     PriceBookDiff,
     PriceBookDiffType,
     PriceBookImportResult,
     UpdateCategory,
     UpdateSourceType,
 )
+from parsers.spaceone_master_parser import parse_spaceone_master
 from ui.navigation import PAGE_HOME, set_current_page
 
 SESSION_IMPORT = "price_book_import"
 SESSION_DIFF = "price_book_diff"
 SESSION_OFFICIAL_MASTER = "official_sku_master"
 SESSION_UPDATE_INBOX = "dt_update_inbox"
+SESSION_RECONCILE = "spaceone_reconciliation"
 DIFF_ORDER = (
     PriceBookDiffType.NEW_SKU,
     PriceBookDiffType.PRICE_CHANGED,
@@ -66,6 +70,8 @@ def render_quote_control(texts: dict) -> None:
         _render_sku_list(page, result)
         _render_diff(page, st.session_state.get(SESSION_DIFF))
 
+    st.divider()
+    _render_spaceone_reconciliation(page)
     st.divider()
     _render_update_inbox(page)
 
@@ -139,6 +145,107 @@ def _render_diff(page: dict, diff: Optional[PriceBookDiff]) -> None:
     labels = page["diff_types"]
     for change_type in DIFF_ORDER:
         st.write(f"{labels[change_type.value]}: {diff.count(change_type)}")
+
+
+def _render_spaceone_reconciliation(page: dict) -> None:
+    st.subheader(page["section_spaceone_reconcile"])
+    st.write(page["section_spaceone_reconcile_description"])
+    st.caption(page["reconcile_not_applied"])
+
+    dt40_file = st.file_uploader(page["upload_dt40_label"], type=["xlsx"], key="input_reconcile_dt40")
+    pt30_file = st.file_uploader(page["upload_pt30_label"], type=["xlsx"], key="input_reconcile_pt30")
+    spaceone_file = st.file_uploader(page["upload_spaceone_label"], type=["xlsx"], key="input_reconcile_spaceone")
+
+    if st.button(page["reconcile_button"], key="reconcile_spaceone_master"):
+        _run_reconciliation(page, dt40_file, pt30_file, spaceone_file)
+
+    report = st.session_state.get(SESSION_RECONCILE)
+    if report is None:
+        st.text(page["no_reconcile"])
+        return
+
+    summary = report.summary
+    st.markdown(f"**{page['reconcile_summary_label']}**")
+    st.write(f"{page['reconcile_total']}: {summary.total_rows}")
+    st.write(f"{page['reconcile_compared']}: {summary.compared_rows}")
+    st.write(f"{page['reconcile_exact']}: {summary.exact_match}")
+    st.write(f"{page['reconcile_mismatch']}: {summary.price_mismatch}")
+    st.write(f"{page['reconcile_missing']}: {summary.price_missing}")
+    st.write(f"{page['reconcile_not_found']}: {summary.sku_not_found}")
+    st.write(f"{page['reconcile_invalid']}: {summary.part_number_invalid}")
+    st.write(f"{page['reconcile_obsolete']}: {summary.obsolete_only}")
+    st.write(f"{page['reconcile_review']}: {summary.needs_review}")
+    st.write(f"{page['reconcile_duplicate']}: {summary.multiple_spaceone_rows}")
+
+    filter_options = page["reconcile_filters"]
+    selected = st.selectbox(
+        page["reconcile_filter_label"],
+        options=list(filter_options.keys()),
+        format_func=lambda key: filter_options[key],
+        key="input_reconcile_filter",
+    )
+    rows = []
+    status_labels = page["match_statuses"]
+    for item in report.results:
+        if not _match_filter(item, selected):
+            continue
+        spaceone = item.current_spaceone_values
+        manufacturer = item.manufacturer_values
+        reference = item.old_reference
+        reason = "; ".join(issue.message for issue in item.issues) or page["no_value"]
+        change_text = page["no_value"]
+        if item.recommended_changes:
+            change_text = " / ".join(
+                f"{change.field}: {change.current_value} → {change.manufacturer_value}"
+                for change in item.recommended_changes
+            )
+        rows.append(
+            {
+                page["column_spaceone_sku"]: item.spaceone_sku or page["no_value"],
+                page["column_name_ja"]: spaceone.name_ja,
+                page["column_judgment"]: status_labels.get(item.primary_status.value, item.primary_status.value),
+                page["column_spaceone_msrp"]: spaceone.manufacturer_msrp_usd,
+                page["column_mfr_msrp"]: manufacturer.msrp_usd if manufacturer else page["no_value"],
+                page["column_spaceone_dealer"]: spaceone.manufacturer_dealer_price_usd,
+                page["column_mfr_dealer"]: manufacturer.dealer_price_usd if manufacturer else page["no_value"],
+                page["column_old_ref"]: (
+                    f"{reference.workbook} {reference.sheet}!{reference.cell}"
+                    if reference and reference.sheet and reference.cell
+                    else page["no_value"]
+                ),
+                page["column_mfr_sheet"]: ", ".join(manufacturer.source_sheets) if manufacturer else page["no_value"],
+                page["column_review_reason"]: reason,
+                page["column_recommended"]: change_text,
+            }
+        )
+    st.markdown(f"**{page['reconcile_issues_label']}**")
+    if rows:
+        st.table(rows)
+    else:
+        st.text(page["no_reconcile_rows"])
+    st.caption(page["recommended_change_caption"])
+
+
+def _run_reconciliation(page: dict, dt40_file, pt30_file, spaceone_file) -> None:
+    if spaceone_file is None or (dt40_file is None and pt30_file is None):
+        st.error(page["reconcile_missing_files"])
+        return
+    try:
+        spaceone = parse_spaceone_master(spaceone_file, source_name="SpaceOne")
+        dt40 = import_price_book(dt40_file, source_price_book="DT40") if dt40_file is not None else None
+        pt30 = import_price_book(pt30_file, source_price_book="PT30") if pt30_file is not None else None
+    except (InvalidFileException, ValueError, OSError, KeyError):
+        st.error(page["reconcile_error"])
+        return
+    st.session_state[SESSION_RECONCILE] = reconcile_spaceone_master(spaceone.items, dt40, pt30)
+
+
+def _match_filter(item, selected: str) -> bool:
+    if selected == "ALL":
+        return True
+    if selected == "REVIEW":
+        return item.primary_status != MatchStatus.EXACT_MATCH
+    return item.primary_status.value == selected
 
 
 def _render_update_inbox(page: dict) -> None:
