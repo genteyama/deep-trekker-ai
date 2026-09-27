@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Optional
 
 import streamlit as st
@@ -5,6 +6,14 @@ from openpyxl.utils.exceptions import InvalidFileException
 
 from agents.master_reconciliation import reconcile_spaceone_master
 from agents.quote_control_agent import SkuMasterStore, diff_price_books, import_price_book
+from agents.pricing_policy import (
+    build_exchange_rate_scenario,
+    compare_ihi_historical_prices,
+    extract_pricing_policies,
+    ihi_historical_comparison_lines,
+    simulate_sales_price_candidates,
+    summarize_pricing_patterns,
+)
 from agents.sku_link import build_sku_link_preview, try_manual_link
 from agents.supplier_quote_validation import load_official_manufacturer_price_books, validate_supplier_quote
 from data.golden_cases.loader import IHI_QUOTE_001, load_quote_golden_case
@@ -28,6 +37,8 @@ SESSION_OFFICIAL_MASTER = "official_sku_master"
 SESSION_UPDATE_INBOX = "dt_update_inbox"
 SESSION_RECONCILE = "spaceone_reconciliation"
 SESSION_SKU_LINKS = "sku_link_preview"
+SESSION_SPACEONE_ITEMS = "spaceone_master_items"
+SESSION_SALES_CANDIDATES = "sales_price_candidates"
 DIFF_ORDER = (
     PriceBookDiffType.NEW_SKU,
     PriceBookDiffType.PRICE_CHANGED,
@@ -78,6 +89,8 @@ def render_quote_control(texts: dict) -> None:
 
     st.divider()
     _render_spaceone_reconciliation(page)
+    st.divider()
+    _render_pricing_policy(page)
     st.divider()
     _render_update_inbox(page)
     _render_golden_quote_cases(page)
@@ -248,6 +261,7 @@ def _run_reconciliation(page: dict, dt40_file, pt30_file, spaceone_file) -> None
         return
     st.session_state[SESSION_RECONCILE] = reconcile_spaceone_master(spaceone.items, dt40, pt30)
     st.session_state[SESSION_SKU_LINKS] = build_sku_link_preview(spaceone.items, dt40, pt30)
+    st.session_state[SESSION_SPACEONE_ITEMS] = spaceone.items
 
 
 def _render_sku_link_preview(page: dict) -> None:
@@ -326,6 +340,72 @@ def _match_filter(item, selected: str) -> bool:
     if selected == "REVIEW":
         return item.primary_status != MatchStatus.EXACT_MATCH
     return item.primary_status.value == selected
+
+
+def _render_pricing_policy(page: dict) -> None:
+    st.subheader(page["section_pricing_policy"])
+    st.write(page["section_pricing_policy_description"])
+    st.caption(page["pricing_policy_not_applied"])
+    items = st.session_state.get(SESSION_SPACEONE_ITEMS)
+    preview = st.session_state.get(SESSION_SKU_LINKS)
+    if not items:
+        st.text(page["no_pricing_policies"])
+        return
+    policies = extract_pricing_policies(items)
+    patterns = summarize_pricing_patterns(policies)
+    st.markdown(f"**{page['pricing_pattern_label']}**")
+    st.table(
+        [
+            {
+                page["column_pattern"]: item.formula,
+                page["column_basis"]: item.price_basis.value if item.price_basis else page["no_value"],
+                page["column_multiplier"]: item.multiplier if item.multiplier is not None else page["no_value"],
+                page["sku_link_total"]: item.item_count,
+                page["column_formula_example"]: item.formula,
+                page["sku_link_review"]: item.review_count,
+            }
+            for item in patterns
+        ]
+    )
+    detected = next((item.detected_exchange_rate for item in items if item.detected_exchange_rate), None)
+    if detected:
+        st.caption(page["detected_rate_caption"].format(rate=detected))
+    rate_text = st.text_input(page["exchange_rate_label"], key="input_sales_exchange_rate")
+    if st.button(page["simulate_sales_button"], key="simulate_sales_prices"):
+        try:
+            rate = float(rate_text)
+        except (TypeError, ValueError):
+            st.warning(page["exchange_rate_invalid"])
+            return
+        if preview is None:
+            st.warning(page["no_sku_links"])
+            return
+        st.session_state[SESSION_SALES_CANDIDATES] = simulate_sales_price_candidates(
+            preview, policies, build_exchange_rate_scenario(rate), items
+        )
+    candidates = st.session_state.get(SESSION_SALES_CANDIDATES)
+    if not candidates:
+        return
+    st.table(
+        [
+            {
+                page["column_sku"]: item.manufacturer_sku or page["no_value"],
+                page["column_name_ja"]: item.name_ja or page["no_value"],
+                page["column_mfr_msrp"]: _display_number(item.manufacturer_msrp_usd, page),
+                page["column_mfr_dealer"]: _display_number(item.manufacturer_dealer_price_usd, page),
+                page["exchange_rate_label"]: _display_number(item.exchange_rate, page),
+                page["column_policy"]: item.source_formula or page["no_value"],
+                page["column_current_sales"]: _display_number(item.current_spaceone_sales_price_jpy, page),
+                page["column_sales_candidate"]: _display_number(item.raw_sales_price_jpy, page),
+                page["column_sales_delta"]: _display_number(item.difference_jpy, page),
+                page["column_ref_margin"]: (
+                    f"{item.reference_gross_margin_rate:.1%}" if item.reference_gross_margin_rate is not None else page["no_value"]
+                ),
+                page["golden_warning"]: item.skipped_reason or "; ".join(item.warnings) or page["no_value"],
+            }
+            for item in candidates
+        ]
+    )
 
 
 def _render_update_inbox(page: dict) -> None:
@@ -468,6 +548,7 @@ def _render_golden_quote_cases(page: dict) -> None:
         st.write(f"{page['golden_insurance']}: {photon.get('insurance_note')}")
         st.write(f"{page['golden_lead_time']}: {photon.get('lead_time_note')}")
         _render_supplier_quote_validation(page, case)
+        _render_ihi_pricing_comparison(page, case)
 
 
 def _render_supplier_quote_validation(page: dict, case: dict) -> None:
@@ -523,6 +604,49 @@ def _render_supplier_quote_validation(page: dict, case: dict) -> None:
         if line.line_kind.value == "INSURANCE":
             st.write(f"{line.description}: {_display_number(line.supplier_unit_price_usd, page)} USD")
     st.caption(page["golden_validation_caption"])
+
+
+def _render_ihi_pricing_comparison(page: dict, case: dict) -> None:
+    st.markdown(f"**{page['ihi_pricing_comparison_label']}**")
+    st.caption(page["ihi_pricing_comparison_hint"])
+    rate_text = st.text_input(page["exchange_rate_label"], key="input_ihi_comparison_rate")
+    if st.button(page["ihi_compare_button"], key="compare_ihi_pricing"):
+        try:
+            rate = float(rate_text)
+        except (TypeError, ValueError):
+            st.warning(page["exchange_rate_invalid"])
+            return
+        books = load_official_manufacturer_price_books()
+        spaceone_path = Path("/tmp/dt_price_investigation/SO_MASTER.xlsx")
+        if not books or not spaceone_path.exists():
+            st.warning(page["golden_validation_no_books"])
+            return
+        spaceone = parse_spaceone_master(spaceone_path, source_name="SO_MASTER")
+        preview = build_sku_link_preview(spaceone.items, *books)
+        policies = extract_pricing_policies(spaceone.items)
+        sales = simulate_sales_price_candidates(
+            preview, policies, build_exchange_rate_scenario(rate), spaceone.items
+        )
+        st.session_state["ihi_pricing_comparison"] = compare_ihi_historical_prices(
+            sales, policies, historical_lines=ihi_historical_comparison_lines(case)
+        )
+    rows = st.session_state.get("ihi_pricing_comparison")
+    if not rows:
+        return
+    labels = page["comparison_statuses"]
+    st.table(
+        [
+            {
+                page["column_sku"]: item.sku or page["no_value"],
+                page["column_name_ja"]: item.item_name or page["no_value"],
+                page["column_sales_candidate"]: _display_number(item.policy_sales_price_jpy, page),
+                page["column_historical"]: _display_number(item.historical_quote_price_jpy, page),
+                page["column_sales_delta"]: _display_number(item.difference_jpy, page),
+                page["column_comparison"]: labels.get(item.comparison_status.value, item.comparison_status.value),
+            }
+            for item in rows
+        ]
+    )
 
 
 def _ensure_official_master() -> None:

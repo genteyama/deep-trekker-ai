@@ -270,6 +270,60 @@ def official_ihi_sku_snapshot_book() -> BytesIO:
     )
 
 
+def pricing_policy_master_book() -> BytesIO:
+    workbook = Workbook()
+    photon = workbook.active
+    photon.title = "PHOTON"
+    photon["E1"] = "レート参考値"
+    photon["E2"] = "1ドル="
+    photon["F2"] = 170
+    photon["B3"] = "Part Number"
+    photon["C3"] = "製品名"
+    photon["D3"] = "内容"
+    photon["E3"] = "価格"
+    photon["R3"] = "スペースワン設定価格"
+    photon["B4"] = "DTマスター\n価格表より"
+    photon["E4"] = "定価"
+    photon["F4"] = "卸値"
+    data = [
+        (5, "9680-BASE", "PHOTON 基本構成", 17391, 10434.6, 6, "=E6*$F$2", "=E6*1.2", 3540000),
+        (8, "DEALER-P", "Dealer基準", 1000, 600, 9, "=F9*$F$2", "=F9*1.1", None),
+        (11, "FIXED-P", "固定売価", 100, 60, 12, None, 35000, 35000),
+        (14, "SPECIAL-P", "特殊式", 2000, 1200, 15, "=E15*$F$2", "=E15*1.2-M15", None),
+        (17, "ROUND-P", "端数処理", 800, 480, 18, "=E18*$F$2", "=ROUND(E18*1.2,-3)", None),
+        (20, "9680-EXPEET", "誤記", 100, 60, 21, "=E21*$F$2", "=E21*1.2", None),
+    ]
+    for usd_row, sku, name, msrp, dealer, jpy_row, jpy_formula, sales_formula, sales_value in data:
+        photon.cell(usd_row, 2, sku)
+        photon.cell(usd_row, 3, name)
+        photon.cell(usd_row, 5, msrp)
+        photon.cell(usd_row, 6, dealer)
+        if jpy_formula:
+            photon.cell(jpy_row, 5, jpy_formula)
+        photon.cell(jpy_row, 18, sales_formula)
+        if sales_value is not None:
+            photon.cell(usd_row, 18, sales_value)
+    buffer = BytesIO()
+    workbook.save(buffer)
+    buffer.seek(0)
+    return buffer
+
+
+def pricing_policy_manufacturer_book() -> BytesIO:
+    return build_workbook(
+        {
+            "PHOTON": [
+                ["Part Number", "Description", "MSRP", "DT40", "Notes:"],
+                ["9680-BASE", "PHOTON BASE PACKAGE", 17391, 10434.6, "Base"],
+                ["DEALER-P", "Dealer priced item", 1000, 600, None],
+                ["FIXED-P", "Fixed sales item", 100, 60, None],
+                ["SPECIAL-P", "Special formula item", 2000, 1200, None],
+                ["ROUND-P", "Rounding item", 800, 480, None],
+            ]
+        }
+    )
+
+
 def manufacturer_books_for_reconciliation() -> tuple[BytesIO, BytesIO]:
     dt40 = build_workbook(
         {

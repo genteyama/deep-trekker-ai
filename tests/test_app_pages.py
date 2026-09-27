@@ -36,6 +36,7 @@ def test_home_opens_quote_control_page():
     assert "価格表・SKU管理" in [item.value for item in at.subheader] + visible_text
     assert "Deep Trekker 更新情報" in [item.value for item in at.subheader] + visible_text
     assert "SpaceOneマスター照合" in [item.value for item in at.subheader] + visible_text
+    assert "SpaceOne販売価格ポリシー" in [item.value for item in at.subheader] + visible_text
     assert "まだ価格表は読み込んでいません。" in [item.value for item in at.text]
     assert "現在は開発用の整理処理です" in [item.value for item in at.warning]
     assert any(button.label == "価格表を読み込む" for button in at.button)

@@ -11,8 +11,14 @@ from models.enums import (
     LinkStatus,
     MatchConfidence,
     MatchStatus,
+    HistoricalComparisonStatus,
+    PriceBasis,
     PriceBookDiffType,
+    PricingFormulaType,
+    PricingPolicyStatus,
+    PricingScopeType,
     QuestionStatus,
+    RoundingMethod,
     QuestionTarget,
     RecommendationOrigin,
     RecordStatus,
@@ -469,6 +475,94 @@ class PricingPolicy(BaseModel):
     rounding_unit: Optional[float] = None
 
 
+class SpaceOnePricingPolicyCandidate(BaseModel):
+    pricing_policy_candidate_id: str
+    spaceone_item_id: Optional[str] = None
+    scope_type: PricingScopeType = PricingScopeType.SKU_SPECIFIC
+    product_family: Optional[str] = None
+    model: Optional[str] = None
+    sku: Optional[str] = None
+    price_basis: PriceBasis = PriceBasis.MANUAL
+    formula_type: PricingFormulaType = PricingFormulaType.MANUAL
+    multiplier: Optional[float] = None
+    fixed_price_jpy: Optional[float] = None
+    exchange_rate_reference: Optional[str] = None
+    detected_exchange_rate: Optional[float] = None
+    rounding_method: RoundingMethod = RoundingMethod.ROUNDING_UNKNOWN
+    rounding_unit: Optional[float] = None
+    source_formula: Optional[str] = None
+    jpy_msrp_formula: Optional[str] = None
+    source_sheet: Optional[str] = None
+    source_row: Optional[int] = None
+    effective_from: Optional[datetime] = None
+    effective_until: Optional[datetime] = None
+    status: PricingPolicyStatus = PricingPolicyStatus.CANDIDATE
+    confidence: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class ExchangeRateScenario(BaseModel):
+    exchange_rate_scenario_id: str
+    name: Optional[str] = None
+    currency_from: str = "USD"
+    currency_to: str = "JPY"
+    rate: Optional[float] = None
+    source_type: Optional[str] = None
+    effective_from: Optional[datetime] = None
+    effective_until: Optional[datetime] = None
+    status: PricingPolicyStatus = PricingPolicyStatus.CANDIDATE
+    notes: Optional[str] = None
+
+
+class PricingPatternSummary(BaseModel):
+    pattern_id: str
+    formula: Optional[str] = None
+    price_basis: Optional[PriceBasis] = None
+    formula_type: Optional[PricingFormulaType] = None
+    multiplier: Optional[float] = None
+    rounding_method: Optional[RoundingMethod] = None
+    item_count: int = 0
+    review_count: int = 0
+    representative_skus: list[str] = Field(default_factory=list)
+    source_sheets: list[str] = Field(default_factory=list)
+
+
+class SalesPriceCandidate(BaseModel):
+    sales_price_candidate_id: str
+    spaceone_item_id: str
+    manufacturer_sku: Optional[str] = None
+    name_ja: Optional[str] = None
+    manufacturer_msrp_usd: Optional[float] = None
+    manufacturer_dealer_price_usd: Optional[float] = None
+    exchange_rate: Optional[float] = None
+    price_basis: Optional[PriceBasis] = None
+    pricing_policy_candidate_id: Optional[str] = None
+    source_formula: Optional[str] = None
+    raw_sales_price_jpy: Optional[float] = None
+    rounded_sales_price_jpy: Optional[float] = None
+    current_spaceone_sales_price_jpy: Optional[float] = None
+    difference_jpy: Optional[float] = None
+    difference_rate: Optional[float] = None
+    reference_gross_margin_rate: Optional[float] = None
+    status: PricingPolicyStatus = PricingPolicyStatus.CANDIDATE
+    warnings: list[str] = Field(default_factory=list)
+    source_reference: Optional[str] = None
+    skipped_reason: Optional[str] = None
+
+
+class HistoricalPriceComparison(BaseModel):
+    sku: Optional[str] = None
+    item_name: Optional[str] = None
+    quote_number: Optional[str] = None
+    configuration_name: Optional[str] = None
+    pricing_policy_candidate_id: Optional[str] = None
+    policy_sales_price_jpy: Optional[float] = None
+    historical_quote_price_jpy: Optional[float] = None
+    difference_jpy: Optional[float] = None
+    comparison_status: HistoricalComparisonStatus = HistoricalComparisonStatus.NOT_COMPARABLE
+    notes: Optional[str] = None
+
+
 SHIPPING_RULE_PRIORITY = (
     "SUPPLIER_QUOTE_CASE_SPECIFIC",
     "MANUFACTURER_CASE_SPECIFIC_REPLY",
@@ -578,6 +672,11 @@ class SpaceOneMasterItem(BaseModel):
     part_number_invalid: bool = False
     is_legacy_shipping: bool = False
     old_reference: Optional[CellReference] = None
+    sales_price_formula: Optional[str] = None
+    sales_price_formula_row: Optional[int] = None
+    jpy_msrp_formula: Optional[str] = None
+    detected_exchange_rate: Optional[float] = None
+    exchange_rate_source_cell: Optional[str] = None
     values: SpaceOneValues = Field(default_factory=SpaceOneValues)
 
 

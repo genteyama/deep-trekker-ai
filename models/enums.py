@@ -188,6 +188,49 @@ class SupplierQuoteLineKind(str, Enum):
     MISSING_COMPONENT = "MISSING_COMPONENT"
 
 
+class PricingScopeType(str, Enum):
+    GLOBAL = "GLOBAL"
+    PRODUCT_FAMILY = "PRODUCT_FAMILY"
+    MODEL = "MODEL"
+    SKU_SPECIFIC = "SKU_SPECIFIC"
+
+
+class PriceBasis(str, Enum):
+    MANUFACTURER_MSRP = "MANUFACTURER_MSRP"
+    MANUFACTURER_DEALER = "MANUFACTURER_DEALER"
+    FIXED_PRICE = "FIXED_PRICE"
+    SPECIAL_FORMULA = "SPECIAL_FORMULA"
+    MANUAL = "MANUAL"
+
+
+class PricingFormulaType(str, Enum):
+    MULTIPLIER = "MULTIPLIER"
+    FIXED = "FIXED"
+    SPECIAL = "SPECIAL"
+    MANUAL = "MANUAL"
+
+
+class RoundingMethod(str, Enum):
+    NONE = "NONE"
+    ROUND = "ROUND"
+    ROUND_UP = "ROUND_UP"
+    ROUND_DOWN = "ROUND_DOWN"
+    ROUNDING_UNKNOWN = "ROUNDING_UNKNOWN"
+
+
+class PricingPolicyStatus(str, Enum):
+    CANDIDATE = "CANDIDATE"
+    REVIEW_REQUIRED = "REVIEW_REQUIRED"
+    APPROVED = "APPROVED"
+    SUPERSEDED = "SUPERSEDED"
+
+
+class HistoricalComparisonStatus(str, Enum):
+    MATCH = "MATCH"
+    DIFFERENCE = "DIFFERENCE"
+    NOT_COMPARABLE = "NOT_COMPARABLE"
+
+
 class SkuMappingSource(str, Enum):
     MANUFACTURER_SOURCE = "MANUFACTURER_SOURCE"
     HUMAN_VERIFIED = "HUMAN_VERIFIED"

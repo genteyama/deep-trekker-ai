@@ -153,6 +153,10 @@ def _row_to_item(formula_sheet, value_sheet, row_number, header_row, max_row, co
     formula = msrp_formula
     if not (isinstance(formula, str) and "IMPORTRANGE" in formula.upper()):
         formula = dealer_formula
+    sales_formula, sales_formula_row, jpy_msrp_formula = _sales_formula(
+        formula_sheet, value_sheet, row_number, max_row
+    )
+    detected_rate, rate_cell = _sheet_exchange_rate(formula_sheet, value_sheet)
     counter += 1
     item = SpaceOneMasterItem(
         spaceone_item_id=f"so-{counter:03d}",
@@ -165,6 +169,11 @@ def _row_to_item(formula_sheet, value_sheet, row_number, header_row, max_row, co
         part_number_invalid=invalid == CODE_PART_NUMBER_INVALID,
         is_legacy_shipping=shipping,
         old_reference=parse_cell_reference(formula if isinstance(formula, str) else None),
+        sales_price_formula=_formula_text(sales_formula),
+        sales_price_formula_row=sales_formula_row,
+        jpy_msrp_formula=_formula_text(jpy_msrp_formula) if isinstance(jpy_msrp_formula, str) else None,
+        detected_exchange_rate=detected_rate,
+        exchange_rate_source_cell=rate_cell,
         values=SpaceOneValues(
             name_ja=name,
             description=description,
@@ -176,6 +185,56 @@ def _row_to_item(formula_sheet, value_sheet, row_number, header_row, max_row, co
         ),
     )
     return item, counter
+
+
+def _sales_formula(formula_sheet, value_sheet, row_number, max_row):
+    current = formula_sheet.cell(row_number, 18).value
+    next_row = row_number + 1
+    nxt = None
+    if next_row <= max_row and value_sheet.cell(next_row, 2).value in (None, ""):
+        nxt = formula_sheet.cell(next_row, 18).value
+        if isinstance(nxt, str) and nxt.startswith("="):
+            return nxt, next_row, formula_sheet.cell(next_row, 5).value
+    if isinstance(current, str) and current.startswith("="):
+        return current, row_number, formula_sheet.cell(row_number, 5).value
+    if _is_sales_formula_or_fixed(nxt):
+        return nxt, next_row, formula_sheet.cell(next_row, 5).value
+    if _is_sales_formula_or_fixed(current):
+        return current, row_number, formula_sheet.cell(row_number, 5).value
+    return None, None, None
+
+
+def _is_sales_formula_or_fixed(value) -> bool:
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, (int, float)):
+        return True
+    return isinstance(value, str) and value.startswith("=")
+
+
+def _formula_text(value) -> Optional[str]:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return str(value)
+    return None
+
+
+def _sheet_exchange_rate(formula_sheet, value_sheet):
+    label = value_sheet["E2"].value or formula_sheet["E2"].value
+    raw = value_sheet["F2"].value
+    if raw is None:
+        raw = formula_sheet["F2"].value
+    if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+        return None, None
+    cell = f"{formula_sheet.title}!F2"
+    if label and "ドル" not in str(label) and "USD" not in str(label).upper():
+        return float(raw), cell
+    return float(raw), cell
 
 
 def _sales_price(value_sheet, row_number, max_row) -> Optional[float]:
