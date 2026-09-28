@@ -29,6 +29,11 @@ from agents.technical_case_agent import (
     run_manufacturer_response_analysis,
     run_technical_case_analysis,
 )
+from llm.provider import (
+    ERROR_MISSING_API_KEY,
+    get_provider_runtime_status,
+    run_provider_connection_test,
+)
 from models import (
     CaseRequirement,
     FactConfidence,
@@ -70,6 +75,7 @@ def render_technical_case(texts: dict) -> None:
 
     if get_active_provider_name() == "mock":
         st.warning(page["mock_warning"])
+    _render_provider_status(page)
 
     st.divider()
 
@@ -113,13 +119,50 @@ def render_technical_case(texts: dict) -> None:
     _render_manufacturer_response_section(page, st.session_state.get(SESSION_RUN))
 
 
+def _render_provider_status(page: dict) -> None:
+    status = get_provider_runtime_status()
+    connection_labels = page.get(
+        "connection_states",
+        {"disconnected": "未接続", "connected": "接続済み", "error": "エラー"},
+    )
+    with st.expander(page.get("provider_status_label", "AI Provider"), expanded=False):
+        st.write(f"{page.get('provider_label', 'AI Provider')}: {status['provider_label']}")
+        st.write(f"{page.get('model_label', 'Model')}: {status['model'] or page.get('no_value', '-')}")
+        st.write(
+            f"{page.get('connection_label', 'Connection')}: "
+            f"{connection_labels.get(status['connection'], status['connection'])}"
+        )
+        st.caption(page.get("fallbacks_label", "Fallbacks") + f": {'ON' if status['fallbacks_enabled'] else 'OFF'}")
+        if status.get("supports_connection_test"):
+            if st.button(page.get("connection_test_button", "Claude接続テスト"), key="claude_connection_test"):
+                st.session_state["provider_connection_test"] = run_provider_connection_test()
+                st.rerun()
+            result = st.session_state.get("provider_connection_test")
+            if result is not None:
+                if result.success:
+                    st.success(page.get("connection_ok", "Connection OK"))
+                elif result.error_code == ERROR_MISSING_API_KEY:
+                    st.error(page["missing_api_key"])
+                else:
+                    st.error(page.get("connection_error", "Claude接続テストに失敗しました"))
+        usage = status.get("last_usage")
+        if usage is not None:
+            st.caption(
+                f"tokens in={usage.input_tokens} out={usage.output_tokens} "
+                f"status={usage.http_status} ms={usage.duration_ms}"
+            )
+
+
 def _render_run_result(page: dict, run: Optional[TechnicalCaseRun]) -> None:
     if run is None:
         _render_empty_sections(page)
         return
 
     if not run.success:
-        st.error(page["analysis_error"])
+        if run.error_code == ERROR_MISSING_API_KEY:
+            st.error(page["missing_api_key"])
+        else:
+            st.error(page["analysis_error"])
         if run.error_details:
             with st.expander(page["error_details_label"]):
                 st.text(run.error_details)
@@ -254,6 +297,8 @@ def _render_response_run(
             error_text = page["response_no_questions"]
         elif run.error_code == ERROR_EMPTY_RESPONSE:
             error_text = page["response_empty_text"]
+        elif run.error_code == ERROR_MISSING_API_KEY:
+            error_text = page["missing_api_key"]
         st.error(error_text)
         if run.error_details:
             with st.expander(page["error_details_label"]):

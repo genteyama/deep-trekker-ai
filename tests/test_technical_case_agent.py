@@ -230,7 +230,7 @@ def test_factory_defaults_to_mock():
 
 def test_unknown_provider_is_rejected():
     with pytest.raises(ProviderError):
-        get_technical_case_provider("anthropic")
+        get_technical_case_provider("unknown-provider")
 
 
 def test_system_prompt_keeps_proposal_origin_rules():

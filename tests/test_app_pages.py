@@ -77,8 +77,61 @@ def test_analyze_button_shows_mock_results():
     assert "管内点検" in " ".join(visible_text)
     assert "点検する管の内径と管種を教えてください。" in " ".join(visible_text)
     assert at.json.len == 1
-    assert at.expander[0].label == "解析データを確認"
+    assert any(expander.label == "解析データを確認" for expander in at.expander)
     assert at.error.len == 0
+
+
+def test_app_starts_without_claude_api_key(monkeypatch):
+    monkeypatch.setenv("TECHNICAL_CASE_PROVIDER", "anthropic")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "")
+    monkeypatch.setenv("ANTHROPIC_MODEL", "claude-opus-5")
+    monkeypatch.setenv("ANTHROPIC_ENABLE_FALLBACKS", "false")
+
+    at = _start_app()
+    assert not at.exception
+
+    at.button(key="open_technical_case").click().run()
+    assert not at.exception
+
+    visible_text = " ".join(
+        [item.value for item in at.text] + [item.value for item in at.markdown]
+    )
+    assert any("AI Provider" in (expander.label or "") for expander in at.expander)
+    assert "Claude" in visible_text
+    assert "claude-opus-5" in visible_text
+    assert "未接続" in visible_text
+    assert "ANTHROPIC_API_KEY" not in visible_text
+    assert "sk-ant" not in visible_text
+    assert not any("開発用Mock解析" in (item.value or "") for item in at.warning)
+
+    at.text_area(key="input_customer_inquiry").set_value("管内点検の相談です。")
+    at.button(key="analyze_inquiry").click().run()
+    assert not at.exception
+    assert "Claude APIキーが設定されていません" in [item.value for item in at.error]
+    visible_after = " ".join(
+        [item.value for item in at.text] + [item.value for item in at.markdown]
+    )
+    assert DEFAULT_MOCK_PAYLOAD["case_summary"] not in visible_after
+
+
+def test_claude_connection_test_without_key_does_not_send_customer_data(monkeypatch):
+    monkeypatch.setenv("TECHNICAL_CASE_PROVIDER", "anthropic")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "")
+
+    at = _start_app()
+    at.button(key="open_technical_case").click().run()
+    at.text_input(key="input_case_name").set_value("機密案件A")
+    at.text_input(key="input_customer_name").set_value("秘密顧客")
+    at.text_area(key="input_customer_inquiry").set_value("顧客の生メール全文")
+
+    at.button(key="claude_connection_test").click().run()
+    assert not at.exception
+    assert "Claude APIキーが設定されていません" in [item.value for item in at.error]
+    visible_text = " ".join(
+        [item.value for item in at.text] + [item.value for item in at.markdown]
+    )
+    assert DEFAULT_MOCK_PAYLOAD["case_summary"] not in visible_text
+    assert "ANTHROPIC_API_KEY" not in visible_text
 
 
 def test_manufacturer_response_button_shows_mock_matches():

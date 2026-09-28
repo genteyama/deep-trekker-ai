@@ -151,3 +151,13 @@ class MockTechnicalCaseProvider(TechnicalCaseProvider):
         if self._response_payload is not None:
             return self._response_payload
         return build_default_manufacturer_response_payload(questions)
+
+    def test_connection(self):
+        from llm.provider import ConnectionTestResult
+
+        return ConnectionTestResult(
+            success=True,
+            provider=self.name,
+            model=None,
+            fallbacks_enabled=False,
+        )

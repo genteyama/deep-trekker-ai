@@ -116,7 +116,21 @@
         "PAST_CASE": "過去案件",
         "AI_EXTRACTED_UNVERIFIED": "AI抽出・未確認"
       },
-      "registered_facts_label": "登録済み技術情報"
+      "registered_facts_label": "登録済み技術情報",
+      "missing_api_key": "Claude APIキーが設定されていません",
+      "provider_status_label": "AI Provider（開発・管理）",
+      "provider_label": "AI Provider",
+      "model_label": "Model",
+      "connection_label": "Connection",
+      "fallbacks_label": "Fallbacks",
+      "connection_test_button": "Claude接続テスト",
+      "connection_ok": "Connection OK",
+      "connection_error": "Claude接続テストに失敗しました",
+      "connection_states": {
+        "disconnected": "未接続",
+        "connected": "接続済み",
+        "error": "エラー"
+      }
     },
     "quote_control": {
       "title": "見積・価格管理AI",

@@ -116,7 +116,21 @@
         "PAST_CASE": "Past case",
         "AI_EXTRACTED_UNVERIFIED": "AI extracted, unverified"
       },
-      "registered_facts_label": "Registered technical facts"
+      "registered_facts_label": "Registered technical facts",
+      "missing_api_key": "Claude API key is not configured",
+      "provider_status_label": "AI Provider (development)",
+      "provider_label": "AI Provider",
+      "model_label": "Model",
+      "connection_label": "Connection",
+      "fallbacks_label": "Fallbacks",
+      "connection_test_button": "Claude connection test",
+      "connection_ok": "Connection OK",
+      "connection_error": "Claude connection test failed",
+      "connection_states": {
+        "disconnected": "Not connected",
+        "connected": "Connected",
+        "error": "Error"
+      }
     },
     "quote_control": {
       "title": "Quote & Price Control Agent",

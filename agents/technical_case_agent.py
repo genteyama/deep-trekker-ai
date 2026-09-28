@@ -12,7 +12,12 @@ from llm.analysis_schema import (
     TechnicalCaseAnalysisResponse,
     UnresolvedItem,
 )
-from llm.provider import ProviderError, TechnicalCaseProvider, get_technical_case_provider
+from llm.provider import (
+    ProviderError,
+    TechnicalCaseProvider,
+    get_technical_case_provider,
+    selected_provider_name,
+)
 from models import (
     Case,
     CaseRequirement,
@@ -114,7 +119,9 @@ def load_manufacturer_response_prompt() -> str:
 
 
 def get_active_provider_name(provider: Optional[TechnicalCaseProvider] = None) -> str:
-    return (provider or get_technical_case_provider()).name
+    if provider is not None:
+        return provider.name
+    return selected_provider_name()
 
 
 def validate_analysis_payload(payload: object) -> TechnicalCaseAnalysisResponse:
@@ -228,7 +235,8 @@ def run_technical_case_analysis(
         )
     except ProviderError as error:
         logger.exception("Technical case provider failed")
-        return _failed_run(case, inquiry, active_provider.name, ERROR_PROVIDER, str(error))
+        code = getattr(error, "error_code", None) or ERROR_PROVIDER
+        return _failed_run(case, inquiry, active_provider.name, code, str(error))
     except ValidationError as error:
         logger.exception("Technical case analysis validation failed")
         return _failed_run(case, inquiry, active_provider.name, ERROR_VALIDATION, str(error))
@@ -342,7 +350,7 @@ def run_manufacturer_response_analysis(
             success=False,
             provider_name=active_provider.name,
             original_response_text=original_text,
-            error_code=ERROR_PROVIDER,
+            error_code=getattr(error, "error_code", None) or ERROR_PROVIDER,
             error_details=str(error),
         )
     except ValidationError as error:
