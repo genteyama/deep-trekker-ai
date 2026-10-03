@@ -159,6 +159,61 @@ def test_app_starts_with_ollama_provider_without_api_key(monkeypatch):
     assert not any("開発用Mock解析" in (item.value or "") for item in at.warning)
 
 
+def test_app_starts_with_gemini_provider_without_api_key(monkeypatch):
+    monkeypatch.setenv("TECHNICAL_CASE_PROVIDER", "gemini")
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-3.8-flash")
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+
+    at = _start_app()
+    assert not at.exception
+
+    at.button(key="open_technical_case").click().run()
+    assert not at.exception
+
+    visible_text = " ".join(
+        [item.value for item in at.text] + [item.value for item in at.markdown]
+    )
+    assert any("AI Provider" in (expander.label or "") for expander in at.expander)
+    assert "Gemini" in visible_text
+    assert "gemini-3.8-flash" in visible_text
+    assert "未接続" in visible_text
+    assert any(getattr(button, "key", None) == "gemini_connection_test" for button in at.button)
+    assert not any(getattr(button, "key", None) == "claude_connection_test" for button in at.button)
+    assert not any(getattr(button, "key", None) == "ollama_connection_test" for button in at.button)
+    assert "GEMINI_API_KEY" not in visible_text
+    assert "AIza" not in visible_text
+    assert not any("開発用Mock解析" in (item.value or "") for item in at.warning)
+
+    at.text_area(key="input_customer_inquiry").set_value("管内点検の相談です。")
+    at.button(key="analyze_inquiry").click().run()
+    assert not at.exception
+    assert "Gemini APIキーが設定されていません" in [item.value for item in at.error]
+    visible_after = " ".join(
+        [item.value for item in at.text] + [item.value for item in at.markdown]
+    )
+    assert DEFAULT_MOCK_PAYLOAD["case_summary"] not in visible_after
+
+
+def test_gemini_connection_test_without_key_does_not_send_customer_data(monkeypatch):
+    monkeypatch.setenv("TECHNICAL_CASE_PROVIDER", "gemini")
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+
+    at = _start_app()
+    at.button(key="open_technical_case").click().run()
+    at.text_input(key="input_case_name").set_value("機密案件A")
+    at.text_input(key="input_customer_name").set_value("秘密顧客")
+    at.text_area(key="input_customer_inquiry").set_value("顧客の生メール全文")
+
+    at.button(key="gemini_connection_test").click().run()
+    assert not at.exception
+    assert "Gemini APIキーが設定されていません" in [item.value for item in at.error]
+    visible_text = " ".join(
+        [item.value for item in at.text] + [item.value for item in at.markdown]
+    )
+    assert DEFAULT_MOCK_PAYLOAD["case_summary"] not in visible_text
+    assert "GEMINI_API_KEY" not in visible_text
+
+
 def test_manufacturer_response_button_shows_mock_matches():
     at = _start_app()
     at.button(key="open_technical_case").click().run()

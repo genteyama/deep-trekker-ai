@@ -10,6 +10,7 @@ def isolate_sqlite(tmp_path, monkeypatch):
 def default_technical_case_provider(monkeypatch):
     monkeypatch.setenv("TECHNICAL_CASE_PROVIDER", "mock")
     monkeypatch.setenv("ANTHROPIC_ENABLE_FALLBACKS", "false")
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
 
 
 @pytest.fixture(autouse=True)

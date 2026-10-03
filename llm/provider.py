@@ -78,6 +78,10 @@ def get_technical_case_provider(
         from llm.ollama_provider import OllamaTechnicalCaseProvider
 
         return OllamaTechnicalCaseProvider()
+    if selected == "gemini":
+        from llm.gemini_provider import GeminiTechnicalCaseProvider
+
+        return GeminiTechnicalCaseProvider()
     if selected == "anthropic":
         from llm.anthropic_provider import AnthropicTechnicalCaseProvider
 
@@ -136,6 +140,22 @@ def get_provider_runtime_status() -> dict:
             "supports_connection_test": True,
             "show_fallbacks": False,
             "connection_test_button_key": "ollama_connection_test",
+        }
+    if selected == "gemini":
+        from llm.gemini_provider import configured_model as gemini_model
+        from llm.gemini_provider import has_api_key as gemini_has_key
+
+        return {
+            "provider_id": "gemini",
+            "provider_label": "Gemini",
+            "model": gemini_model(),
+            "fallbacks_enabled": False,
+            "api_key_configured": gemini_has_key(),
+            "connection": _RUNTIME["connection"],
+            "last_usage": _RUNTIME["last_usage"],
+            "supports_connection_test": True,
+            "show_fallbacks": False,
+            "connection_test_button_key": "gemini_connection_test",
         }
     return {
         "provider_id": selected if selected == "mock" else selected,

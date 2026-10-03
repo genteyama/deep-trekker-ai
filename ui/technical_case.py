@@ -120,6 +120,12 @@ def render_technical_case(texts: dict) -> None:
     _render_manufacturer_response_section(page, st.session_state.get(SESSION_RUN))
 
 
+def _missing_key_text(page: dict) -> str:
+    if get_active_provider_name() == "gemini":
+        return page.get("gemini_missing_api_key", "Gemini APIキーが設定されていません")
+    return page["missing_api_key"]
+
+
 def _render_provider_status(page: dict) -> None:
     status = get_provider_runtime_status()
     connection_labels = page.get(
@@ -140,6 +146,10 @@ def _render_provider_status(page: dict) -> None:
                 button_label = page.get("ollama_connection_test_button", "Ollama接続テスト")
                 button_key = status.get("connection_test_button_key") or "ollama_connection_test"
                 failed_label = page.get("ollama_connection_error", "Ollama接続テストに失敗しました")
+            elif status.get("provider_id") == "gemini":
+                button_label = page.get("gemini_connection_test_button", "Gemini接続テスト")
+                button_key = status.get("connection_test_button_key") or "gemini_connection_test"
+                failed_label = page.get("gemini_connection_error", "Gemini接続テストに失敗しました")
             else:
                 button_label = page.get("connection_test_button", "Claude接続テスト")
                 button_key = status.get("connection_test_button_key") or "claude_connection_test"
@@ -152,7 +162,7 @@ def _render_provider_status(page: dict) -> None:
                 if result.success:
                     st.success(page.get("connection_ok", "Connection OK"))
                 elif result.error_code == ERROR_MISSING_API_KEY:
-                    st.error(page["missing_api_key"])
+                    st.error(_missing_key_text(page))
                 else:
                     st.error(failed_label)
         usage = status.get("last_usage")
@@ -170,7 +180,7 @@ def _render_run_result(page: dict, run: Optional[TechnicalCaseRun]) -> None:
 
     if not run.success:
         if run.error_code == ERROR_MISSING_API_KEY:
-            st.error(page["missing_api_key"])
+            st.error(_missing_key_text(page))
         elif run.error_code == ERROR_COMPLETENESS:
             st.error(page.get("completeness_error", page["analysis_error"]))
         else:
@@ -325,7 +335,7 @@ def _render_response_run(
         elif run.error_code == ERROR_EMPTY_RESPONSE:
             error_text = page["response_empty_text"]
         elif run.error_code == ERROR_MISSING_API_KEY:
-            error_text = page["missing_api_key"]
+            error_text = _missing_key_text(page)
         elif run.error_code == ERROR_COMPLETENESS:
             error_text = page.get("completeness_error", page["response_error"])
         st.error(error_text)
