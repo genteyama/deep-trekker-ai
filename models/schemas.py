@@ -75,6 +75,8 @@ class CaseRequirement(BaseModel):
     source: Optional[str] = None
     confirmed: bool = False
     notes: Optional[str] = None
+    original_text: Optional[str] = None
+    normalized_meaning: Optional[str] = None
 
 
 class TechnicalQuestion(BaseModel):
@@ -85,6 +87,11 @@ class TechnicalQuestion(BaseModel):
     status: Optional[QuestionStatus] = None
     follow_up_required: bool = False
     created_at: Optional[datetime] = None
+    classification: Optional[str] = None
+    source: Optional[str] = None
+    original_text: Optional[str] = None
+    normalized_meaning: Optional[str] = None
+    grounding: Optional[str] = None
 
 
 class ResponseMatchCandidate(BaseModel):

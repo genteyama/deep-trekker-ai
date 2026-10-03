@@ -75,6 +75,8 @@ def main() -> int:
         usage=response_usage,
     )
 
+    analysis = inquiry_run.analysis_json or {}
+    response_analysis = response_run.analysis_json or {}
     _safe_print(
         "TECHNICAL_CASE_RUN",
         {
@@ -82,8 +84,26 @@ def main() -> int:
             "error_code": inquiry_run.error_code,
             "provider_name": inquiry_run.provider_name,
             "usage": inquiry_usage,
-            "thinking_leaks": find_thinking_leaks(inquiry_run.analysis_json or {}),
-            "analysis": inquiry_run.analysis_json,
+            "thinking_leaks": find_thinking_leaks(analysis),
+            "structured_counts": {
+                "requested_products": len(analysis.get("requested_products") or []),
+                "requirements": len(analysis.get("requirements") or []),
+                "customer_goal": len(analysis.get("customer_goal") or []),
+                "existing_equipment": len(analysis.get("existing_equipment") or []),
+                "manufacturer_questions": len(analysis.get("manufacturer_questions") or []),
+                "ai_suggested_questions": sum(
+                    1
+                    for item in (analysis.get("manufacturer_questions") or [])
+                    + (analysis.get("customer_questions") or [])
+                    + (analysis.get("technical_questions") or [])
+                    if (item.get("classification") or item.get("source")) == "AI_SUGGESTED"
+                ),
+            },
+            "completeness_issues": [
+                item.as_dict() if hasattr(item, "as_dict") else item
+                for item in inquiry_run.completeness_issues
+            ],
+            "analysis": analysis,
             "evaluation": inquiry_eval.as_dict(),
         },
     )
@@ -94,8 +114,16 @@ def main() -> int:
             "error_code": response_run.error_code,
             "provider_name": response_run.provider_name,
             "usage": response_usage,
-            "thinking_leaks": find_thinking_leaks(response_run.analysis_json or {}),
-            "analysis": response_run.analysis_json,
+            "thinking_leaks": find_thinking_leaks(response_analysis),
+            "structured_counts": {
+                "matches": len(response_analysis.get("matches") or []),
+                "unmatched_information": len(response_analysis.get("unmatched_information") or []),
+            },
+            "completeness_issues": [
+                item.as_dict() if hasattr(item, "as_dict") else item
+                for item in response_run.completeness_issues
+            ],
+            "analysis": response_analysis,
             "evaluation": response_eval.as_dict(),
         },
     )

@@ -11,12 +11,19 @@ class ExtractedRequirement(BaseModel):
     value: Optional[str] = None
     unit: Optional[str] = None
     notes: Optional[str] = None
+    original_text: Optional[str] = None
+    normalized_meaning: Optional[str] = None
 
 
 class ExtractedQuestion(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     question: Optional[str] = None
+    classification: Optional[str] = None
+    source: Optional[str] = None
+    original_text: Optional[str] = None
+    normalized_meaning: Optional[str] = None
+    grounding: Optional[str] = None
 
 
 class UnresolvedItem(BaseModel):
@@ -32,6 +39,8 @@ class TechnicalCaseAnalysisResponse(BaseModel):
     case_summary: Optional[str] = None
     requested_products: list[str] = Field(default_factory=list)
     requirements: list[ExtractedRequirement] = Field(default_factory=list)
+    customer_goal: list[ExtractedRequirement] = Field(default_factory=list)
+    existing_equipment: list[ExtractedRequirement] = Field(default_factory=list)
     customer_questions: list[ExtractedQuestion] = Field(default_factory=list)
     manufacturer_questions: list[ExtractedQuestion] = Field(default_factory=list)
     technical_questions: list[ExtractedQuestion] = Field(default_factory=list)

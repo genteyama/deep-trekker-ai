@@ -12,6 +12,14 @@ from llm.analysis_schema import (
     TechnicalCaseAnalysisResponse,
     UnresolvedItem,
 )
+from llm.completeness import (
+    ERROR_COMPLETENESS,
+    CompletenessError,
+    harden_analysis,
+    raise_if_fail,
+    validate_analysis_completeness,
+    validate_manufacturer_match_completeness,
+)
 from llm.provider import (
     ProviderError,
     TechnicalCaseProvider,
@@ -61,6 +69,7 @@ class TechnicalCaseRun:
         analysis_json: Optional[dict] = None,
         error_code: Optional[str] = None,
         error_details: Optional[str] = None,
+        completeness_issues: Optional[list] = None,
     ) -> None:
         self.success = success
         self.case = case
@@ -76,6 +85,7 @@ class TechnicalCaseRun:
         self.analysis_json = analysis_json
         self.error_code = error_code
         self.error_details = error_details
+        self.completeness_issues = completeness_issues or []
 
 
 class ManufacturerResponseRun:
@@ -91,6 +101,7 @@ class ManufacturerResponseRun:
         analysis_json: Optional[dict] = None,
         error_code: Optional[str] = None,
         error_details: Optional[str] = None,
+        completeness_issues: Optional[list] = None,
     ) -> None:
         self.success = success
         self.provider_name = provider_name
@@ -102,6 +113,7 @@ class ManufacturerResponseRun:
         self.analysis_json = analysis_json
         self.error_code = error_code
         self.error_details = error_details
+        self.completeness_issues = completeness_issues or []
 
 
 class QuestionMatchView:
@@ -145,6 +157,8 @@ def convert_requirements(
                 source=SOURCE_AI_EXTRACTED,
                 confirmed=False,
                 notes=item.notes,
+                original_text=item.original_text,
+                normalized_meaning=item.normalized_meaning,
             )
         )
     return requirements
@@ -168,6 +182,11 @@ def convert_questions(
                 status=QuestionStatus.DRAFT,
                 follow_up_required=False,
                 created_at=timestamp,
+                classification=item.classification,
+                source=item.source,
+                original_text=item.original_text,
+                normalized_meaning=item.normalized_meaning,
+                grounding=item.grounding,
             )
         )
     return questions
@@ -200,7 +219,9 @@ def run_technical_case_analysis(
             end_user_name=case.end_user_name,
             system_prompt=load_system_prompt(),
         )
-        analysis = validate_analysis_payload(payload)
+        analysis = harden_analysis(inquiry, validate_analysis_payload(payload))
+        issues = validate_analysis_completeness(inquiry, analysis)
+        raise_if_fail(issues)
         updated_case = case.model_copy(
             update={"requested_products": list(analysis.requested_products)}
         )
@@ -211,7 +232,12 @@ def run_technical_case_analysis(
             inquiry_text=inquiry,
             case_summary=analysis.case_summary,
             requested_products=list(analysis.requested_products),
-            requirements=convert_requirements(updated_case.case_id, analysis.requirements),
+            requirements=convert_requirements(
+                updated_case.case_id,
+                list(analysis.requirements)
+                + list(analysis.customer_goal)
+                + list(analysis.existing_equipment),
+            ),
             customer_questions=convert_questions(
                 updated_case.case_id,
                 analysis.customer_questions,
@@ -232,6 +258,17 @@ def run_technical_case_analysis(
             ),
             unresolved_items=list(analysis.unresolved_items),
             analysis_json=analysis.model_dump(mode="json"),
+            completeness_issues=issues,
+        )
+    except CompletenessError as error:
+        logger.exception("Technical case completeness failed")
+        return _failed_run(
+            case,
+            inquiry,
+            active_provider.name,
+            ERROR_COMPLETENESS,
+            str(error),
+            completeness_issues=error.issues,
         )
     except ProviderError as error:
         logger.exception("Technical case provider failed")
@@ -251,6 +288,7 @@ def _failed_run(
     provider_name: str,
     error_code: str,
     error_details: str,
+    completeness_issues: Optional[list] = None,
 ) -> TechnicalCaseRun:
     return TechnicalCaseRun(
         success=False,
@@ -259,6 +297,7 @@ def _failed_run(
         inquiry_text=inquiry,
         error_code=error_code,
         error_details=error_details,
+        completeness_issues=completeness_issues,
     )
 
 
@@ -333,6 +372,8 @@ def run_manufacturer_response_analysis(
             system_prompt=load_manufacturer_response_prompt(),
         )
         analysis = validate_manufacturer_response_payload(payload)
+        issues = validate_manufacturer_match_completeness(questions, analysis, original_text)
+        raise_if_fail(issues)
         matches = merge_response_matches(questions, analysis)
         return ManufacturerResponseRun(
             success=True,
@@ -341,8 +382,20 @@ def run_manufacturer_response_analysis(
             response_summary=analysis.response_summary,
             matches=matches,
             unmatched_information=list(analysis.unmatched_information),
-            overall_follow_up_required=analysis.overall_follow_up_required,
+            overall_follow_up_required=analysis.overall_follow_up_required
+            or any(view.candidate.follow_up_required for view in matches),
             analysis_json=analysis.model_dump(mode="json"),
+            completeness_issues=issues,
+        )
+    except CompletenessError as error:
+        logger.exception("Manufacturer response completeness failed")
+        return ManufacturerResponseRun(
+            success=False,
+            provider_name=active_provider.name,
+            original_response_text=original_text,
+            error_code=ERROR_COMPLETENESS,
+            error_details=str(error),
+            completeness_issues=error.issues,
         )
     except ProviderError as error:
         logger.exception("Manufacturer response provider failed")

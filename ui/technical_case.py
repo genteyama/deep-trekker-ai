@@ -29,6 +29,7 @@ from agents.technical_case_agent import (
     run_manufacturer_response_analysis,
     run_technical_case_analysis,
 )
+from llm.completeness import ERROR_COMPLETENESS
 from llm.provider import (
     ERROR_MISSING_API_KEY,
     get_provider_runtime_status,
@@ -170,6 +171,8 @@ def _render_run_result(page: dict, run: Optional[TechnicalCaseRun]) -> None:
     if not run.success:
         if run.error_code == ERROR_MISSING_API_KEY:
             st.error(page["missing_api_key"])
+        elif run.error_code == ERROR_COMPLETENESS:
+            st.error(page.get("completeness_error", page["analysis_error"]))
         else:
             st.error(page["analysis_error"])
         if run.error_details:
@@ -179,6 +182,7 @@ def _render_run_result(page: dict, run: Optional[TechnicalCaseRun]) -> None:
         return
 
     _render_summary_section(page, run)
+    _render_completeness_issues(page, getattr(run, "completeness_issues", []))
     _render_requirement_section(page, run.requirements)
     _render_question_section(page["section_customer_checks"], run.customer_questions, page)
     _render_question_section(page["section_manufacturer_checks"], run.manufacturer_questions, page)
@@ -229,12 +233,26 @@ def _render_question_section(
 ) -> None:
     with st.container(border=True):
         st.markdown(f"**{title}**")
-        visible_questions = [item.question for item in questions if item.question]
+        visible_questions = [item for item in questions if item.question]
         if not visible_questions:
             st.text(page["no_results"])
             return
-        for question in visible_questions:
-            st.write(f"- {question}")
+        for item in visible_questions:
+            suffix = ""
+            if (item.classification or item.source) == "AI_SUGGESTED":
+                suffix = f" ({page.get('ai_suggested_review', 'AI_SUGGESTED・要確認')})"
+            st.write(f"- {item.question}{suffix}")
+            if item.original_text:
+                st.caption(f"{page.get('original_text_label', 'customer wording')}: {item.original_text}")
+
+
+def _render_completeness_issues(page: dict, issues: list) -> None:
+    warnings = [item for item in issues if getattr(item, "severity", None) == "WARNING"]
+    if not warnings:
+        return
+    with st.expander(page.get("completeness_warnings_label", "Completeness warnings"), expanded=False):
+        for item in warnings:
+            st.warning(getattr(item, "message", str(item)))
 
 
 def _render_unresolved_section(page: dict, run: TechnicalCaseRun) -> None:
@@ -308,6 +326,8 @@ def _render_response_run(
             error_text = page["response_empty_text"]
         elif run.error_code == ERROR_MISSING_API_KEY:
             error_text = page["missing_api_key"]
+        elif run.error_code == ERROR_COMPLETENESS:
+            error_text = page.get("completeness_error", page["response_error"])
         st.error(error_text)
         if run.error_details:
             with st.expander(page["error_details_label"]):
