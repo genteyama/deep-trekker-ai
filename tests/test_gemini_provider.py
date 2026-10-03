@@ -10,6 +10,7 @@ from llm.gemini_provider import (
     DEFAULT_MODEL,
     ERROR_AUTH,
     ERROR_INVALID_JSON,
+    ERROR_RATE_LIMIT,
     ERROR_SCHEMA,
     MISSING_API_KEY_MESSAGE,
     THINKING_LEVEL,
@@ -154,6 +155,18 @@ def test_invalid_json_raises_provider_error():
     with pytest.raises(ProviderError, match="JSON") as raised:
         provider.analyze_technical_case("管内点検")
     assert raised.value.error_code == ERROR_INVALID_JSON
+
+
+def test_rate_limit_raises_provider_error_without_fallback():
+    provider, _ = make_provider(dumps({"ok": True}))
+    provider = GeminiTechnicalCaseProvider(
+        client=FakeGeminiClient(
+            ProviderError("Gemini API error (429): Rate limit exceeded", error_code=ERROR_RATE_LIMIT)
+        )
+    )
+    with pytest.raises(ProviderError, match="429") as raised:
+        provider.analyze_technical_case("管内点検")
+    assert raised.value.error_code == ERROR_RATE_LIMIT
 
 
 def test_authentication_error_raises_provider_error_without_fallback(monkeypatch):

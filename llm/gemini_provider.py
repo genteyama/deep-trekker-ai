@@ -41,6 +41,7 @@ ERROR_AUTH = "GEMINI_AUTH"
 ERROR_INVALID_JSON = "GEMINI_INVALID_JSON"
 ERROR_SCHEMA = "GEMINI_SCHEMA_VALIDATION"
 ERROR_HTTP = "GEMINI_HTTP"
+ERROR_RATE_LIMIT = "GEMINI_RATE_LIMIT"
 _SECRET_RE = re.compile(r"(AIza[0-9A-Za-z_-]{10,}|GEMINI_API_KEY\s*=\s*\S+)")
 
 logger = logging.getLogger(__name__)
@@ -58,6 +59,19 @@ def configured_model() -> str:
 
 def configured_endpoint() -> str:
     return (os.getenv("GEMINI_ENDPOINT") or "").strip() or DEFAULT_ENDPOINT
+
+
+def configured_timeout() -> float:
+    raw = (os.getenv("GEMINI_TIMEOUT_SECONDS") or "").strip()
+    if not raw:
+        return float(DEFAULT_TIMEOUT_SECONDS)
+    try:
+        timeout = float(raw)
+    except ValueError as error:
+        raise ProviderError("GEMINI_TIMEOUT_SECONDS is invalid") from error
+    if timeout <= 0:
+        raise ProviderError("GEMINI_TIMEOUT_SECONDS must be greater than 0")
+    return timeout
 
 
 def has_api_key() -> bool:
@@ -156,7 +170,12 @@ class UrllibGeminiClient:
             http_status = getattr(error, "code", None)
             raw = error.read().decode("utf-8", errors="replace") if error.fp else ""
             message = redact_secrets(_safe_error_message(raw) or str(error))
-            code = ERROR_AUTH if http_status in {401, 403} else ERROR_HTTP
+            if http_status in {401, 403}:
+                code = ERROR_AUTH
+            elif http_status == 429:
+                code = ERROR_RATE_LIMIT
+            else:
+                code = ERROR_HTTP
             raise ProviderError(
                 f"Gemini API error ({http_status}): {message}",
                 error_code=code,
@@ -282,7 +301,7 @@ class GeminiTechnicalCaseProvider(TechnicalCaseProvider):
             self._client = UrllibGeminiClient(
                 self._endpoint,
                 os.getenv("GEMINI_API_KEY") or "",
-                DEFAULT_TIMEOUT_SECONDS,
+                configured_timeout(),
             )
         return self._client
 

@@ -162,7 +162,7 @@ def test_app_starts_with_ollama_provider_without_api_key(monkeypatch):
 def test_app_starts_with_gemini_provider_without_api_key(monkeypatch):
     monkeypatch.setenv("TECHNICAL_CASE_PROVIDER", "gemini")
     monkeypatch.setenv("GEMINI_MODEL", "gemini-3.8-flash")
-    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.setenv("GEMINI_API_KEY", "")
 
     at = _start_app()
     assert not at.exception
@@ -196,7 +196,7 @@ def test_app_starts_with_gemini_provider_without_api_key(monkeypatch):
 
 def test_gemini_connection_test_without_key_does_not_send_customer_data(monkeypatch):
     monkeypatch.setenv("TECHNICAL_CASE_PROVIDER", "gemini")
-    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.setenv("GEMINI_API_KEY", "")
 
     at = _start_app()
     at.button(key="open_technical_case").click().run()
