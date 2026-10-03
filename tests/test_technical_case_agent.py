@@ -29,6 +29,7 @@ class AlternateProvider(TechnicalCaseProvider):
         customer_name=None,
         end_user_name=None,
         system_prompt=None,
+        approved_technical_facts=None,
     ) -> dict:
         return {
             "case_summary": "Alternate provider sample",

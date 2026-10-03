@@ -12,6 +12,14 @@ from llm.analysis_schema import (
     TechnicalCaseAnalysisResponse,
     UnresolvedItem,
 )
+from agents.fact_retrieval import (
+    build_fact_grounded_questions,
+    detect_requested_products,
+    facts_as_provider_payload,
+    facts_to_models,
+    merge_manufacturer_questions,
+    retrieve_approved_facts_for_products,
+)
 from llm.completeness import (
     ERROR_COMPLETENESS,
     CompletenessError,
@@ -70,6 +78,8 @@ class TechnicalCaseRun:
         error_code: Optional[str] = None,
         error_details: Optional[str] = None,
         completeness_issues: Optional[list] = None,
+        retrieved_facts: Optional[list] = None,
+        detected_products: Optional[list] = None,
     ) -> None:
         self.success = success
         self.case = case
@@ -86,6 +96,8 @@ class TechnicalCaseRun:
         self.error_code = error_code
         self.error_details = error_details
         self.completeness_issues = completeness_issues or []
+        self.retrieved_facts = retrieved_facts or []
+        self.detected_products = detected_products or []
 
 
 class ManufacturerResponseRun:
@@ -210,6 +222,15 @@ def run_technical_case_analysis(
         created_at=created_at,
     )
     inquiry = normalize_optional_text(inquiry_text)
+    detected_products = detect_requested_products(inquiry)
+    retrieved_facts = retrieve_approved_facts_for_products(detected_products)
+    if retrieved_facts:
+        logger.info(
+            "retrieved_facts products=%s count=%s fact_ids=%s",
+            detected_products,
+            len(retrieved_facts),
+            [item.get("fact_id") for item in retrieved_facts],
+        )
 
     try:
         payload = active_provider.analyze_technical_case(
@@ -218,10 +239,23 @@ def run_technical_case_analysis(
             customer_name=case.customer_name,
             end_user_name=case.end_user_name,
             system_prompt=load_system_prompt(),
+            approved_technical_facts=facts_as_provider_payload(retrieved_facts),
         )
         analysis = harden_analysis(inquiry, validate_analysis_payload(payload))
         issues = validate_analysis_completeness(inquiry, analysis)
         raise_if_fail(issues)
+        manufacturer_items = merge_manufacturer_questions(
+            list(analysis.manufacturer_questions),
+            build_fact_grounded_questions(inquiry, retrieved_facts),
+        )
+        analysis = analysis.model_copy(
+            update={
+                "manufacturer_questions": [
+                    item if isinstance(item, ExtractedQuestion) else ExtractedQuestion.model_validate(item)
+                    for item in manufacturer_items
+                ]
+            }
+        )
         updated_case = case.model_copy(
             update={"requested_products": list(analysis.requested_products)}
         )
@@ -259,6 +293,8 @@ def run_technical_case_analysis(
             unresolved_items=list(analysis.unresolved_items),
             analysis_json=analysis.model_dump(mode="json"),
             completeness_issues=issues,
+            retrieved_facts=facts_to_models(retrieved_facts),
+            detected_products=detected_products,
         )
     except CompletenessError as error:
         logger.exception("Technical case completeness failed")
@@ -298,6 +334,8 @@ def _failed_run(
         error_code=error_code,
         error_details=error_details,
         completeness_issues=completeness_issues,
+        retrieved_facts=facts_to_models(retrieve_approved_facts_for_products(detect_requested_products(inquiry))),
+        detected_products=detect_requested_products(inquiry),
     )
 
 

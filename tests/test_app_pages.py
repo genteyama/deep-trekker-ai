@@ -81,6 +81,28 @@ def test_analyze_button_shows_mock_results():
     assert at.error.len == 0
 
 
+def test_mag_inquiry_shows_retrieved_approved_facts():
+    at = _start_app()
+    at.button(key="open_technical_case").click().run()
+    at.text_area(key="input_customer_inquiry").set_value(
+        "MAG Utility Crawlerで鋼製円筒タンクの水中肉厚測定を検討。側面と底面。測定した場所を把握したい。"
+    )
+    at.button(key="analyze_inquiry").click().run()
+
+    visible_text = " ".join(
+        [item.value for item in at.text] + [item.value for item in at.markdown] + [item.value for item in at.caption]
+    )
+    assert "参照した承認済み技術情報" in visible_text
+    assert "異なる面へ連続して移動できない" in visible_text
+    assert "自己位置を把握する機能はない" in visible_text
+    assert "Cygnus" in visible_text
+    assert "ROVと超音波肉厚計" in visible_text
+    assert "この案件への適用は未確定" in visible_text
+    assert "45kgf" not in visible_text
+    assert "ATEX" not in visible_text
+    assert DEFAULT_MOCK_PAYLOAD["case_summary"] in visible_text
+
+
 def test_app_starts_without_claude_api_key(monkeypatch):
     monkeypatch.setenv("TECHNICAL_CASE_PROVIDER", "anthropic")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "")

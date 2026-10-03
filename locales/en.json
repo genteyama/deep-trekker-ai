@@ -38,6 +38,8 @@
       "review_json": "Review analysis data",
       "requested_products_label": "Customer-requested products",
       "requested_products_note": "These products were requested by the customer. They are not recommended products.",
+      "retrieved_facts_label": "Retrieved approved technical facts",
+      "retrieved_facts_note": "These are human-approved reusable facts. Applicability to this case is unconfirmed. A person makes the final decision.",
       "completeness_warnings_label": "Completeness warnings",
       "completeness_error": "The analysis failed a business completeness check",
       "ai_suggested_review": "AI_SUGGESTED, needs review",

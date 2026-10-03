@@ -19,6 +19,7 @@ from llm.provider import (
     ConnectionTestResult,
     ProviderError,
     TechnicalCaseProvider,
+    attach_approved_facts,
     record_runtime_status,
 )
 from llm.usage import TokenUsageRecord, utc_now_iso
@@ -249,13 +250,17 @@ class OllamaTechnicalCaseProvider(TechnicalCaseProvider):
         customer_name: Optional[str] = None,
         end_user_name: Optional[str] = None,
         system_prompt: Optional[str] = None,
+        approved_technical_facts: Optional[list] = None,
     ) -> dict:
-        user_input = {
-            "case_name": case_name,
-            "customer_name": customer_name,
-            "end_user_name": end_user_name,
-            "inquiry_text": inquiry_text,
-        }
+        user_input = attach_approved_facts(
+            {
+                "case_name": case_name,
+                "customer_name": customer_name,
+                "end_user_name": end_user_name,
+                "inquiry_text": inquiry_text,
+            },
+            approved_technical_facts,
+        )
         return self._parse(
             system_prompt,
             user_input,

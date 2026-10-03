@@ -129,6 +129,7 @@ class MockTechnicalCaseProvider(TechnicalCaseProvider):
         customer_name: Optional[str] = None,
         end_user_name: Optional[str] = None,
         system_prompt: Optional[str] = None,
+        approved_technical_facts: Optional[list] = None,
     ) -> dict:
         if self._error is not None:
             if isinstance(self._error, ProviderError):

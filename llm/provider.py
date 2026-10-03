@@ -34,8 +34,19 @@ class TechnicalCaseProvider(ABC):
         customer_name: Optional[str] = None,
         end_user_name: Optional[str] = None,
         system_prompt: Optional[str] = None,
+        approved_technical_facts: Optional[list] = None,
     ) -> dict:
         raise NotImplementedError
+
+
+def attach_approved_facts(user_input: dict, approved_technical_facts: Optional[list]) -> dict:
+    if approved_technical_facts:
+        user_input["approved_technical_facts"] = approved_technical_facts
+        user_input["approved_technical_facts_usage"] = (
+            "Human-approved reusable facts. Applicability to this case is unconfirmed. "
+            "Use as grounding only. Do not invent extra specifications."
+        )
+    return user_input
 
     @abstractmethod
     def analyze_manufacturer_response(

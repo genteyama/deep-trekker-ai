@@ -224,6 +224,20 @@ def _render_summary_section(page: dict, run: TechnicalCaseRun) -> None:
             for product in run.requested_products:
                 st.write(f"- {product}")
             st.caption(page["requested_products_note"])
+        _render_retrieved_facts(page, getattr(run, "retrieved_facts", []))
+
+
+def _render_retrieved_facts(page: dict, facts: list) -> None:
+    if not facts:
+        return
+    st.markdown(f"**{page.get('retrieved_facts_label', '参照した承認済み技術情報')}**")
+    st.caption(page.get("retrieved_facts_note", "人が承認した再利用Factです。この案件への適用は未確定です。"))
+    confidence_labels = page.get("fact_confidence", {})
+    for fact in facts:
+        confidence = getattr(fact.confidence, "value", fact.confidence) if fact.confidence else None
+        label = confidence_labels.get(confidence, confidence or page.get("no_value", "-"))
+        st.write(f"- {fact.product or page.get('unnamed_item', '項目')} / {fact.topic or '-'}: {fact.fact}")
+        st.caption(f"{page.get('fact_confidence_label', '確信度')}: {label}")
 
 
 def _render_requirement_section(page: dict, requirements: list[CaseRequirement]) -> None:

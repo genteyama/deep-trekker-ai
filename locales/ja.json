@@ -38,6 +38,8 @@
       "review_json": "解析データを確認",
       "requested_products_label": "顧客指定製品",
       "requested_products_note": "顧客が指定した製品です。推奨製品ではありません。",
+      "retrieved_facts_label": "参照した承認済み技術情報",
+      "retrieved_facts_note": "人が承認した再利用Factです。この案件への適用は未確定です。最終判断は人が行います。",
       "completeness_warnings_label": "構造化の確認事項",
       "completeness_error": "解析結果の業務チェックで問題が見つかりました",
       "ai_suggested_review": "AI_SUGGESTED・要確認",

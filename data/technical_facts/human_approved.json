@@ -1,0 +1,70 @@
+{
+  "catalog_id": "human_approved_technical_facts",
+  "notes": "Only human-registered reusable facts. Not a prompt. Not raw manufacturer email.",
+  "facts": [
+    {
+      "fact_id": "FACT-MAG-SURFACE-TRANSITION",
+      "case_id": "IHI-TECH-001",
+      "product": "MAG Utility Crawler",
+      "topic": "surface_transition_constraint",
+      "fact": "MAGはタンク内部で、壁面から底面、天面から側面など、異なる面へ連続して移動できない。",
+      "scope": "PRODUCT_REUSABLE",
+      "status": "HUMAN_REGISTERED",
+      "confidence": "MANUFACTURER_CONFIRMED",
+      "source_type": "MANUFACTURER_RESPONSE",
+      "source_reference": "IHI-TECH-001-MR-001:mag_cannot_transition_surfaces",
+      "is_time_sensitive": false,
+      "notes": "Human approved. Applicability to a new tank still requires review.",
+      "inquiry_triggers": ["側面", "底面", "タンク"],
+      "remaining_open_question": "本タンクの側面・底面でも、この面移動制約が適用されるか確認してください。"
+    },
+    {
+      "fact_id": "FACT-MAG-SELF-POSITION",
+      "case_id": "IHI-TECH-001",
+      "product": "MAG Utility Crawler",
+      "topic": "structure_self_position",
+      "fact": "MAG Utility Crawlerには、水深・高度・テザー繰出量などを利用して構造物上の自己位置を把握する機能はない。",
+      "scope": "PRODUCT_REUSABLE",
+      "status": "HUMAN_REGISTERED",
+      "confidence": "MANUFACTURER_CONFIRMED",
+      "source_type": "MANUFACTURER_RESPONSE",
+      "source_reference": "IHI-TECH-001-MR-001:mag_no_structure_self_position",
+      "is_time_sensitive": false,
+      "notes": "Human approved. Do not reinterpret as GPSがない.",
+      "inquiry_triggers": ["測定した場所", "測定位置", "位置を把握"],
+      "remaining_open_question": "自己位置機能がない前提で、測定位置の記録・管理方法を追加確認してください。顧客文言を別の測位技術名へ置き換えないでください。"
+    },
+    {
+      "fact_id": "FACT-MAG-CYGNUS",
+      "case_id": "IHI-TECH-001",
+      "product": "MAG Utility Crawler",
+      "topic": "cygnus_compatibility",
+      "fact": "MAGとCygnus Thickness Gaugeの組み合わせは可能。本体は機体間で付け替えて共有でき、各機体専用のIntegration Kitはそれぞれ必要。",
+      "scope": "PRODUCT_REUSABLE",
+      "status": "HUMAN_REGISTERED",
+      "confidence": "MANUFACTURER_CONFIRMED",
+      "source_type": "MANUFACTURER_RESPONSE",
+      "source_reference": "IHI-TECH-001-MR-001:cygnus_body_shareable;integration_kit_required_per_vehicle",
+      "is_time_sensitive": false,
+      "notes": "Human approved. Cygnus and Elevated Pan Tilt simultaneous use is not included.",
+      "inquiry_triggers": ["超音波", "厚さ計", "肉厚測定"],
+      "remaining_open_question": "本案件のMAG＋超音波厚さ計構成を確認してください。CygnusとElevated Pan Tiltの同時搭載可否はこのFactに含まれません。"
+    },
+    {
+      "fact_id": "FACT-MAG-UNDERWATER-TANK-RECOMMENDATION",
+      "case_id": "IHI-TECH-001",
+      "product": "MAG Utility Crawler",
+      "topic": "underwater_tank_manufacturer_recommendation",
+      "fact": "水環境下のタンク内部における肉厚計測について、メーカーはROVと超音波肉厚計による方法を推奨した。候補として PHOTON + Cygnus Thickness Gauge が提案された。",
+      "scope": "PRODUCT_REUSABLE",
+      "status": "HUMAN_REGISTERED",
+      "confidence": "MANUFACTURER_CONFIRMED",
+      "source_type": "MANUFACTURER_RESPONSE",
+      "source_reference": "IHI-TECH-001-MR-001:manufacturer_recommends_rov_plus_gauge;photon_plus_cygnus_proposed",
+      "is_time_sensitive": false,
+      "notes": "Human approved. This is MANUFACTURER_RECOMMENDED, not a MAG recommendation. MAG remains CUSTOMER_REQUESTED. MAG remaining tank constraints still need follow-up.",
+      "inquiry_triggers": ["水中", "タンク"],
+      "remaining_open_question": "メーカー推奨はROV＋超音波肉厚計です。MAGを推奨したことではありません。本タンクにおけるMAGの残る適性制約を追加確認してください。"
+    }
+  ]
+}
