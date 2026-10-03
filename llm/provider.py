@@ -74,12 +74,16 @@ def get_technical_case_provider(
     selected = selected_provider_name(provider_name)
     if selected == "mock":
         return MockTechnicalCaseProvider()
+    if selected == "ollama":
+        from llm.ollama_provider import OllamaTechnicalCaseProvider
+
+        return OllamaTechnicalCaseProvider()
     if selected == "anthropic":
         from llm.anthropic_provider import AnthropicTechnicalCaseProvider
 
         return AnthropicTechnicalCaseProvider()
 
-    raise ProviderError(f"Provider '{selected}' is not available yet")
+    raise ProviderError(f"Provider '{selected}' is not available")
 
 
 def record_runtime_status(
@@ -115,6 +119,23 @@ def get_provider_runtime_status() -> dict:
             "connection": _RUNTIME["connection"],
             "last_usage": _RUNTIME["last_usage"],
             "supports_connection_test": True,
+            "show_fallbacks": True,
+            "connection_test_button_key": "claude_connection_test",
+        }
+    if selected == "ollama":
+        from llm.ollama_provider import configured_model as ollama_model
+
+        return {
+            "provider_id": "ollama",
+            "provider_label": "Local AI (Ollama)",
+            "model": ollama_model(),
+            "fallbacks_enabled": False,
+            "api_key_configured": False,
+            "connection": _RUNTIME["connection"],
+            "last_usage": _RUNTIME["last_usage"],
+            "supports_connection_test": True,
+            "show_fallbacks": False,
+            "connection_test_button_key": "ollama_connection_test",
         }
     return {
         "provider_id": selected if selected == "mock" else selected,
@@ -125,6 +146,8 @@ def get_provider_runtime_status() -> dict:
         "connection": CONNECTION_DISCONNECTED,
         "last_usage": None,
         "supports_connection_test": False,
+        "show_fallbacks": False,
+        "connection_test_button_key": None,
     }
 
 

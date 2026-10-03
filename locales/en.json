@@ -124,8 +124,10 @@
       "connection_label": "Connection",
       "fallbacks_label": "Fallbacks",
       "connection_test_button": "Claude connection test",
+      "ollama_connection_test_button": "Ollama connection test",
       "connection_ok": "Connection OK",
       "connection_error": "Claude connection test failed",
+      "ollama_connection_error": "Ollama connection test failed",
       "connection_states": {
         "disconnected": "Not connected",
         "connected": "Connected",

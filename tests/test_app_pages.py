@@ -134,6 +134,31 @@ def test_claude_connection_test_without_key_does_not_send_customer_data(monkeypa
     assert "ANTHROPIC_API_KEY" not in visible_text
 
 
+def test_app_starts_with_ollama_provider_without_api_key(monkeypatch):
+    monkeypatch.setenv("TECHNICAL_CASE_PROVIDER", "ollama")
+    monkeypatch.setenv("OLLAMA_MODEL", "qwen3.5:9b")
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+    at = _start_app()
+    assert not at.exception
+
+    at.button(key="open_technical_case").click().run()
+    assert not at.exception
+
+    visible_text = " ".join(
+        [item.value for item in at.text] + [item.value for item in at.markdown]
+    )
+    assert any("AI Provider" in (expander.label or "") for expander in at.expander)
+    assert "Local AI (Ollama)" in visible_text
+    assert "qwen3.5:9b" in visible_text
+    assert "未接続" in visible_text
+    assert any(getattr(button, "key", None) == "ollama_connection_test" for button in at.button)
+    assert not any(getattr(button, "key", None) == "claude_connection_test" for button in at.button)
+    assert "ANTHROPIC_API_KEY" not in visible_text
+    assert "sk-ant" not in visible_text
+    assert not any("開発用Mock解析" in (item.value or "") for item in at.warning)
+
+
 def test_manufacturer_response_button_shows_mock_matches():
     at = _start_app()
     at.button(key="open_technical_case").click().run()

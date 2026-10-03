@@ -132,9 +132,18 @@ def _render_provider_status(page: dict) -> None:
             f"{page.get('connection_label', 'Connection')}: "
             f"{connection_labels.get(status['connection'], status['connection'])}"
         )
-        st.caption(page.get("fallbacks_label", "Fallbacks") + f": {'ON' if status['fallbacks_enabled'] else 'OFF'}")
+        if status.get("show_fallbacks"):
+            st.caption(page.get("fallbacks_label", "Fallbacks") + f": {'ON' if status['fallbacks_enabled'] else 'OFF'}")
         if status.get("supports_connection_test"):
-            if st.button(page.get("connection_test_button", "Claude接続テスト"), key="claude_connection_test"):
+            if status.get("provider_id") == "ollama":
+                button_label = page.get("ollama_connection_test_button", "Ollama接続テスト")
+                button_key = status.get("connection_test_button_key") or "ollama_connection_test"
+                failed_label = page.get("ollama_connection_error", "Ollama接続テストに失敗しました")
+            else:
+                button_label = page.get("connection_test_button", "Claude接続テスト")
+                button_key = status.get("connection_test_button_key") or "claude_connection_test"
+                failed_label = page.get("connection_error", "Claude接続テストに失敗しました")
+            if st.button(button_label, key=button_key):
                 st.session_state["provider_connection_test"] = run_provider_connection_test()
                 st.rerun()
             result = st.session_state.get("provider_connection_test")
@@ -144,7 +153,7 @@ def _render_provider_status(page: dict) -> None:
                 elif result.error_code == ERROR_MISSING_API_KEY:
                     st.error(page["missing_api_key"])
                 else:
-                    st.error(page.get("connection_error", "Claude接続テストに失敗しました"))
+                    st.error(failed_label)
         usage = status.get("last_usage")
         if usage is not None:
             st.caption(
