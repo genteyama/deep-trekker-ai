@@ -11,6 +11,38 @@ def _start_app() -> AppTest:
     return AppTest.from_file(str(APP_PATH)).run()
 
 
+def test_home_dashboard_shows_both_work_kinds():
+    at = _start_app()
+    visible = " ".join(
+        [item.value for item in at.text]
+        + [item.value for item in at.markdown]
+        + [item.value for item in at.caption]
+    )
+    assert "進行中の案件" in visible
+    assert "営業・技術受付AI" in visible
+    assert "見積・価格管理AI" in visible
+    assert at.button(key="open_technical_case").disabled is False
+    assert at.button(key="open_quote_control").disabled is False
+    assert "入力不足のため次へ進めません" not in visible
+
+
+def test_incomplete_technical_case_does_not_block_actions():
+    at = _start_app()
+    at.button(key="open_technical_case").click().run()
+    visible = " ".join(
+        [item.value for item in at.text]
+        + [item.value for item in at.markdown]
+        + [item.value for item in at.caption]
+    )
+    assert at.button(key="analyze_inquiry").disabled is False
+    assert at.button(key="organize_manufacturer_response").disabled is False
+    assert at.button(key="save_technical_case").disabled is False
+    assert at.button(key="new_technical_case").disabled is False
+    assert "入力不足のため次へ進めません" not in visible
+    assert "進捗" in visible
+    assert "要確認" in visible
+
+
 def test_home_opens_technical_case_page():
     at = _start_app()
 

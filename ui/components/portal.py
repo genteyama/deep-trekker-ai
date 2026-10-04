@@ -116,6 +116,7 @@ def render_recent_draft_list(
         if st.button(
             workspace.get("resume_draft_button", "作業を再開"),
             key=f"{resume_key_prefix}{item.quote_draft_id}_{item.version}",
+            type="secondary",
         ):
             on_resume(item.quote_draft_id, item.version)
 

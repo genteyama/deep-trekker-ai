@@ -1,14 +1,17 @@
 import streamlit as st
 
 from ui.components.quote_summary import render_summary_cards
+from ui.components.status import render_progress_summary
 from ui.quote_format import display_percent, display_yen
 from ui.quote_persistence import SESSION_SAVE_AT, SESSION_SAVE_ERROR, SESSION_SAVE_STATUS, format_saved_at
 from ui.quote_steps import build_header_summary
+from ui.work_status import summarize_quote
 
 
 def render_quote_header(page: dict, draft, snapshot) -> None:
     workspace = page["workspace"]
     summary = build_header_summary(draft, snapshot)
+    work = summarize_quote(draft, snapshot)
     if draft is None and snapshot is None:
         st.info(workspace["header_empty"])
         return
@@ -26,6 +29,7 @@ def render_quote_header(page: dict, draft, snapshot) -> None:
             meta[2].write(f"{page['column_version']}：v{summary['quote_version']}")
         if summary["quote_draft_id"]:
             st.caption(f"{workspace['draft_id_label']}: {summary['quote_draft_id']}")
+        render_progress_summary(work, workspace)
         render_summary_cards(
             [
                 (workspace["header_total"], display_yen(summary["total"], None)),

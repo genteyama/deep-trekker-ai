@@ -58,12 +58,15 @@ from ui.technical_case_flow import (
     SESSION_RESPONSE_RUN,
     SESSION_RUN,
 )
+from ui.components.status import item_badge_label, render_progress_summary, render_work_card
 from ui.technical_case_persistence import (
     get_technical_case_repository,
     persist_technical_case,
     resume_case_into_session,
     start_new_technical_case,
 )
+from ui.work_status import summarize_technical_case
+
 FACT_SELECT_PREFIX = "use_fact_"
 APPROVAL_STATUS_OPTIONS = (
     SuggestedQuestionStatus.ANSWERED,
@@ -82,41 +85,55 @@ RESULT_SECTIONS = (
 
 def render_technical_case(texts: dict) -> None:
     page = texts["pages"]["technical_case"]
+    _apply_pending_resume()
 
-    if st.button(texts["back_to_home"], key="back_to_home"):
+    if st.button(texts["back_to_home"], key="back_to_home", type="secondary"):
         set_current_page(PAGE_HOME)
         st.rerun()
 
     st.title(page["title"])
     st.caption(page["internal_name"])
     st.write(page["description"])
-    _render_case_workspace(page)
+    summary = _current_work_summary()
+    _render_case_summary(page, summary)
+    _render_case_actions(page)
 
     if get_active_provider_name() == "mock":
         st.warning(page["mock_warning"])
-    _render_provider_status(page)
+    with st.expander(page.get("provider_status_label", "AI Provider"), expanded=False):
+        _render_provider_status(page)
 
-    st.divider()
-
-    st.subheader(page["section_inquiry"])
-    inquiry_text = st.text_area(
-        page["inquiry_label"],
-        key="input_customer_inquiry",
-        height=180,
-    )
-    _render_knowledge_selection(page, inquiry_text)
-
-    with st.form("technical_case_intake"):
-        st.subheader(page["section_case_info"])
-        case_name = st.text_input(page["case_name"], key="input_case_name")
-        customer_name = st.text_input(page["customer_name"], key="input_customer_name")
-        end_user_name = st.text_input(page["end_user_name"], key="input_end_user_name")
-        st.caption(page["end_user_hint"])
-        submitted = st.form_submit_button(
-            page["analyze_button"],
-            key="analyze_inquiry",
-            type="primary",
+    inquiry_text = ""
+    with render_work_card(
+        page["section_inquiry"],
+        item_badge_label(summary, "inquiry"),
+        expanded=True,
+        key="card_inquiry",
+    ):
+        inquiry_text = st.text_area(
+            page["inquiry_label"],
+            key="input_customer_inquiry",
+            height=180,
         )
+        _render_knowledge_selection(page, inquiry_text)
+
+    submitted = False
+    with render_work_card(
+        page["section_case_info"],
+        item_badge_label(summary, "case_info"),
+        expanded=True,
+        key="card_case_info",
+    ):
+        with st.form("technical_case_intake"):
+            case_name = st.text_input(page["case_name"], key="input_case_name")
+            customer_name = st.text_input(page["customer_name"], key="input_customer_name")
+            end_user_name = st.text_input(page["end_user_name"], key="input_end_user_name")
+            st.caption(page["end_user_hint"])
+            submitted = st.form_submit_button(
+                page["analyze_button"],
+                key="analyze_inquiry",
+                type="primary",
+            )
 
     if submitted:
         existing_case = st.session_state.get(SESSION_CASE)
@@ -135,37 +152,111 @@ def render_technical_case(texts: dict) -> None:
         st.session_state[SESSION_ANALYSIS] = run.analysis_json
         persist_technical_case(st.session_state, run)
 
-    st.divider()
-    st.subheader(page["section_results"])
-    _render_run_result(page, st.session_state.get(SESSION_RUN))
-
-    st.divider()
-    _render_manufacturer_response_section(page, st.session_state.get(SESSION_RUN))
-    _render_technical_fact_view(page)
-
-
-def _render_case_workspace(page: dict) -> None:
-    repo = get_technical_case_repository()
     run = st.session_state.get(SESSION_RUN)
-    status_labels = page.get("case_status", {})
-    current_status = None
-    if run is not None and run.case is not None:
-        current_status = run.case.status
+    analyzed = bool(run and run.success)
+    with render_work_card(
+        page["section_results"],
+        item_badge_label(summary, "requirements"),
+        expanded=run is None or analyzed,
+        key="card_results",
+    ):
+        _render_run_result(page, run)
+
+    with render_work_card(
+        page["retrieved_facts_label"],
+        item_badge_label(summary, "knowledge"),
+        expanded=analyzed,
+        key="card_knowledge",
+    ):
+        if analyzed:
+            _render_retrieved_facts(page, run)
+        else:
+            st.text(page["no_results"])
+
+    with render_work_card(
+        page["section_manufacturer_checks"],
+        item_badge_label(summary, "human_review") if summary.review_required else item_badge_label(summary, "manufacturer_questions"),
+        expanded=analyzed,
+        key="card_manufacturer_questions",
+    ):
+        if analyzed:
+            _render_question_section(page["section_manufacturer_checks"], run.manufacturer_questions, page)
+        else:
+            st.text(page["no_results"])
+
+    with render_work_card(
+        page["section_manufacturer_response"],
+        item_badge_label(summary, "manufacturer_response"),
+        expanded=True,
+        key="card_manufacturer_response",
+    ):
+        _render_manufacturer_response_section(page, run)
+
+    with render_work_card(
+        page.get("section_evidence", "Evidence Validation"),
+        item_badge_label(summary, "evidence_validation"),
+        expanded=bool(st.session_state.get(SESSION_RESPONSE_RUN)),
+        key="card_evidence",
+    ):
+        _render_evidence_card(page, st.session_state.get(SESSION_RESPONSE_RUN))
+
+    with render_work_card(
+        page.get("section_customer_reply", "顧客回答準備"),
+        item_badge_label(summary, "customer_reply"),
+        expanded=bool(st.session_state.get(SESSION_APPROVAL_BOARD)),
+        key="card_customer_reply",
+    ):
+        board = st.session_state.get(SESSION_APPROVAL_BOARD)
+        if board:
+            _render_approval_summary(page, board)
+        else:
+            st.text(page.get("response_no_results", page["no_results"]))
+
+    _render_technical_fact_view(page)
+    _render_recent_cases(page)
+
+
+def _current_work_summary():
+    record = None
     saved_id = st.session_state.get("technical_case_saved_id")
     if saved_id:
-        saved = repo.get_case(saved_id)
-        if saved is not None:
-            current_status = saved.status
-    if current_status:
-        st.caption(
-            f"{page.get('case_status_label', '案件状態')}: "
-            f"{status_labels.get(current_status, current_status)}"
-        )
+        record = get_technical_case_repository().get_case(saved_id)
+    return summarize_technical_case(
+        inquiry_text=st.session_state.get("input_customer_inquiry") or st.session_state.get(SESSION_INQUIRY),
+        case_name=st.session_state.get("input_case_name"),
+        customer_name=st.session_state.get("input_customer_name"),
+        run=st.session_state.get(SESSION_RUN),
+        response_run=st.session_state.get(SESSION_RESPONSE_RUN),
+        record=record,
+    )
+
+
+def _render_case_summary(page: dict, summary) -> None:
+    status_labels = page.get("case_status", {})
+    with st.container(border=True):
+        cols = st.columns([2, 1])
+        with cols[0]:
+            st.markdown(f"**{summary.title or page.get('unnamed_item', '項目')}**")
+            st.write(summary.customer or page.get("no_value", "-"))
+            st.caption(f"{page.get('end_user_name', 'End User')}: {st.session_state.get('input_end_user_name') or '-'}")
+        with cols[1]:
+            st.caption(
+                f"{page.get('case_status_label', '案件状態')}: "
+                f"{status_labels.get(summary.process_status, summary.process_label())}"
+            )
+            render_progress_summary(summary, page)
+            st.caption(f"{page.get('provider_label', 'AI Provider')}: {summary.provider or '-'}")
+            st.caption(f"{page.get('model_label', 'Model')}: {summary.model or '-'}")
+            if summary.updated_at:
+                st.caption(f"{page.get('updated_at_label', '最終更新')}: {summary.updated_at}")
+
+
+def _render_case_actions(page: dict) -> None:
     cols = st.columns(3)
-    if cols[0].button(page.get("new_case_button", "新規案件"), key="new_technical_case"):
+    if cols[0].button(page.get("new_case_button", "新規案件"), key="new_technical_case", type="secondary"):
         start_new_technical_case(st.session_state)
         st.rerun()
-    if cols[1].button(page.get("save_case_button", "保存"), key="save_technical_case"):
+    if cols[1].button(page.get("save_case_button", "保存"), key="save_technical_case", type="primary"):
         persist_technical_case(
             st.session_state,
             st.session_state.get(SESSION_RUN),
@@ -173,44 +264,84 @@ def _render_case_workspace(page: dict) -> None:
             st.session_state.get(SESSION_APPROVAL_BOARD),
         )
         st.rerun()
-    if cols[2].button(page.get("complete_case_button", "案件を完了"), key="complete_technical_case"):
-        persist_technical_case(
-            st.session_state,
-            st.session_state.get(SESSION_RUN),
-            st.session_state.get(SESSION_RESPONSE_RUN),
-            st.session_state.get(SESSION_APPROVAL_BOARD),
-            completed=True,
-        )
-        st.rerun()
+    with cols[2]:
+        st.markdown("<div class='dt-complete-wrap'>", unsafe_allow_html=True)
+        completed = st.button(page.get("complete_case_button", "案件を完了"), key="complete_technical_case", type="secondary")
+        st.markdown("</div>", unsafe_allow_html=True)
+        if completed:
+            persist_technical_case(
+                st.session_state,
+                st.session_state.get(SESSION_RUN),
+                st.session_state.get(SESSION_RESPONSE_RUN),
+                st.session_state.get(SESSION_APPROVAL_BOARD),
+                completed=True,
+            )
+            st.rerun()
     if st.session_state.get("technical_case_save_status") == "saved":
         st.success(page.get("case_saved", "案件を保存しました"))
     elif st.session_state.get("technical_case_save_error"):
         st.error(page.get("case_save_error", "案件を保存できませんでした"))
+
+
+def _render_evidence_card(page: dict, run: Optional[ManufacturerResponseRun]) -> None:
+    if run is None or not run.success:
+        st.text(page.get("response_no_results", page["no_results"]))
+        return
+    shown = False
+    for view in getattr(run, "matches", None) or []:
+        validation = getattr(view, "validation", None)
+        question = getattr(view, "question", None)
+        if validation is None:
+            continue
+        shown = True
+        label = getattr(question, "question", None) or page.get("unnamed_item", "項目")
+        st.write(f"- {label}")
+        if validation.reason:
+            st.caption(
+                f"{page.get('validation_reason_label', 'Validation')}: {validation.reason} / "
+                f"review={validation.requires_human_review}"
+            )
+    if not shown:
+        st.caption(page.get("validation_reason_label", "Validation"))
+
+
+def _render_recent_cases(page: dict) -> None:
+    repo = get_technical_case_repository()
     recent = repo.list_recent_cases()
     st.markdown(f"**{page.get('recent_cases_label', '最近の案件')}**")
-    if not recent:
-        st.caption(page.get("recent_cases_empty", "保存済み案件はまだありません"))
-        return
-    for item in recent:
-        label = " / ".join(
-            part
-            for part in (
-                item.customer_name or page.get("unnamed_item", "項目"),
-                item.case_title or page.get("unnamed_item", "項目"),
-                status_labels.get(item.status, item.status or "-"),
-                item.updated_at,
-                item.provider or "-",
+    with st.expander(page.get("recent_cases_label", "最近の案件"), expanded=False):
+        if not recent:
+            st.caption(page.get("recent_cases_empty", "保存済み案件はまだありません"))
+            return
+        status_labels = page.get("case_status", {})
+        for item in recent:
+            label = " / ".join(
+                part
+                for part in (
+                    item.customer_name or page.get("unnamed_item", "項目"),
+                    item.case_title or page.get("unnamed_item", "項目"),
+                    status_labels.get(item.status, item.status or "-"),
+                    item.updated_at,
+                    item.provider or "-",
+                )
+                if part
             )
-            if part
-        )
-        if st.button(
-            f"{page.get('resume_case_button', '案件を再開')}: {label}",
-            key=f"resume_technical_case_{item.case_id}",
-        ):
-            loaded = repo.get_case(item.case_id)
-            if loaded is not None:
-                resume_case_into_session(loaded, st.session_state)
+            if st.button(
+                f"{page.get('resume_case_button', '案件を再開')}: {label}",
+                key=f"resume_technical_case_{item.case_id}",
+                type="secondary",
+            ):
+                st.session_state["pending_resume_case_id"] = item.case_id
                 st.rerun()
+
+
+def _apply_pending_resume() -> None:
+    case_id = st.session_state.pop("pending_resume_case_id", None)
+    if not case_id:
+        return
+    loaded = get_technical_case_repository().get_case(case_id)
+    if loaded is not None:
+        resume_case_into_session(loaded, st.session_state)
 
 
 def _missing_key_text(page: dict) -> str:
@@ -225,45 +356,44 @@ def _render_provider_status(page: dict) -> None:
         "connection_states",
         {"disconnected": "未接続", "connected": "接続済み", "error": "エラー"},
     )
-    with st.expander(page.get("provider_status_label", "AI Provider"), expanded=False):
-        st.write(f"{page.get('provider_label', 'AI Provider')}: {status['provider_label']}")
-        st.write(f"{page.get('model_label', 'Model')}: {status['model'] or page.get('no_value', '-')}")
-        st.write(
-            f"{page.get('connection_label', 'Connection')}: "
-            f"{connection_labels.get(status['connection'], status['connection'])}"
-        )
-        if status.get("show_fallbacks"):
-            st.caption(page.get("fallbacks_label", "Fallbacks") + f": {'ON' if status['fallbacks_enabled'] else 'OFF'}")
-        if status.get("supports_connection_test"):
-            if status.get("provider_id") == "ollama":
-                button_label = page.get("ollama_connection_test_button", "Ollama接続テスト")
-                button_key = status.get("connection_test_button_key") or "ollama_connection_test"
-                failed_label = page.get("ollama_connection_error", "Ollama接続テストに失敗しました")
-            elif status.get("provider_id") == "gemini":
-                button_label = page.get("gemini_connection_test_button", "Gemini接続テスト")
-                button_key = status.get("connection_test_button_key") or "gemini_connection_test"
-                failed_label = page.get("gemini_connection_error", "Gemini接続テストに失敗しました")
+    st.write(f"{page.get('provider_label', 'AI Provider')}: {status['provider_label']}")
+    st.write(f"{page.get('model_label', 'Model')}: {status['model'] or page.get('no_value', '-')}")
+    st.write(
+        f"{page.get('connection_label', 'Connection')}: "
+        f"{connection_labels.get(status['connection'], status['connection'])}"
+    )
+    if status.get("show_fallbacks"):
+        st.caption(page.get("fallbacks_label", "Fallbacks") + f": {'ON' if status['fallbacks_enabled'] else 'OFF'}")
+    if status.get("supports_connection_test"):
+        if status.get("provider_id") == "ollama":
+            button_label = page.get("ollama_connection_test_button", "Ollama接続テスト")
+            button_key = status.get("connection_test_button_key") or "ollama_connection_test"
+            failed_label = page.get("ollama_connection_error", "Ollama接続テストに失敗しました")
+        elif status.get("provider_id") == "gemini":
+            button_label = page.get("gemini_connection_test_button", "Gemini接続テスト")
+            button_key = status.get("connection_test_button_key") or "gemini_connection_test"
+            failed_label = page.get("gemini_connection_error", "Gemini接続テストに失敗しました")
+        else:
+            button_label = page.get("connection_test_button", "Claude接続テスト")
+            button_key = status.get("connection_test_button_key") or "claude_connection_test"
+            failed_label = page.get("connection_error", "Claude接続テストに失敗しました")
+        if st.button(button_label, key=button_key, type="secondary"):
+            st.session_state["provider_connection_test"] = run_provider_connection_test()
+            st.rerun()
+        result = st.session_state.get("provider_connection_test")
+        if result is not None:
+            if result.success:
+                st.success(page.get("connection_ok", "Connection OK"))
+            elif result.error_code == ERROR_MISSING_API_KEY:
+                st.error(_missing_key_text(page))
             else:
-                button_label = page.get("connection_test_button", "Claude接続テスト")
-                button_key = status.get("connection_test_button_key") or "claude_connection_test"
-                failed_label = page.get("connection_error", "Claude接続テストに失敗しました")
-            if st.button(button_label, key=button_key):
-                st.session_state["provider_connection_test"] = run_provider_connection_test()
-                st.rerun()
-            result = st.session_state.get("provider_connection_test")
-            if result is not None:
-                if result.success:
-                    st.success(page.get("connection_ok", "Connection OK"))
-                elif result.error_code == ERROR_MISSING_API_KEY:
-                    st.error(_missing_key_text(page))
-                else:
-                    st.error(failed_label)
-        usage = status.get("last_usage")
-        if usage is not None:
-            st.caption(
-                f"tokens in={usage.input_tokens} out={usage.output_tokens} "
-                f"status={usage.http_status} ms={usage.duration_ms}"
-            )
+                st.error(failed_label)
+    usage = status.get("last_usage")
+    if usage is not None:
+        st.caption(
+            f"tokens in={usage.input_tokens} out={usage.output_tokens} "
+            f"status={usage.http_status} ms={usage.duration_ms}"
+        )
 
 
 def _render_run_result(page: dict, run: Optional[TechnicalCaseRun]) -> None:
@@ -288,7 +418,6 @@ def _render_run_result(page: dict, run: Optional[TechnicalCaseRun]) -> None:
     _render_completeness_issues(page, getattr(run, "completeness_issues", []))
     _render_requirement_section(page, run.requirements)
     _render_question_section(page["section_customer_checks"], run.customer_questions, page)
-    _render_question_section(page["section_manufacturer_checks"], run.manufacturer_questions, page)
     _render_question_section(page["section_technical_questions"], run.technical_questions, page)
     _render_unresolved_section(page, run)
 
@@ -317,7 +446,6 @@ def _render_summary_section(page: dict, run: TechnicalCaseRun) -> None:
             for product in run.requested_products:
                 st.write(f"- {product}")
             st.caption(page["requested_products_note"])
-        _render_retrieved_facts(page, run)
 
 
 def _selected_fact_ids(inquiry_text: Optional[str]) -> list:
@@ -506,7 +634,6 @@ def _render_manufacturer_response_section(
     page: dict,
     inquiry_run: Optional[TechnicalCaseRun],
 ) -> None:
-    st.subheader(page["section_manufacturer_response"])
     if get_active_provider_name() == "mock":
         st.warning(page["response_mock_warning"])
     st.caption(page["response_review_label"])
@@ -582,7 +709,6 @@ def _render_response_run(
         st.caption(page["approver_hint"])
         for item in board.items:
             _render_approval_card(page, item, board, inquiry_run)
-        _render_approval_summary(page, board)
 
     with st.container(border=True):
         st.markdown(f"**{page['unmatched_information_label']}**")

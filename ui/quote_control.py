@@ -94,7 +94,7 @@ def render_quote_control(texts: dict) -> None:
     page = texts["pages"]["quote_control"]
     _ensure_official_master()
 
-    if st.button(texts["back_to_home"], key="back_to_home"):
+    if st.button(texts["back_to_home"], key="back_to_home", type="secondary"):
         set_current_page(PAGE_HOME)
         st.rerun()
 
@@ -1062,16 +1062,16 @@ def _render_file_export(page: dict, snapshot) -> None:
     generated_by = st.text_input(page["generated_by_label"], value="弦", key="input_export_generated_by")
     columns = st.columns(2)
     with columns[0]:
-        if st.button(page["export_spaceone_button"], key="export_spaceone_xlsx"):
+        if st.button(page["export_spaceone_button"], key="export_spaceone_xlsx", type="primary"):
             _run_export(page, snapshot, export_spaceone_quote_excel, official, generated_by, ExportPurpose.FORMAL)
-        if st.button(page["export_internal_button"], key="export_internal_xlsx"):
+        if st.button(page["export_internal_button"], key="export_internal_xlsx", type="secondary"):
             _run_export(page, snapshot, export_internal_calc_excel, official, generated_by, ExportPurpose.DEVELOPMENT)
-        if st.button(page["export_mf_tsv_button"], key="export_mf_tsv"):
+        if st.button(page["export_mf_tsv_button"], key="export_mf_tsv", type="secondary"):
             _run_export(page, snapshot, export_moneyforward_tsv, official, generated_by, ExportPurpose.DEVELOPMENT)
     with columns[1]:
-        if st.button(page.get("export_spaceone_pdf_button", "SpaceOne見積 PDF"), key="export_spaceone_pdf"):
+        if st.button(page.get("export_spaceone_pdf_button", "SpaceOne見積 PDF"), key="export_spaceone_pdf", type="primary"):
             _run_pdf_export(page, snapshot, official, generated_by)
-        if st.button(page["export_mf_csv_button"], key="export_mf_csv"):
+        if st.button(page["export_mf_csv_button"], key="export_mf_csv", type="secondary"):
             _run_export(page, snapshot, export_moneyforward_csv, official, generated_by, ExportPurpose.DEVELOPMENT)
     saved = st.session_state.get("quote_export_files") or []
     if not saved:

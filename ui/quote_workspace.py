@@ -137,11 +137,11 @@ def _render_new_quote_buttons(page: dict, helpers) -> None:
     left, right = st.columns(2)
     with left:
         render_product_choice_card("PHOTON", page["ihi_photon_draft_button"])
-        if st.button(page["ihi_photon_draft_button"], key="ihi_photon_draft"):
+        if st.button(page["ihi_photon_draft_button"], key="ihi_photon_draft", type="primary"):
             _create_draft(page, helpers, case, "PHOTON")
     with right:
         render_product_choice_card("MAG", page["ihi_mag_draft_button"])
-        if st.button(page["ihi_mag_draft_button"], key="ihi_mag_draft"):
+        if st.button(page["ihi_mag_draft_button"], key="ihi_mag_draft", type="primary"):
             _create_draft(page, helpers, case, "MAG")
 
 
@@ -397,7 +397,7 @@ def _render_step_review(page: dict, helpers, draft, snapshot) -> None:
         and confirm_sales_price
         and confirm_remarks
     )
-    if ready_to_approve and st.button(page["approve_snapshot_button"], key="approve_quote_snapshot"):
+    if ready_to_approve and st.button(page["approve_snapshot_button"], key="approve_quote_snapshot", type="primary"):
         try:
             apply_selected_remarks(draft, selected_remarks)
             apply_lead_time_text(draft, lead_time or None)
@@ -429,7 +429,7 @@ def _render_step_review(page: dict, helpers, draft, snapshot) -> None:
             st.rerun()
         except (QuoteApprovalError, ValueError) as error:
             st.error(str(error))
-    if snapshot is not None and st.button(page["create_revision_button"], key="create_quote_revision"):
+    if snapshot is not None and st.button(page["create_revision_button"], key="create_quote_revision", type="secondary"):
         revision = create_revision_draft(snapshot, store=store)
         helpers["init_date_widgets"](revision, overwrite=True)
         st.session_state["quote_draft"] = revision
