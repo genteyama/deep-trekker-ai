@@ -8,6 +8,9 @@ SESSION_CASE = "technical_case_record"
 SESSION_INQUIRY = "customer_inquiry_text"
 SESSION_NOTICE = "technical_case_notice"
 SESSION_ANALYSIS = "technical_case_analysis"
+SESSION_RUN = "technical_case_run"
+SESSION_RESPONSE_RUN = "manufacturer_response_run"
+SESSION_APPROVAL_BOARD = "manufacturer_approval_board"
 
 RESULT_KEYS = (
     "case_summary",

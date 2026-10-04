@@ -67,3 +67,5 @@ def test_ai_suggested_is_not_auto_approved():
     edited = apply_question_review(question, "EDITED", "人が直した質問")
     assert edited.review_status == "EDITED"
     assert edited.question == "人が直した質問"
+    assert edited.ai_original_question == "一般知識の確認"
+    assert edited.human_edited_question == "人が直した質問"

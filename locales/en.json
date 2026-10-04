@@ -158,7 +158,29 @@
         "disconnected": "Not connected",
         "connected": "Connected",
         "error": "Error"
-      }
+      },
+      "new_case_button": "New case",
+      "save_case_button": "Save",
+      "resume_case_button": "Resume case",
+      "complete_case_button": "Mark complete",
+      "recent_cases_label": "Recent cases",
+      "recent_cases_empty": "No saved cases yet",
+      "case_saved": "Case saved",
+      "case_save_error": "The case could not be saved",
+      "case_status_label": "Case status",
+      "case_status": {
+        "DRAFT": "Draft",
+        "ANALYZED": "Analyzed",
+        "QUESTIONS_REVIEW": "Question review",
+        "WAITING_MANUFACTURER": "Waiting for manufacturer",
+        "MANUFACTURER_RESPONSE_RECEIVED": "Manufacturer response received",
+        "RESPONSE_REVIEW": "Response review",
+        "COMPLETED": "Completed"
+      },
+      "ai_original_label": "AI original",
+      "question_edit_label": "Question text",
+      "fact_catalog_label": "Approved technical facts",
+      "fact_catalog_note": "Internal review list. This is not the case knowledge snapshot."
     },
     "quote_control": {
       "title": "Quote & Price Control Agent",

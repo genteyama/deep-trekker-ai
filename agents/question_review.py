@@ -29,6 +29,9 @@ def apply_question_review(
     if review == QuestionReviewStatus.EDITED:
         text = normalize_optional_text(edited_text)
         if text:
+            if not question.ai_original_question:
+                update["ai_original_question"] = question.question
+            update["human_edited_question"] = text
             update["question"] = text
     if review == QuestionReviewStatus.REJECTED:
         update["follow_up_required"] = False

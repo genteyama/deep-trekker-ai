@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from pathlib import Path
 import hashlib
 import json
@@ -15,22 +14,9 @@ from repositories.quote_repository import (
     QuoteRepositoryError,
     SaveResult,
 )
+from repositories.sqlite import connect_sqlite, default_sqlite_path, now_iso
 
 DEFAULT_DB_NAME = "deep_trekker.sqlite3"
-
-
-def default_sqlite_path() -> Path:
-    from os import getenv
-
-    override = getenv("DEEP_TREKKER_SQLITE")
-    if override:
-        path = Path(override)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        return path
-    root = Path(__file__).resolve().parents[1]
-    directory = root / "runtime"
-    directory.mkdir(parents=True, exist_ok=True)
-    return directory / DEFAULT_DB_NAME
 
 
 def content_hash(payload: dict, ui_state: dict) -> str:
@@ -38,16 +24,11 @@ def content_hash(payload: dict, ui_state: dict) -> str:
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
-
-
 class SqliteQuoteRepository:
     def __init__(self, path: Optional[Path] = None):
         self.path = Path(path) if path else default_sqlite_path()
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._connection = sqlite3.connect(self.path, check_same_thread=False)
-        self._connection.row_factory = sqlite3.Row
+        self._connection = connect_sqlite(self.path)
         self._initialize()
 
     def close(self) -> None:
@@ -102,7 +83,7 @@ class SqliteQuoteRepository:
         ).fetchone()
         if existing is not None and existing["content_hash"] == digest and not force:
             return SaveResult(saved=False, skipped=True, updated_at=existing["updated_at"], content_hash=digest)
-        now = _now_iso()
+        now = now_iso()
         created = existing["created_at"] if existing is not None else (draft.created_at.isoformat() if draft.created_at else now)
         try:
             self._connection.execute(
@@ -221,7 +202,7 @@ class SqliteQuoteRepository:
                     snapshot.quote_draft_id,
                     snapshot.quote_version,
                     json.dumps(payload, ensure_ascii=False),
-                    snapshot.approved_at.isoformat() if snapshot.approved_at else _now_iso(),
+                    snapshot.approved_at.isoformat() if snapshot.approved_at else now_iso(),
                     SCHEMA_VERSION,
                 ),
             )

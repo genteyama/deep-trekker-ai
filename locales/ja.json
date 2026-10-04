@@ -158,7 +158,29 @@
         "disconnected": "未接続",
         "connected": "接続済み",
         "error": "エラー"
-      }
+      },
+      "new_case_button": "新規案件",
+      "save_case_button": "保存",
+      "resume_case_button": "案件を再開",
+      "complete_case_button": "案件を完了",
+      "recent_cases_label": "最近の案件",
+      "recent_cases_empty": "保存済み案件はまだありません",
+      "case_saved": "案件を保存しました",
+      "case_save_error": "案件を保存できませんでした",
+      "case_status_label": "案件状態",
+      "case_status": {
+        "DRAFT": "下書き",
+        "ANALYZED": "解析済み",
+        "QUESTIONS_REVIEW": "質問確認中",
+        "WAITING_MANUFACTURER": "メーカー回答待ち",
+        "MANUFACTURER_RESPONSE_RECEIVED": "メーカー回答受信",
+        "RESPONSE_REVIEW": "回答確認中",
+        "COMPLETED": "完了"
+      },
+      "ai_original_label": "AI原文",
+      "question_edit_label": "質問文",
+      "fact_catalog_label": "確認済み技術情報一覧",
+      "fact_catalog_note": "社内確認用です。案件で使ったKnowledge Snapshotではありません。"
     },
     "quote_control": {
       "title": "見積・価格管理AI",

@@ -46,6 +46,7 @@ from models.enums import (
     SupplierQuoteOverallStatus,
     SupplierQuoteValidationStatus,
     SuggestedQuestionStatus,
+    TechnicalCaseStatus,
     UpdateCategory,
     UpdateConfidence,
     UpdateSourceType,
@@ -63,6 +64,58 @@ class Case(BaseModel):
     requested_products: list[str] = Field(default_factory=list)
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+
+
+class QuestionHumanReview(BaseModel):
+    question_id: str
+    review_status: str = "PENDING"
+    ai_original: Optional[str] = None
+    human_edited: Optional[str] = None
+
+
+class ManufacturerResponseRevision(BaseModel):
+    revision: int
+    analyzed_at: str
+    provider: Optional[str] = None
+    model: Optional[str] = None
+    original_response: Optional[str] = None
+    analysis: Optional[dict] = None
+    validated_matches: list[dict] = Field(default_factory=list)
+    evidence_validation_result: list[dict] = Field(default_factory=list)
+
+
+class TechnicalCaseRecord(BaseModel):
+    case_id: str
+    customer_name: Optional[str] = None
+    case_title: Optional[str] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+    status: str = TechnicalCaseStatus.DRAFT.value
+    original_inquiry: Optional[str] = None
+    requested_products: list[str] = Field(default_factory=list)
+    requirements: list[dict] = Field(default_factory=list)
+    customer_goal: list[dict] = Field(default_factory=list)
+    existing_equipment: list[dict] = Field(default_factory=list)
+    provider: Optional[str] = None
+    model: Optional[str] = None
+    knowledge_snapshot: Optional[dict] = None
+    manufacturer_questions: list[dict] = Field(default_factory=list)
+    question_human_reviews: list[QuestionHumanReview] = Field(default_factory=list)
+    manufacturer_response_input: Optional[str] = None
+    manufacturer_response_analysis: Optional[dict] = None
+    validated_matches: list[dict] = Field(default_factory=list)
+    evidence_validation_result: list[dict] = Field(default_factory=list)
+    last_error: Optional[str] = None
+    schema_version: int = 1
+    end_user_name: Optional[str] = None
+    case_summary: Optional[str] = None
+    customer_questions: list[dict] = Field(default_factory=list)
+    technical_questions: list[dict] = Field(default_factory=list)
+    unresolved_items: list[dict] = Field(default_factory=list)
+    analysis_json: Optional[dict] = None
+    inquiry_success: bool = False
+    response_revisions: list[ManufacturerResponseRevision] = Field(default_factory=list)
+    approval_board: Optional[dict] = None
 
 
 class CaseRequirement(BaseModel):
@@ -94,6 +147,8 @@ class TechnicalQuestion(BaseModel):
     grounding: Optional[str] = None
     related_products: list[str] = Field(default_factory=list)
     review_status: Optional[str] = None
+    ai_original_question: Optional[str] = None
+    human_edited_question: Optional[str] = None
 
 
 class ResponseMatchCandidate(BaseModel):

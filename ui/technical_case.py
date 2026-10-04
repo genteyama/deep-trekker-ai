@@ -20,7 +20,11 @@ from agents.facts import (
     fact_registration_warnings,
     register_technical_fact,
 )
-from agents.fact_retrieval import detect_requested_products, retrieve_approved_facts_for_products
+from agents.fact_retrieval import (
+    detect_requested_products,
+    load_human_approved_catalog,
+    retrieve_approved_facts_for_products,
+)
 from agents.knowledge import is_default_selected
 from agents.question_review import apply_question_review
 from agents.technical_case_agent import (
@@ -46,11 +50,20 @@ from models import (
     TechnicalQuestion,
 )
 from ui.navigation import PAGE_HOME, set_current_page
-from ui.technical_case_flow import SESSION_ANALYSIS, SESSION_CASE, SESSION_INQUIRY
-
-SESSION_RUN = "technical_case_run"
-SESSION_RESPONSE_RUN = "manufacturer_response_run"
-SESSION_APPROVAL_BOARD = "manufacturer_approval_board"
+from ui.technical_case_flow import (
+    SESSION_ANALYSIS,
+    SESSION_APPROVAL_BOARD,
+    SESSION_CASE,
+    SESSION_INQUIRY,
+    SESSION_RESPONSE_RUN,
+    SESSION_RUN,
+)
+from ui.technical_case_persistence import (
+    get_technical_case_repository,
+    persist_technical_case,
+    resume_case_into_session,
+    start_new_technical_case,
+)
 FACT_SELECT_PREFIX = "use_fact_"
 APPROVAL_STATUS_OPTIONS = (
     SuggestedQuestionStatus.ANSWERED,
@@ -77,6 +90,7 @@ def render_technical_case(texts: dict) -> None:
     st.title(page["title"])
     st.caption(page["internal_name"])
     st.write(page["description"])
+    _render_case_workspace(page)
 
     if get_active_provider_name() == "mock":
         st.warning(page["mock_warning"])
@@ -105,17 +119,21 @@ def render_technical_case(texts: dict) -> None:
         )
 
     if submitted:
+        existing_case = st.session_state.get(SESSION_CASE)
         run = run_technical_case_analysis(
             case_name,
             customer_name,
             end_user_name,
             inquiry_text,
             selected_fact_ids=_selected_fact_ids(inquiry_text),
+            case_id=existing_case.case_id if existing_case is not None else None,
+            created_at=existing_case.created_at if existing_case is not None else None,
         )
         st.session_state[SESSION_RUN] = run
         st.session_state[SESSION_CASE] = run.case
         st.session_state[SESSION_INQUIRY] = run.inquiry_text
         st.session_state[SESSION_ANALYSIS] = run.analysis_json
+        persist_technical_case(st.session_state, run)
 
     st.divider()
     st.subheader(page["section_results"])
@@ -123,6 +141,76 @@ def render_technical_case(texts: dict) -> None:
 
     st.divider()
     _render_manufacturer_response_section(page, st.session_state.get(SESSION_RUN))
+    _render_technical_fact_view(page)
+
+
+def _render_case_workspace(page: dict) -> None:
+    repo = get_technical_case_repository()
+    run = st.session_state.get(SESSION_RUN)
+    status_labels = page.get("case_status", {})
+    current_status = None
+    if run is not None and run.case is not None:
+        current_status = run.case.status
+    saved_id = st.session_state.get("technical_case_saved_id")
+    if saved_id:
+        saved = repo.get_case(saved_id)
+        if saved is not None:
+            current_status = saved.status
+    if current_status:
+        st.caption(
+            f"{page.get('case_status_label', '案件状態')}: "
+            f"{status_labels.get(current_status, current_status)}"
+        )
+    cols = st.columns(3)
+    if cols[0].button(page.get("new_case_button", "新規案件"), key="new_technical_case"):
+        start_new_technical_case(st.session_state)
+        st.rerun()
+    if cols[1].button(page.get("save_case_button", "保存"), key="save_technical_case"):
+        persist_technical_case(
+            st.session_state,
+            st.session_state.get(SESSION_RUN),
+            st.session_state.get(SESSION_RESPONSE_RUN),
+            st.session_state.get(SESSION_APPROVAL_BOARD),
+        )
+        st.rerun()
+    if cols[2].button(page.get("complete_case_button", "案件を完了"), key="complete_technical_case"):
+        persist_technical_case(
+            st.session_state,
+            st.session_state.get(SESSION_RUN),
+            st.session_state.get(SESSION_RESPONSE_RUN),
+            st.session_state.get(SESSION_APPROVAL_BOARD),
+            completed=True,
+        )
+        st.rerun()
+    if st.session_state.get("technical_case_save_status") == "saved":
+        st.success(page.get("case_saved", "案件を保存しました"))
+    elif st.session_state.get("technical_case_save_error"):
+        st.error(page.get("case_save_error", "案件を保存できませんでした"))
+    recent = repo.list_recent_cases()
+    st.markdown(f"**{page.get('recent_cases_label', '最近の案件')}**")
+    if not recent:
+        st.caption(page.get("recent_cases_empty", "保存済み案件はまだありません"))
+        return
+    for item in recent:
+        label = " / ".join(
+            part
+            for part in (
+                item.customer_name or page.get("unnamed_item", "項目"),
+                item.case_title or page.get("unnamed_item", "項目"),
+                status_labels.get(item.status, item.status or "-"),
+                item.updated_at,
+                item.provider or "-",
+            )
+            if part
+        )
+        if st.button(
+            f"{page.get('resume_case_button', '案件を再開')}: {label}",
+            key=f"resume_technical_case_{item.case_id}",
+        ):
+            loaded = repo.get_case(item.case_id)
+            if loaded is not None:
+                resume_case_into_session(loaded, st.session_state)
+                st.rerun()
 
 
 def _missing_key_text(page: dict) -> str:
@@ -243,19 +331,37 @@ def _selected_fact_ids(inquiry_text: Optional[str]) -> list:
 
 
 def _render_knowledge_selection(page: dict, inquiry_text: Optional[str]) -> None:
-    products = detect_requested_products(inquiry_text)
-    candidates = retrieve_approved_facts_for_products(products)
+    run = st.session_state.get(SESSION_RUN)
+    snapshot = getattr(run, "knowledge_snapshot", None) if run is not None else None
+    scope_labels = page.get("fact_scope", {})
+    if snapshot is not None and snapshot.items:
+        candidates = [
+            {
+                "fact_id": item.fact_id,
+                "product": item.product,
+                "topic": item.topic,
+                "fact": item.statement,
+                "source_reference": item.source_reference,
+                "scope": item.scope,
+                "status": item.status,
+                "selected": item.selected,
+            }
+            for item in snapshot.items
+        ]
+        defaults = {item["fact_id"]: item["selected"] for item in candidates}
+    else:
+        products = detect_requested_products(inquiry_text)
+        candidates = retrieve_approved_facts_for_products(products)
+        defaults = {item.get("fact_id"): is_default_selected(item) for item in candidates}
     if not candidates:
         return
     st.markdown(f"**{page.get('knowledge_select_label', '参照する確認済み技術情報')}**")
     st.caption(page.get("knowledge_select_note", "使用しないFactはProviderへ送りません。"))
-    scope_labels = page.get("fact_scope", {})
     for item in candidates:
         fact_id = item.get("fact_id") or ""
-        default_on = is_default_selected(item)
         st.checkbox(
             f"{item.get('product') or '-'} / {item.get('topic') or '-'}",
-            value=default_on,
+            value=defaults.get(fact_id, False),
             key=f"{FACT_SELECT_PREFIX}{fact_id}",
         )
         st.write(item.get("fact") or "")
@@ -314,6 +420,12 @@ def _render_question_review_controls(page: dict, question: TechnicalQuestion) ->
             for offset, current in enumerate(run.manufacturer_questions):
                 if current.question_id == question.question_id:
                     run.manufacturer_questions[offset] = updated
+            persist_technical_case(
+                st.session_state,
+                run,
+                st.session_state.get(SESSION_RESPONSE_RUN),
+                st.session_state.get(SESSION_APPROVAL_BOARD),
+            )
             st.rerun()
     if (question.classification or question.source) == "AI_SUGGESTED":
         st.caption(page.get("ai_suggested_not_auto", "AI_SUGGESTEDは自動APPROVEDしません。"))
@@ -356,8 +468,15 @@ def _render_question_section(
                 st.caption(f"{page.get('related_fact_label', '関連Fact')}: {item.grounding}")
             if item.original_text:
                 st.caption(f"{page.get('original_text_label', 'customer wording')}: {item.original_text}")
+            if item.review_status == "EDITED" and item.ai_original_question:
+                st.caption(f"{page.get('ai_original_label', 'AI original')}: {item.ai_original_question}")
             if title == page["section_manufacturer_checks"]:
                 _render_question_review_controls(page, item)
+                st.text_area(
+                    page.get("question_edit_label", "質問文"),
+                    value=item.question or "",
+                    key=f"qrev_text_{item.question_id}",
+                )
 
 
 def _render_completeness_issues(page: dict, issues: list) -> None:
@@ -412,6 +531,13 @@ def _render_manufacturer_response_section(
         st.session_state[SESSION_RESPONSE_RUN] = run
         st.session_state[SESSION_APPROVAL_BOARD] = (
             build_approval_board(run) if run.success else None
+        )
+        persist_technical_case(
+            st.session_state,
+            inquiry_run,
+            run,
+            st.session_state.get(SESSION_APPROVAL_BOARD),
+            append_response_revision=True,
         )
 
     _render_response_run(
@@ -561,6 +687,12 @@ def _render_approval_card(
             )
             if result.success and result.item:
                 _sync_inquiry_question(inquiry_run, result.item.question)
+                persist_technical_case(
+                    st.session_state,
+                    inquiry_run,
+                    st.session_state.get(SESSION_RESPONSE_RUN),
+                    board,
+                )
                 st.success(page["applied_message"])
                 st.rerun()
             elif result.error_code == ERROR_ALREADY_APPLIED:
@@ -655,6 +787,20 @@ def _sync_inquiry_question(inquiry_run: Optional[TechnicalCaseRun], question: Te
         if current.question_id == question.question_id:
             inquiry_run.manufacturer_questions[index] = question
             return
+
+
+def _render_technical_fact_view(page: dict) -> None:
+    with st.expander(page.get("fact_catalog_label", "確認済み技術情報一覧"), expanded=False):
+        st.caption(page.get("fact_catalog_note", "社内確認用です。Masterの参照であり、案件Snapshotではありません。"))
+        for item in load_human_approved_catalog():
+            st.write(f"- {item.get('product') or '-'} / {item.get('topic') or '-'}: {item.get('fact') or ''}")
+            st.caption(
+                f"{page.get('fact_status_label', '承認状態')}: {item.get('status') or '-'} / "
+                f"{page.get('fact_scope_label', 'Scope')}: {item.get('scope') or '-'} / "
+                f"{page.get('fact_source_label', '情報源')}: {item.get('source_reference') or '-'} / "
+                f"approved_at: {item.get('approved_at') or '-'} / "
+                f"superseded: {item.get('superseded')}"
+            )
 
 
 def _requirement_line(requirement: CaseRequirement, page: dict) -> str:

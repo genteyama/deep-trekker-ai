@@ -93,10 +93,12 @@ class TechnicalCaseRun:
         retrieved_facts: Optional[list] = None,
         detected_products: Optional[list] = None,
         knowledge_snapshot: Optional[KnowledgeContextSnapshot] = None,
+        model: Optional[str] = None,
     ) -> None:
         self.success = success
         self.case = case
         self.provider_name = provider_name
+        self.model = model
         self.inquiry_text = inquiry_text
         self.case_summary = case_summary
         self.requested_products = requested_products or []
@@ -128,9 +130,11 @@ class ManufacturerResponseRun:
         error_code: Optional[str] = None,
         error_details: Optional[str] = None,
         completeness_issues: Optional[list] = None,
+        model: Optional[str] = None,
     ) -> None:
         self.success = success
         self.provider_name = provider_name
+        self.model = model
         self.original_response_text = original_response_text
         self.response_summary = response_summary
         self.matches = matches or []
@@ -166,6 +170,15 @@ def get_active_provider_name(provider: Optional[TechnicalCaseProvider] = None) -
     if provider is not None:
         return provider.name
     return selected_provider_name()
+
+
+def provider_model_name(provider: Optional[TechnicalCaseProvider] = None) -> Optional[str]:
+    if provider is None:
+        return None
+    usage = getattr(provider, "last_usage", None)
+    if usage is not None and getattr(usage, "model", None):
+        return usage.model
+    return getattr(provider, "model", None)
 
 
 def validate_analysis_payload(payload: object) -> TechnicalCaseAnalysisResponse:
@@ -219,6 +232,7 @@ def convert_questions(
                 original_text=item.original_text,
                 normalized_meaning=item.normalized_meaning,
                 grounding=item.grounding,
+                ai_original_question=item.question,
                 related_products=extract_product_entities(
                     " ".join([item.question or "", item.grounding or "", item.normalized_meaning or ""])
                 ),
@@ -296,6 +310,7 @@ def run_technical_case_analysis(
             success=True,
             case=updated_case,
             provider_name=active_provider.name,
+            model=provider_model_name(active_provider),
             inquiry_text=inquiry,
             case_summary=analysis.case_summary,
             requested_products=list(analysis.requested_products),
@@ -339,6 +354,7 @@ def run_technical_case_analysis(
             ERROR_COMPLETENESS,
             str(error),
             completeness_issues=error.issues,
+            model=provider_model_name(active_provider),
         )
     except ProviderError as error:
         logger.exception("Technical case provider failed")
@@ -359,11 +375,13 @@ def _failed_run(
     error_code: str,
     error_details: str,
     completeness_issues: Optional[list] = None,
+    model: Optional[str] = None,
 ) -> TechnicalCaseRun:
     return TechnicalCaseRun(
         success=False,
         case=case,
         provider_name=provider_name,
+        model=model,
         inquiry_text=inquiry,
         error_code=error_code,
         error_details=error_details,
@@ -448,6 +466,7 @@ def run_manufacturer_response_analysis(
         return ManufacturerResponseRun(
             success=True,
             provider_name=active_provider.name,
+            model=provider_model_name(active_provider),
             original_response_text=original_text,
             response_summary=analysis.response_summary,
             matches=matches,

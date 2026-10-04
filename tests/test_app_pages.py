@@ -79,6 +79,10 @@ def test_analyze_button_shows_mock_results():
     assert at.json.len == 1
     assert any(expander.label == "解析データを確認" for expander in at.expander)
     assert at.error.len == 0
+    assert any(button.key == "new_technical_case" for button in at.button)
+    assert any(button.key == "save_technical_case" for button in at.button)
+    assert "最近の案件" in " ".join(visible_text)
+    assert any(expander.label == "確認済み技術情報一覧" for expander in at.expander)
 
 
 def test_mag_inquiry_shows_retrieved_approved_facts():
@@ -234,6 +238,23 @@ def test_gemini_connection_test_without_key_does_not_send_customer_data(monkeypa
     )
     assert DEFAULT_MOCK_PAYLOAD["case_summary"] not in visible_text
     assert "GEMINI_API_KEY" not in visible_text
+
+
+def test_saved_technical_case_can_resume_after_new_case():
+    at = _start_app()
+    at.button(key="open_technical_case").click().run()
+    at.text_input(key="input_case_name").set_value("再開確認案件")
+    at.text_input(key="input_customer_name").set_value("再開株式会社")
+    at.text_area(key="input_customer_inquiry").set_value("直径300mmの管を点検したい。")
+    at.button(key="analyze_inquiry").click().run()
+    at.button(key="new_technical_case").click().run()
+    resume_buttons = [button for button in at.button if (button.key or "").startswith("resume_technical_case_")]
+    assert resume_buttons
+    resume_buttons[0].click().run()
+    visible_text = [item.value for item in at.text] + [item.value for item in at.markdown]
+    assert DEFAULT_MOCK_PAYLOAD["case_summary"] in visible_text
+    assert at.session_state["input_customer_inquiry"] == "直径300mmの管を点検したい。"
+    assert at.session_state["technical_case_run"].provider_name == "mock"
 
 
 def test_manufacturer_response_button_shows_mock_matches():
