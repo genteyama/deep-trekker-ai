@@ -28,12 +28,27 @@ def render_portal_section_title(label: str) -> None:
     st.markdown(f"<h3 class='portal-section-title'>{escape(label)}</h3>", unsafe_allow_html=True)
 
 
-def render_menu_card(title: str, english: str, description: str, *, product_key: Optional[str] = None) -> None:
+def render_menu_card(
+    title: str,
+    english: str,
+    description: str,
+    *,
+    product_key: Optional[str] = None,
+    count: Optional[int] = None,
+    count_label: str = "進行中",
+    count_unit: str = "件",
+) -> None:
     image = product_image_html(product_key, css_class="portal-card-thumb")
+    thumb = image or "<div class='portal-card-thumb-spacer' aria-hidden='true'></div>"
+    count_html = ""
+    if count is not None:
+        count_html = (
+            f"<span class='portal-card-count'>（{escape(count_label)}：{count}{escape(count_unit)}）</span>"
+        )
     st.markdown(
         f"<div class='portal-card'>"
-        f"{image}"
-        f"<div class='portal-card-title'>{escape(title)}</div>"
+        f"{thumb}"
+        f"<div class='portal-card-title'>{escape(title)}{count_html}</div>"
         f"<div class='portal-card-en'>{escape(english)}</div>"
         f"<div class='portal-card-desc'>{escape(description)}</div>"
         f"</div>",

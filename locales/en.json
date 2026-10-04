@@ -63,12 +63,12 @@
   },
   "agents": {
     "technical_case": {
-      "name": "Sales & Technical Intake AI",
+      "name": "Sales & Technical Intake",
       "english": "Technical Support",
       "description": "Supports technical inquiries, requirement gathering, and manufacturer confirmation"
     },
     "quote_control": {
-      "name": "Quote & Price Control Agent",
+      "name": "Quote & Price Control",
       "english": "Quote & Price Control",
       "description": "Supports price checks, configuration review, and quote estimates"
     },

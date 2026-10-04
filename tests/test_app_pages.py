@@ -19,9 +19,11 @@ def test_home_dashboard_shows_both_work_kinds():
         + [item.value for item in at.caption]
     )
     assert "進行中の案件" in visible
-    assert "営業・技術受付AI" in visible
-    assert "見積・価格管理AI" in visible
+    assert "営業・技術受付" in visible
+    assert "見積・価格管理" in visible
     assert "履歴・活動台帳" in visible
+    assert "営業・技術受付AI" not in visible
+    assert "（進行中：" in visible
     assert at.button(key="open_activity_ledger").disabled is False
     filter_labels = []
     for radio in at.radio:

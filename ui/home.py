@@ -28,6 +28,8 @@ def render_home(texts: dict) -> None:
     render_portal_section_title(texts["menu_label"])
 
     tech_open, quote_open = _open_counts()
+    count_label = portal.get("open_cases_label", "進行中")
+    count_unit = portal.get("count_unit", "件")
     left_column, middle_column, right_column = st.columns(3)
     with left_column:
         render_menu_card(
@@ -35,8 +37,10 @@ def render_home(texts: dict) -> None:
             technical_case.get("english", "Technical Support"),
             technical_case["description"],
             product_key="PIPETREKKER",
+            count=tech_open,
+            count_label=count_label,
+            count_unit=count_unit,
         )
-        st.caption(f"{portal.get('open_cases_label', '進行中')}：{tech_open}{portal.get('count_unit', '件')}")
         if st.button(
             texts.get("open_label", "開く"),
             key="open_technical_case",
@@ -47,6 +51,25 @@ def render_home(texts: dict) -> None:
             st.rerun()
 
     with middle_column:
+        render_menu_card(
+            quote_control["name"],
+            quote_control.get("english", "Quote & Price Control"),
+            quote_control["description"],
+            product_key="PHOTON",
+            count=quote_open,
+            count_label=count_label,
+            count_unit=count_unit,
+        )
+        if st.button(
+            texts.get("open_label", "開く"),
+            key="open_quote_control",
+            use_container_width=True,
+            type="primary",
+        ):
+            set_current_page(PAGE_QUOTE_CONTROL)
+            st.rerun()
+
+    with right_column:
         activity = texts.get("agents", {}).get("activity_ledger", {})
         render_menu_card(
             activity.get("name", "履歴・活動台帳"),
@@ -60,23 +83,6 @@ def render_home(texts: dict) -> None:
             type="primary",
         ):
             set_current_page(PAGE_ACTIVITY_LEDGER)
-            st.rerun()
-
-    with right_column:
-        render_menu_card(
-            quote_control["name"],
-            quote_control.get("english", "Quote & Price Control"),
-            quote_control["description"],
-            product_key="PHOTON",
-        )
-        st.caption(f"{portal.get('open_cases_label', '進行中')}：{quote_open}{portal.get('count_unit', '件')}")
-        if st.button(
-            texts.get("open_label", "開く"),
-            key="open_quote_control",
-            use_container_width=True,
-            type="primary",
-        ):
-            set_current_page(PAGE_QUOTE_CONTROL)
             st.rerun()
 
     render_portal_section_title(portal.get("recent_work_label", "進行中の案件"))
@@ -101,7 +107,7 @@ def render_home(texts: dict) -> None:
             if st.button(
                 portal.get("resume_label", "再開"),
                 key=f"home_resume_technical_{item['id']}",
-                type="secondary",
+                type="primary",
             ):
                 loaded = get_technical_case_repository().get_case(item["id"])
                 if loaded is not None:
@@ -112,7 +118,7 @@ def render_home(texts: dict) -> None:
             if st.button(
                 quote_page["workspace"].get("resume_draft_button", "作業を再開"),
                 key=f"home_resume_draft_{item['id']}_{item['version']}",
-                type="secondary",
+                type="primary",
             ):
                 _resume_quote_from_home(quote_page, item["id"], item["version"])
 

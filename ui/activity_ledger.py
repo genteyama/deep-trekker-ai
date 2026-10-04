@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
+from html import escape
 from pathlib import Path
 
 import streamlit as st
@@ -38,6 +39,7 @@ from ui.components.portal import render_portal_section_title, resume_draft_into_
 from ui.navigation import PAGE_HOME, PAGE_QUOTE_CONTROL, PAGE_TECHNICAL_CASE, set_current_page
 from ui.quote_persistence import get_quote_repository
 from ui.technical_case_persistence import get_technical_case_repository
+from ui.work_status import PROCESS_LABELS
 
 SESSION_FILTER = "activity_filter"
 SESSION_SORT = "activity_sort"
@@ -212,7 +214,7 @@ def _render_sort(page: dict, sort: ActivitySort) -> None:
 def _render_selection_bar(page: dict, rows, selection: ActivitySelection) -> None:
     st.caption(f"{page.get('selected_count', '選択中')}：{len(selection.selected_rows(rows))}{page.get('count_unit', '件')}")
     cols = st.columns(4)
-    if cols[0].button(page.get("select_all", "全選択"), key="activity_select_all"):
+    if cols[0].button(page.get("select_all", "全選択"), key="activity_select_all", type="primary"):
         selection.select_all(rows)
         st.rerun()
     if cols[1].button(page.get("deselect_all", "全解除"), key="activity_deselect_all"):
@@ -220,9 +222,22 @@ def _render_selection_bar(page: dict, rows, selection: ActivitySelection) -> Non
         st.rerun()
 
 
+def _status_label(status: str) -> str:
+    return PROCESS_LABELS.get(status or "", status or "-")
+
+
+def _cell(text: str, *, kind: str = "td", extra: str = "") -> str:
+    css = f"activity-{kind}"
+    if extra:
+        css = f"{css} {extra}"
+    return f"<div class='{css}'>{escape(text)}</div>"
+
+
+TABLE_WEIGHTS = [0.35, 0.35, 0.75, 1.0, 0.8, 0.75, 0.95, 1.7, 1.25, 0.75, 0.85, 0.55]
+
+
 def _render_table(page: dict, rows, all_rows, selection: ActivitySelection) -> None:
     render_portal_section_title(page.get("list_label", "履歴一覧"))
-    header = st.columns([0.4, 0.4, 0.9, 1.1, 0.9, 0.9, 0.8, 1.4, 1.0, 1.0, 1.0, 0.7])
     labels = (
         page.get("col_select", "選択"),
         page.get("col_no", "No."),
@@ -235,31 +250,32 @@ def _render_table(page: dict, rows, all_rows, selection: ActivitySelection) -> N
         page.get("col_status", "対応ステータス"),
         page.get("col_updated", "最終更新"),
         page.get("col_related", "関連元"),
-        "",
+        page.get("open_row", "開く"),
     )
+    header = st.columns(TABLE_WEIGHTS)
     for column, label in zip(header, labels):
-        column.markdown(f"**{label}**")
+        column.markdown(_cell(label, kind="th"), unsafe_allow_html=True)
     if not rows:
         st.caption(page.get("empty", "該当する履歴はありません。"))
         return
     for index, row in enumerate(rows, start=1):
-        cols = st.columns([0.4, 0.4, 0.9, 1.1, 0.9, 0.9, 0.8, 1.4, 1.0, 1.0, 1.0, 0.7])
-        checked = cols[0].checkbox("", value=row.row_id in selection.selected, key=f"activity_select_{row.row_id}")
+        cols = st.columns(TABLE_WEIGHTS)
+        checked = cols[0].checkbox(" ", value=row.row_id in selection.selected, key=f"activity_select_{row.row_id}", label_visibility="collapsed")
         if checked:
             selection.select_one(row.row_id)
         elif row.row_id in selection.selected:
             selection.selected.discard(row.row_id)
-        cols[1].write(str(index))
-        cols[2].write(display_day(row.date) or "-")
-        cols[3].write(row.customer or "-")
-        cols[4].write(row.end_user or "-")
-        cols[5].write(row.category_label())
-        cols[6].write(row.product or "-")
-        cols[7].write(row.title or "-")
-        cols[8].write(row.status or "-")
-        cols[9].write(display_day(row.updated_at) or "-")
-        cols[10].write(related_source_label(row, all_rows) or "-")
-        if cols[11].button(page.get("open_row", "開く"), key=f"activity_open_{row.row_id}"):
+        cols[1].markdown(_cell(str(index)), unsafe_allow_html=True)
+        cols[2].markdown(_cell(display_day(row.date) or "-"), unsafe_allow_html=True)
+        cols[3].markdown(_cell(row.customer or "-"), unsafe_allow_html=True)
+        cols[4].markdown(_cell(row.end_user or "-"), unsafe_allow_html=True)
+        cols[5].markdown(_cell(row.category_label()), unsafe_allow_html=True)
+        cols[6].markdown(_cell(row.product or "-", extra="activity-td-product"), unsafe_allow_html=True)
+        cols[7].markdown(_cell(row.title or "-", extra="activity-td-title"), unsafe_allow_html=True)
+        cols[8].markdown(_cell(_status_label(row.status), extra="activity-td-status"), unsafe_allow_html=True)
+        cols[9].markdown(_cell(display_day(row.updated_at) or "-"), unsafe_allow_html=True)
+        cols[10].markdown(_cell(related_source_label(row, all_rows) or "-"), unsafe_allow_html=True)
+        if cols[11].button(page.get("open_row", "開く"), key=f"activity_open_{row.row_id}", type="primary"):
             st.session_state[SESSION_DETAIL] = row.row_id
             _open_row(row)
 
@@ -278,10 +294,10 @@ def _render_detail(page: dict, row, all_rows, case_repo, quote_repo, activity_re
     render_portal_section_title(page.get("detail_label", "履歴詳細"))
     with st.container(border=True):
         st.markdown(f"**{row.title or row.entity_id}**")
-        st.caption(f"{row.category_label()} / {row.customer or '-'} / {row.status or '-'}")
+        st.caption(f"{row.category_label()} / {row.customer or '-'} / {_status_label(row.status)}")
         actions = st.columns(4)
         if row.entity_kind == "case":
-            if actions[0].button(page.get("open_case", "案件を開く"), key=f"activity_open_case_{row.entity_id}"):
+            if actions[0].button(page.get("open_case", "案件を開く"), key=f"activity_open_case_{row.entity_id}", type="primary"):
                 _open_row(row)
             related = load_related_quotes(quote_repo, row.entity_id)
             if related:
@@ -304,13 +320,13 @@ def _render_detail(page: dict, row, all_rows, case_repo, quote_repo, activity_re
                     caption = f"{number} {label}".strip()
                     cols = st.columns([3, 1, 1])
                     cols[0].write(caption)
-                    if cols[1].button(page.get("open_quote", "見積を開く"), key=f"activity_open_quote_{draft.quote_draft_id}_{draft.quote_version}"):
+                    if cols[1].button(page.get("open_quote", "見積を開く"), key=f"activity_open_quote_{draft.quote_draft_id}_{draft.quote_version}", type="primary"):
                         _open_quote(draft.quote_draft_id, draft.quote_version)
                     if snapshot is not None and cols[2].button(page.get("preview_quote", "見積プレビュー"), key=f"activity_preview_{snapshot.approved_quote_snapshot_id}"):
                         st.session_state[SESSION_PREVIEW] = snapshot.approved_quote_snapshot_id
                         st.rerun()
         else:
-            if actions[0].button(page.get("open_quote", "見積を開く"), key=f"activity_open_quote_detail_{row.entity_id}"):
+            if actions[0].button(page.get("open_quote", "見積を開く"), key=f"activity_open_quote_detail_{row.entity_id}", type="primary"):
                 _open_row(row)
             snapshot = quote_repo.get_snapshot_for_draft(row.entity_id, row.quote_version or 1)
             if snapshot is not None and actions[1].button(page.get("preview_quote", "見積プレビュー"), key=f"activity_preview_quote_{row.entity_id}"):
@@ -380,11 +396,11 @@ def _render_exports(page: dict, rows, selection: ActivitySelection, filt: Activi
     stamp = date.today().strftime("%Y%m%d")
     export_dir = Path("runtime") / "exports"
     cols = st.columns(4)
-    if cols[0].button(page.get("export_word", "Word出力"), key="activity_export_word"):
+    if cols[0].button(page.get("export_word", "Word出力"), key="activity_export_word", type="primary"):
         path = export_dir / activity_report_filename(".docx", now=stamp)
         render_activity_report_docx(target, path, filt=filt)
         st.session_state["activity_export_word_path"] = str(path)
-    if cols[1].button(page.get("export_pdf", "PDF出力"), key="activity_export_pdf"):
+    if cols[1].button(page.get("export_pdf", "PDF出力"), key="activity_export_pdf", type="primary"):
         path = export_dir / activity_report_filename(".pdf", now=stamp)
         render_activity_report_pdf(target, path, filt=filt)
         st.session_state["activity_export_pdf_path"] = str(path)

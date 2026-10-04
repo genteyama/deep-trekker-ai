@@ -28,7 +28,7 @@ APP_CSS = """
         background-color: var(--dt-white);
         color: var(--dt-text);
     }
-    .block-container { padding-top: 1.2rem; max-width: 1100px; }
+    .block-container { padding-top: 1.2rem; max-width: 1240px; }
     [data-testid="stExpander"] {
         background: var(--dt-white);
         border: 1px solid var(--dt-border);
@@ -165,12 +165,40 @@ APP_CSS = """
         background: var(--dt-white);
         padding: 16px 18px;
     }
-    .portal-card { min-height: 132px; }
+    .portal-card {
+        min-height: 228px;
+        display: flex;
+        flex-direction: column;
+        box-sizing: border-box;
+    }
     .portal-card:hover, .portal-draft-card:hover { border-color: var(--dt-accent); }
-    .portal-card-title, .dt-card-title, .portal-draft-title { color: var(--dt-navy); font-size: 20px; font-weight: 700; line-height: 1.3; }
+    .portal-card-title, .dt-card-title, .portal-draft-title {
+        color: var(--dt-navy);
+        font-size: 20px;
+        font-weight: 700;
+        line-height: 1.35;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 2px 4px;
+    }
+    .portal-card-count {
+        font-size: 13px;
+        font-weight: 650;
+        color: var(--dt-accent);
+        white-space: nowrap;
+    }
     .portal-card-en { color: var(--dt-accent); font-size: 13px; margin: 4px 0 8px 0; }
-    .portal-card-desc, .dt-card-meta { color: var(--dt-muted); font-size: 14px; line-height: 1.5; }
-    .portal-card-thumb { height: 56px; width: auto; max-width: 120px; object-fit: contain; display: block; margin-bottom: 10px; }
+    .portal-card-desc, .dt-card-meta { color: var(--dt-muted); font-size: 14px; line-height: 1.5; flex: 1; }
+    .portal-card-thumb, .portal-card-thumb-spacer {
+        height: 56px;
+        width: auto;
+        max-width: 120px;
+        object-fit: contain;
+        display: block;
+        margin-bottom: 10px;
+        flex-shrink: 0;
+    }
     .portal-product-card { min-height: 96px; }
     .product-badge, .dt-status-badge, .status-badge {
         display: inline-block;
@@ -223,6 +251,52 @@ APP_CSS = """
     thead tr { border-bottom: 2px solid var(--dt-navy); }
     tbody tr { border-bottom: 1px solid var(--dt-border); }
     [data-testid="stTable"] th { background: var(--dt-bg-soft); color: var(--dt-navy); }
+    [data-testid="stHorizontalBlock"]:has(.activity-th) {
+        background: var(--dt-navy);
+        border: 1px solid var(--dt-navy);
+        margin-bottom: 0;
+    }
+    [data-testid="stHorizontalBlock"]:has(.activity-td) {
+        background: var(--dt-white);
+        border: 1px solid var(--dt-border);
+        border-top: none;
+        margin-bottom: 0;
+    }
+    [data-testid="stHorizontalBlock"]:has(.activity-td):nth-of-type(even) {
+        background: var(--dt-bg-soft);
+    }
+    [data-testid="stHorizontalBlock"]:has(.activity-th) [data-testid="column"],
+    [data-testid="stHorizontalBlock"]:has(.activity-td) [data-testid="column"] {
+        border-right: 1px solid rgba(255,255,255,0.18);
+        padding: 6px 6px !important;
+    }
+    [data-testid="stHorizontalBlock"]:has(.activity-td) [data-testid="column"] {
+        border-right: 1px solid var(--dt-border);
+    }
+    [data-testid="stHorizontalBlock"]:has(.activity-th) [data-testid="column"]:last-child,
+    [data-testid="stHorizontalBlock"]:has(.activity-td) [data-testid="column"]:last-child {
+        border-right: none;
+    }
+    .activity-th {
+        color: var(--dt-white);
+        font-size: 12px;
+        font-weight: 700;
+        line-height: 1.3;
+        padding: 8px 4px;
+    }
+    .activity-td {
+        color: var(--dt-text);
+        font-size: 13px;
+        line-height: 1.35;
+        padding: 7px 4px;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
+    .activity-td-product, .activity-td-title, .activity-td-status {
+        min-width: 0;
+    }
+    .activity-td-title { font-weight: 650; }
+    .activity-td-status { color: var(--dt-navy); font-weight: 650; }
     .save-status { font-size: 13px; color: var(--dt-accent); }
     .save-error { font-size: 13px; color: var(--dt-danger); }
 </style>

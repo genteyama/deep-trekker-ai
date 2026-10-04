@@ -130,5 +130,5 @@ def test_streamlit_app_still_imports():
     texts = app.load_texts("ja")
 
     assert texts["app_title"] == "Deep Trekker 業務支援AI"
-    assert texts["agents"]["technical_case"]["name"] == "営業・技術受付AI"
-    assert texts["agents"]["quote_control"]["name"] == "見積・価格管理AI"
+    assert texts["agents"]["technical_case"]["name"] == "営業・技術受付"
+    assert texts["agents"]["quote_control"]["name"] == "見積・価格管理"

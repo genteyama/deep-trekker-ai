@@ -63,12 +63,12 @@
   },
   "agents": {
     "technical_case": {
-      "name": "営業・技術受付AI",
+      "name": "営業・技術受付",
       "english": "Technical Support",
       "description": "技術相談、要件整理、メーカー確認を支援"
     },
     "quote_control": {
-      "name": "見積・価格管理AI",
+      "name": "見積・価格管理",
       "english": "Quote & Price Control",
       "description": "価格確認、構成チェック、見積試算を支援"
     },
