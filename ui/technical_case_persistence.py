@@ -22,6 +22,7 @@ from ui.technical_case_flow import (
     SESSION_RESPONSE_RUN,
     SESSION_RUN,
 )
+from ui.technical_case_steps import SESSION_CASE_STEP
 
 SESSION_REPO = "technical_case_repository"
 SESSION_RECORD_ID = "technical_case_saved_id"
@@ -148,6 +149,7 @@ def start_new_technical_case(session) -> None:
         SESSION_RECORD_ID,
         SESSION_SAVE_STATUS,
         SESSION_SAVE_ERROR,
+        SESSION_CASE_STEP,
         *WIDGET_KEYS,
     ):
         if key in session:

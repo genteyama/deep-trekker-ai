@@ -11,6 +11,11 @@ def _start_app() -> AppTest:
     return AppTest.from_file(str(APP_PATH)).run()
 
 
+def _open_case_step(at: AppTest, step: int) -> AppTest:
+    at.button(key=f"technical_case_step_{step}").click().run()
+    return at
+
+
 def test_home_dashboard_shows_both_work_kinds():
     at = _start_app()
     visible = " ".join(
@@ -45,12 +50,19 @@ def test_incomplete_technical_case_does_not_block_actions():
         + [item.value for item in at.caption]
     )
     assert at.button(key="analyze_inquiry").disabled is False
-    assert at.button(key="organize_manufacturer_response").disabled is False
     assert at.button(key="save_technical_case").disabled is False
     assert at.button(key="new_technical_case").disabled is False
     assert "入力不足のため次へ進めません" not in visible
     assert "進捗" in visible
     assert "要確認" in visible
+    _open_case_step(at, 5)
+    assert at.button(key="organize_manufacturer_response").disabled is False
+    after = " ".join(
+        [item.value for item in at.text]
+        + [item.value for item in at.markdown]
+        + [item.value for item in at.caption]
+    )
+    assert "入力不足のため次へ進めません" not in after
 
 
 def test_home_opens_technical_case_page():
@@ -61,6 +73,26 @@ def test_home_opens_technical_case_page():
     assert at.title[0].value == "営業・技術受付AI"
     assert "Technical Case Agent" in [caption.value for caption in at.caption]
     assert "まだ解析結果はありません" in [text.value for text in at.text]
+    assert any(button.key == "technical_case_step_1" for button in at.button)
+    assert any(button.key == "technical_case_step_7" for button in at.button)
+    assert any("1 受付" in (button.label or "") for button in at.button)
+    assert any("AI Provider" in (expander.label or "") for expander in at.expander)
+
+
+def test_technical_case_stepper_navigates_incomplete_steps():
+    at = _start_app()
+    at.button(key="open_technical_case").click().run()
+    for step in range(1, 8):
+        _open_case_step(at, step)
+        assert not at.exception
+        assert "入力不足のため次へ進めません" not in " ".join(
+            [item.value for item in at.text] + [item.value for item in at.markdown]
+        )
+    assert any(button.key == "complete_technical_case" for button in at.button)
+    assert any(button.key == "analyze_inquiry" for button in at.button)
+    visible = " ".join([item.value for item in at.markdown] + [item.value for item in at.caption])
+    assert "現在" in visible
+    assert "進捗" in visible
 
 
 def test_home_opens_quote_control_page():
@@ -134,6 +166,7 @@ def test_mag_inquiry_shows_retrieved_approved_facts():
         "MAG Utility Crawlerで鋼製円筒タンクの水中肉厚測定を検討。側面と底面。測定した場所を把握したい。"
     )
     at.button(key="analyze_inquiry").click().run()
+    _open_case_step(at, 3)
 
     visible_text = " ".join(
         [item.value for item in at.text] + [item.value for item in at.markdown] + [item.value for item in at.caption]
@@ -307,6 +340,7 @@ def test_manufacturer_response_button_shows_mock_matches():
     at.text_input(key="input_customer_name").set_value("サンプル株式会社")
     at.text_area(key="input_customer_inquiry").set_value("直径300mmの管を点検したい。")
     at.button(key="analyze_inquiry").click().run()
+    _open_case_step(at, 5)
 
     at.text_area(key="input_manufacturer_response").set_value("メーカーからの返信サンプルです。")
     at.button(key="organize_manufacturer_response").click().run()
@@ -330,6 +364,7 @@ def test_apply_button_marks_manufacturer_question_applied():
     at.button(key="open_technical_case").click().run()
     at.text_area(key="input_customer_inquiry").set_value("管内点検の相談です。")
     at.button(key="analyze_inquiry").click().run()
+    _open_case_step(at, 5)
     at.text_area(key="input_manufacturer_response").set_value("メーカーからの返信サンプルです。")
     at.button(key="organize_manufacturer_response").click().run()
 
@@ -352,6 +387,7 @@ def test_human_can_register_technical_fact_from_applied_answer():
     at.button(key="open_technical_case").click().run()
     at.text_area(key="input_customer_inquiry").set_value("管内点検の相談です。")
     at.button(key="analyze_inquiry").click().run()
+    _open_case_step(at, 5)
     at.text_area(key="input_manufacturer_response").set_value("メーカーからの返信サンプルです。")
     at.button(key="organize_manufacturer_response").click().run()
     [button for button in at.button if button.label == "この内容で反映"][0].click().run()

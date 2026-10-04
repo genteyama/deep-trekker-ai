@@ -35,6 +35,36 @@ def progress_text(summary: WorkSummary, labels: Optional[dict] = None) -> str:
 
 def render_progress_summary(summary: WorkSummary, labels: Optional[dict] = None) -> None:
     st.markdown(f"<div class='dt-progress'>{escape(progress_text(summary, labels))}</div>", unsafe_allow_html=True)
+    if summary.total:
+        percent = int(round(100 * summary.completed / summary.total))
+        st.markdown(
+            f"<div class='dt-progress-bar' role='progressbar' aria-valuenow='{summary.completed}' "
+            f"aria-valuemin='0' aria-valuemax='{summary.total}'>"
+            f"<div class='dt-progress-bar-fill' style='width:{percent}%'></div></div>",
+            unsafe_allow_html=True,
+        )
+
+
+def render_workflow_progress(workflow, labels: Optional[dict] = None) -> None:
+    texts = labels or {}
+    current_title = getattr(workflow, "current", None)
+    current_name = getattr(current_title, "title", "") if current_title is not None else ""
+    review = getattr(workflow, "review_required", 0)
+    st.markdown(
+        f"<div class='dt-progress'>"
+        f"{escape(texts.get('current_label', '現在'))}：{escape(current_name)}　"
+        f"{escape(texts.get('progress_label', '進捗'))}：{workflow.completed} / {workflow.total}　"
+        f"{escape(texts.get('review_label', '要確認'))}：{review}{escape(texts.get('review_unit', '件'))}"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+    percent = int(round(100 * workflow.completed / workflow.total)) if workflow.total else 0
+    st.markdown(
+        f"<div class='dt-progress-bar' role='progressbar' aria-valuenow='{workflow.completed}' "
+        f"aria-valuemin='0' aria-valuemax='{workflow.total}'>"
+        f"<div class='dt-progress-bar-fill' style='width:{percent}%'></div></div>",
+        unsafe_allow_html=True,
+    )
 
 
 def render_work_card(title: str, badge_label: str, *, expanded: bool, key: Optional[str] = None):

@@ -30,6 +30,9 @@ def test_shared_css_uses_brand_tokens_and_button_states():
     assert "--dt-navy-hover" in APP_CSS
     assert "--dt-border" in APP_CSS
     assert ".activity-th" in APP_CSS
+    assert ".dt-step-card" in APP_CSS
+    assert ".dt-progress-bar" in APP_CSS
+    assert ".dt-step-current-label" in APP_CSS
     assert "background: var(--dt-navy) !important" in APP_CSS
     assert "cursor: pointer" in APP_CSS
     assert "cursor: not-allowed" in APP_CSS

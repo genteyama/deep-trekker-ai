@@ -59,12 +59,24 @@ from ui.technical_case_flow import (
     SESSION_RUN,
 )
 from ui.components.lifecycle import apply_case_lifecycle, render_case_actions_menu, render_lineage_card
-from ui.components.status import item_badge_label, render_progress_summary, render_work_card
+from ui.components.process_stepper import ProcessStepView, render_process_stepper, render_work_panel
+from ui.components.status import render_workflow_progress
 from ui.technical_case_persistence import (
+    WIDGET_KEYS,
     get_technical_case_repository,
     persist_technical_case,
     resume_case_into_session,
     start_new_technical_case,
+)
+from ui.technical_case_steps import (
+    SESSION_CASE_STEP,
+    STEP_STATUS_LABELS,
+    TECHNICAL_STEP_IDS,
+    build_technical_workflow,
+    infer_current_step,
+    selected_or_current,
+    step_button_key,
+    step_title,
 )
 from ui.work_status import summarize_technical_case
 
@@ -86,6 +98,9 @@ RESULT_SECTIONS = (
 
 def render_technical_case(texts: dict) -> None:
     page = texts["pages"]["technical_case"]
+    workflow_labels = page.get("workflow", {})
+    for key in WIDGET_KEYS:
+        st.session_state.setdefault(key, "")
     _apply_pending_resume()
 
     if st.button(texts["back_to_home"], key="back_to_home", type="secondary"):
@@ -96,125 +111,44 @@ def render_technical_case(texts: dict) -> None:
     st.caption(page["internal_name"])
     st.write(page["description"])
     summary = _current_work_summary()
-    _render_case_summary(page, summary)
+    workflow = build_technical_workflow(summary, workflow_labels)
+    _render_case_summary(page, summary, workflow)
     _render_case_actions(page)
-    _render_case_lifecycle(texts, page)
 
     if get_active_provider_name() == "mock":
         st.warning(page["mock_warning"])
-    with st.expander(page.get("provider_status_label", "AI Provider"), expanded=False):
+    with st.expander(page.get("dev_settings_label", page.get("provider_status_label", "AI Provider")), expanded=False):
         _render_provider_status(page)
+        _render_technical_fact_view(page)
 
-    inquiry_text = ""
-    with render_work_card(
-        page["section_inquiry"],
-        item_badge_label(summary, "inquiry"),
-        expanded=True,
-        key="card_inquiry",
-    ):
-        inquiry_text = st.text_area(
-            page["inquiry_label"],
-            key="input_customer_inquiry",
-            height=180,
+    selected = selected_or_current(st.session_state.get(SESSION_CASE_STEP), workflow)
+    views = [
+        ProcessStepView(
+            step=item.step,
+            title=item.title,
+            status=item.status,
+            status_label=item.badge_label(STEP_STATUS_LABELS, workflow_labels.get("review_unit", "件")),
+            review_count=item.review_count,
+            is_current=item.step == workflow.current_step,
         )
-        _render_knowledge_selection(page, inquiry_text)
+        for item in workflow.steps
+    ]
+    clicked = render_process_stepper(
+        views,
+        selected=selected,
+        button_key_fn=step_button_key,
+        current_label=workflow_labels.get("current_label", "現在"),
+        row_sizes=(4, 3),
+    )
+    if clicked != selected:
+        st.session_state[SESSION_CASE_STEP] = clicked
+        st.rerun()
 
-    submitted = False
-    with render_work_card(
-        page["section_case_info"],
-        item_badge_label(summary, "case_info"),
-        expanded=True,
-        key="card_case_info",
-    ):
-        with st.form("technical_case_intake"):
-            case_name = st.text_input(page["case_name"], key="input_case_name")
-            customer_name = st.text_input(page["customer_name"], key="input_customer_name")
-            end_user_name = st.text_input(page["end_user_name"], key="input_end_user_name")
-            st.caption(page["end_user_hint"])
-            submitted = st.form_submit_button(
-                page["analyze_button"],
-                key="analyze_inquiry",
-                type="primary",
-            )
-
-    if submitted:
-        existing_case = st.session_state.get(SESSION_CASE)
-        run = run_technical_case_analysis(
-            case_name,
-            customer_name,
-            end_user_name,
-            inquiry_text,
-            selected_fact_ids=_selected_fact_ids(inquiry_text),
-            case_id=existing_case.case_id if existing_case is not None else None,
-            created_at=existing_case.created_at if existing_case is not None else None,
-        )
-        st.session_state[SESSION_RUN] = run
-        st.session_state[SESSION_CASE] = run.case
-        st.session_state[SESSION_INQUIRY] = run.inquiry_text
-        st.session_state[SESSION_ANALYSIS] = run.analysis_json
-        persist_technical_case(st.session_state, run)
-
-    run = st.session_state.get(SESSION_RUN)
-    analyzed = bool(run and run.success)
-    with render_work_card(
-        page["section_results"],
-        item_badge_label(summary, "requirements"),
-        expanded=run is None or analyzed,
-        key="card_results",
-    ):
-        _render_run_result(page, run)
-
-    with render_work_card(
-        page["retrieved_facts_label"],
-        item_badge_label(summary, "knowledge"),
-        expanded=analyzed,
-        key="card_knowledge",
-    ):
-        if analyzed:
-            _render_retrieved_facts(page, run)
-        else:
-            st.text(page["no_results"])
-
-    with render_work_card(
-        page["section_manufacturer_checks"],
-        item_badge_label(summary, "human_review") if summary.review_required else item_badge_label(summary, "manufacturer_questions"),
-        expanded=analyzed,
-        key="card_manufacturer_questions",
-    ):
-        if analyzed:
-            _render_question_section(page["section_manufacturer_checks"], run.manufacturer_questions, page)
-        else:
-            st.text(page["no_results"])
-
-    with render_work_card(
-        page["section_manufacturer_response"],
-        item_badge_label(summary, "manufacturer_response"),
-        expanded=True,
-        key="card_manufacturer_response",
-    ):
-        _render_manufacturer_response_section(page, run)
-
-    with render_work_card(
-        page.get("section_evidence", "Evidence Validation"),
-        item_badge_label(summary, "evidence_validation"),
-        expanded=bool(st.session_state.get(SESSION_RESPONSE_RUN)),
-        key="card_evidence",
-    ):
-        _render_evidence_card(page, st.session_state.get(SESSION_RESPONSE_RUN))
-
-    with render_work_card(
-        page.get("section_customer_reply", "顧客回答準備"),
-        item_badge_label(summary, "customer_reply"),
-        expanded=bool(st.session_state.get(SESSION_APPROVAL_BOARD)),
-        key="card_customer_reply",
-    ):
-        board = st.session_state.get(SESSION_APPROVAL_BOARD)
-        if board:
-            _render_approval_summary(page, board)
-        else:
-            st.text(page.get("response_no_results", page["no_results"]))
-
-    _render_technical_fact_view(page)
+    if selected != 1:
+        with st.expander(page["section_case_info"], expanded=False):
+            _render_intake_fields(page)
+    _render_selected_step(texts, page, selected, summary, workflow)
+    _render_step_nav(page, selected)
     _render_recent_cases(page)
 
 
@@ -233,20 +167,236 @@ def _current_work_summary():
     )
 
 
-def _render_case_summary(page: dict, summary) -> None:
+def _render_selected_step(texts: dict, page: dict, selected: int, summary, workflow) -> None:
+    state = workflow.step_state(selected)
+    title = f"{selected}. {step_title(selected, page.get('workflow'))}"
+    badge = state.badge_label() if state is not None else STEP_STATUS_LABELS["NOT_STARTED"]
+    status = state.status if state is not None else "NOT_STARTED"
+    with render_work_panel(title, badge, status=status):
+        if selected == 1:
+            _render_step_intake(page)
+        elif selected == 2:
+            _render_step_requirements(page)
+        elif selected == 3:
+            _render_step_knowledge(page)
+        elif selected == 4:
+            _render_step_manufacturer(page)
+        elif selected == 5:
+            _render_step_response(page)
+        elif selected == 6:
+            _render_step_customer_reply(page)
+        else:
+            _render_step_complete(texts, page, summary, workflow)
+
+
+def _render_step_nav(page: dict, selected: int) -> None:
+    labels = page.get("workflow", {})
+    left, _, right = st.columns([1, 1, 1])
+    with left:
+        if selected > TECHNICAL_STEP_IDS[0] and st.button(
+            labels.get("prev_step", "前の工程"),
+            key="technical_case_step_prev",
+            type="secondary",
+        ):
+            st.session_state[SESSION_CASE_STEP] = selected - 1
+            st.rerun()
+    with right:
+        if selected < TECHNICAL_STEP_IDS[-1] and st.button(
+            labels.get("next_step", "次の工程"),
+            key="technical_case_step_next",
+            type="secondary",
+        ):
+            st.session_state[SESSION_CASE_STEP] = selected + 1
+            st.rerun()
+
+
+def _render_step_intake(page: dict) -> None:
+    if st.session_state.get(SESSION_RUN) is None:
+        st.text(page["no_results"])
+    _render_intake_fields(page)
+
+
+def _render_intake_fields(page: dict) -> None:
+    inquiry_text = st.text_area(
+        page["inquiry_label"],
+        key="input_customer_inquiry",
+        height=180,
+    )
+    case_name = st.text_input(page["case_name"], key="input_case_name")
+    customer_name = st.text_input(page["customer_name"], key="input_customer_name")
+    end_user_name = st.text_input(page["end_user_name"], key="input_end_user_name")
+    st.caption(page["end_user_hint"])
+    submitted = st.button(
+        page["analyze_button"],
+        key="analyze_inquiry",
+        type="primary",
+    )
+    if submitted:
+        existing_case = st.session_state.get(SESSION_CASE)
+        run = run_technical_case_analysis(
+            case_name,
+            customer_name,
+            end_user_name,
+            inquiry_text,
+            selected_fact_ids=_selected_fact_ids(inquiry_text),
+            case_id=existing_case.case_id if existing_case is not None else None,
+            created_at=existing_case.created_at if existing_case is not None else None,
+        )
+        st.session_state[SESSION_RUN] = run
+        st.session_state[SESSION_CASE] = run.case
+        st.session_state[SESSION_INQUIRY] = run.inquiry_text
+        st.session_state[SESSION_ANALYSIS] = run.analysis_json
+        persist_technical_case(st.session_state, run)
+        st.session_state[SESSION_CASE_STEP] = 2
+        st.rerun()
+
+
+def _render_step_requirements(page: dict) -> None:
+    run = st.session_state.get(SESSION_RUN)
+    _render_requirements_detail(page, run)
+
+
+def _render_step_knowledge(page: dict) -> None:
+    inquiry_text = st.session_state.get("input_customer_inquiry") or st.session_state.get(SESSION_INQUIRY)
+    _render_knowledge_selection(page, inquiry_text)
+    run = st.session_state.get(SESSION_RUN)
+    if run and run.success:
+        _render_retrieved_facts(page, run)
+        if run.technical_questions:
+            _render_question_section(page["section_technical_questions"], run.technical_questions, page)
+    else:
+        st.text(page["no_results"])
+
+
+def _render_step_manufacturer(page: dict) -> None:
+    run = st.session_state.get(SESSION_RUN)
+    if run and run.success:
+        _render_question_section(page["section_manufacturer_checks"], run.manufacturer_questions, page)
+    else:
+        st.text(page["no_results"])
+
+
+def _render_step_response(page: dict) -> None:
+    run = st.session_state.get(SESSION_RUN)
+    _render_manufacturer_response_section(page, run)
+    _render_evidence_card(page, st.session_state.get(SESSION_RESPONSE_RUN))
+    board = st.session_state.get(SESSION_APPROVAL_BOARD)
+    if board:
+        _render_approval_summary(page, board)
+
+
+def _render_step_customer_reply(page: dict) -> None:
+    board = st.session_state.get(SESSION_APPROVAL_BOARD)
+    if board:
+        _render_approval_summary(page, board)
+    else:
+        st.text(page.get("workflow", {}).get("preparing_label", "準備中"))
+        st.text(page.get("response_no_results", page["no_results"]))
+
+
+def _render_step_complete(texts: dict, page: dict, summary, workflow) -> None:
     status_labels = page.get("case_status", {})
+    st.write(
+        f"{page.get('case_status_label', '案件状態')}: "
+        f"{status_labels.get(summary.process_status, summary.process_label())}"
+    )
+    st.write(
+        f"{page.get('review_label', '要確認')}: "
+        f"{workflow.review_required}{page.get('workflow', {}).get('review_unit', page.get('review_unit', '件'))}"
+    )
+    if st.button(page.get("complete_case_button", "案件を完了"), key="complete_technical_case", type="primary"):
+        persist_technical_case(
+            st.session_state,
+            st.session_state.get(SESSION_RUN),
+            st.session_state.get(SESSION_RESPONSE_RUN),
+            st.session_state.get(SESSION_APPROVAL_BOARD),
+            completed=True,
+        )
+        st.session_state[SESSION_CASE_STEP] = 7
+        st.rerun()
+    _render_case_lifecycle(texts, page)
+    _render_related_quotes(page)
+
+
+def _render_related_quotes(page: dict) -> None:
+    record = _current_record()
+    if record is None:
+        return
+    from agents.activity_catalog import load_related_quotes
+    from ui.quote_persistence import get_quote_repository
+
+    quotes = load_related_quotes(get_quote_repository(), record.case_id)
+    st.markdown(f"**{page.get('workflow', {}).get('related_quotes', '関連見積')}**")
+    if not quotes:
+        st.text(page.get("no_results", "まだ解析結果はありません"))
+        return
+    for draft in quotes:
+        st.write(f"- {draft.title or draft.configuration_name or draft.quote_draft_id}")
+
+
+def _render_requirements_detail(page: dict, run) -> None:
+    if run is None:
+        _render_empty_requirement_sections(page)
+        return
+    if not run.success:
+        _render_run_result(page, run)
+        return
+    _render_summary_section(page, run)
+    _render_completeness_issues(page, getattr(run, "completeness_issues", []))
+    _render_requirement_section(page, run.requirements)
+    _render_question_section(page["section_customer_checks"], run.customer_questions, page)
+    _render_existing_equipment(page, run)
+    _render_unresolved_section(page, run)
+    if run.analysis_json is not None:
+        with st.expander(page["review_json"]):
+            st.json(run.analysis_json)
+
+
+def _render_empty_requirement_sections(page: dict) -> None:
+    for title_key in (
+        "section_summary",
+        "section_requirements",
+        "section_customer_checks",
+        "section_unconfirmed",
+    ):
+        with st.container(border=True):
+            st.markdown(f"**{page[title_key]}**")
+            st.text(page["no_results"])
+
+
+def _render_existing_equipment(page: dict, run) -> None:
+    label = page.get("workflow", {}).get("existing_equipment", "既存設備")
+    with st.container(border=True):
+        st.markdown(f"**{label}**")
+        found = [
+            item
+            for item in (run.requirements or [])
+            if "既存" in (item.label or "") or "設備" in (item.label or "")
+        ]
+        if not found:
+            st.text(page["no_results"])
+            return
+        for item in found:
+            st.write(f"- {_requirement_line(item, page)}")
+
+
+def _render_case_summary(page: dict, summary, workflow) -> None:
+    status_labels = page.get("case_status", {})
+    run = st.session_state.get(SESSION_RUN)
     with st.container(border=True):
         cols = st.columns([2, 1])
         with cols[0]:
             st.markdown(f"**{summary.title or page.get('unnamed_item', '項目')}**")
             st.write(summary.customer or page.get("no_value", "-"))
             st.caption(f"{page.get('end_user_name', 'End User')}: {st.session_state.get('input_end_user_name') or '-'}")
+            if run is not None and run.case_summary:
+                st.write(run.case_summary)
         with cols[1]:
             st.caption(
                 f"{page.get('case_status_label', '案件状態')}: "
                 f"{status_labels.get(summary.process_status, summary.process_label())}"
             )
-            render_progress_summary(summary, page)
+            render_workflow_progress(workflow, page.get("workflow") or page)
             st.caption(f"{page.get('provider_label', 'AI Provider')}: {summary.provider or '-'}")
             st.caption(f"{page.get('model_label', 'Model')}: {summary.model or '-'}")
             if summary.updated_at:
@@ -259,7 +409,7 @@ def _render_case_summary(page: dict, summary) -> None:
 
 
 def _render_case_actions(page: dict) -> None:
-    cols = st.columns(3)
+    cols = st.columns(2)
     if cols[0].button(page.get("new_case_button", "新規案件"), key="new_technical_case", type="secondary"):
         start_new_technical_case(st.session_state)
         st.rerun()
@@ -271,19 +421,6 @@ def _render_case_actions(page: dict) -> None:
             st.session_state.get(SESSION_APPROVAL_BOARD),
         )
         st.rerun()
-    with cols[2]:
-        st.markdown("<div class='dt-complete-wrap'>", unsafe_allow_html=True)
-        completed = st.button(page.get("complete_case_button", "案件を完了"), key="complete_technical_case", type="secondary")
-        st.markdown("</div>", unsafe_allow_html=True)
-        if completed:
-            persist_technical_case(
-                st.session_state,
-                st.session_state.get(SESSION_RUN),
-                st.session_state.get(SESSION_RESPONSE_RUN),
-                st.session_state.get(SESSION_APPROVAL_BOARD),
-                completed=True,
-            )
-            st.rerun()
     if st.session_state.get("technical_case_save_status") == "saved":
         st.success(page.get("case_saved", "案件を保存しました"))
     elif st.session_state.get("technical_case_save_error"):
@@ -399,6 +536,15 @@ def _apply_pending_resume() -> None:
     loaded = get_technical_case_repository().get_case(case_id)
     if loaded is not None:
         resume_case_into_session(loaded, st.session_state)
+        summary = summarize_technical_case(
+            inquiry_text=st.session_state.get("input_customer_inquiry") or loaded.original_inquiry,
+            case_name=st.session_state.get("input_case_name") or loaded.case_title,
+            customer_name=st.session_state.get("input_customer_name") or loaded.customer_name,
+            run=st.session_state.get(SESSION_RUN),
+            response_run=st.session_state.get(SESSION_RESPONSE_RUN),
+            record=loaded,
+        )
+        st.session_state[SESSION_CASE_STEP] = infer_current_step(summary)
 
 
 def _missing_key_text(page: dict) -> str:
@@ -723,6 +869,7 @@ def _render_manufacturer_response_section(
             st.session_state.get(SESSION_APPROVAL_BOARD),
             append_response_revision=True,
         )
+        st.session_state[SESSION_CASE_STEP] = 5
 
     _render_response_run(
         page,

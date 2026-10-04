@@ -238,6 +238,54 @@ APP_CSS = """
     .summary-card .value { font-size: 22px; line-height: 1.2; color: var(--dt-navy); font-weight: 650; word-break: break-word; }
     .summary-card .unset { font-size: 13px; color: var(--dt-muted); font-weight: 500; }
     .dt-progress { color: var(--dt-navy); font-size: 14px; font-weight: 650; }
+    .dt-progress-bar {
+        height: 6px;
+        background: var(--dt-border);
+        border-radius: 999px;
+        overflow: hidden;
+        margin: 6px 0 10px 0;
+    }
+    .dt-progress-bar-fill {
+        height: 100%;
+        background: var(--dt-navy);
+        border-radius: 999px;
+    }
+    .dt-step-card {
+        border: 1px solid var(--dt-border);
+        border-radius: 10px;
+        background: var(--dt-white);
+        padding: 10px 12px;
+        min-height: 88px;
+        margin-bottom: 8px;
+        box-sizing: border-box;
+    }
+    .dt-step-card.is-current {
+        border: 2px solid var(--dt-navy);
+        background: var(--dt-bg-soft);
+    }
+    .dt-step-card-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 6px;
+        margin-bottom: 8px;
+    }
+    .dt-step-num {
+        color: var(--dt-navy);
+        font-size: 14px;
+        font-weight: 700;
+        line-height: 1.35;
+    }
+    .dt-step-current-label {
+        display: inline-block;
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--dt-white);
+        background: var(--dt-navy);
+        padding: 1px 6px;
+        border-radius: 4px;
+        white-space: nowrap;
+    }
     .section-rule { border: 0; border-top: 1px solid var(--dt-border); margin: 12px 0; }
     .warning-card {
         border: 1px solid #c9a227;
