@@ -1,4 +1,6 @@
 from models.enums import (
+    ActivityCategory,
+    ActivityEventType,
     CaseLineageType,
     AnswerSourceType,
     DestinationRegion,
@@ -58,12 +60,14 @@ from models.enums import (
 from models.sample import create_sample_case, sample_case_json
 from models.schemas import (
     SHIPPING_RULE_PRIORITY,
+    ActivityEvent,
     ApprovalRecord,
     Case,
     CaseRequirement,
     Configuration,
     ConfigurationItem,
     CellReference,
+    CustomerRecord,
     CostScenario,
     ExchangeRateScenario,
     HistoricalPriceComparison,
@@ -161,6 +165,9 @@ from models.schemas import (
 )
 
 __all__ = [
+    "ActivityCategory",
+    "ActivityEvent",
+    "ActivityEventType",
     "AnswerSourceType",
     "ApprovalRecord",
     "Case",
@@ -225,6 +232,7 @@ __all__ = [
     "CustomerQuoteInsurance",
     "CustomerQuoteLine",
     "CustomerQuoteShipping",
+    "CustomerRecord",
     "CurrentManufacturerValues",
     "DestinationRegion",
     "FactConfidence",

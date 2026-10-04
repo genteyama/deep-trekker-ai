@@ -8,7 +8,7 @@ from ui.components.portal import (
 )
 from ui.components.lifecycle import render_home_filter
 from ui.components.status import render_recent_case_card
-from ui.navigation import PAGE_QUOTE_CONTROL, PAGE_TECHNICAL_CASE, set_current_page
+from ui.navigation import PAGE_ACTIVITY_LEDGER, PAGE_QUOTE_CONTROL, PAGE_TECHNICAL_CASE, set_current_page
 from ui.quote_persistence import get_quote_repository
 from ui.technical_case_persistence import get_technical_case_repository, resume_case_into_session
 from ui.work_status import KIND_QUOTE, KIND_TECHNICAL, summarize_quote, summarize_technical_case
@@ -28,7 +28,7 @@ def render_home(texts: dict) -> None:
     render_portal_section_title(texts["menu_label"])
 
     tech_open, quote_open = _open_counts()
-    left_column, right_column = st.columns(2)
+    left_column, middle_column, right_column = st.columns(3)
     with left_column:
         render_menu_card(
             technical_case["name"],
@@ -44,6 +44,22 @@ def render_home(texts: dict) -> None:
             type="primary",
         ):
             set_current_page(PAGE_TECHNICAL_CASE)
+            st.rerun()
+
+    with middle_column:
+        activity = texts.get("agents", {}).get("activity_ledger", {})
+        render_menu_card(
+            activity.get("name", "履歴・活動台帳"),
+            activity.get("english", "Activity Ledger"),
+            activity.get("description", "営業技術問い合わせ、見積、派生案件を時系列で確認"),
+        )
+        if st.button(
+            texts.get("open_label", "開く"),
+            key="open_activity_ledger",
+            use_container_width=True,
+            type="primary",
+        ):
+            set_current_page(PAGE_ACTIVITY_LEDGER)
             st.rerun()
 
     with right_column:

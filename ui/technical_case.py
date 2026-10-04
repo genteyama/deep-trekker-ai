@@ -305,6 +305,10 @@ def _render_case_lifecycle(texts: dict, page: dict) -> None:
         relation = st.session_state.pop("case_derive_relation", None)
         updated = apply_case_lifecycle(record, repo, action, relation_type=relation)
         repo.save_case(updated)
+        from agents.activity_log import record_case_lifecycle
+        from repositories.sqlite_activity_repository import SqliteActivityRepository
+
+        record_case_lifecycle(SqliteActivityRepository(repo.path), updated, action, previous=record)
         if action in {"duplicate", "derive"}:
             resume_case_into_session(updated, st.session_state)
         elif action in {"archive", "trash", "restore"}:

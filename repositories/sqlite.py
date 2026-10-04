@@ -52,6 +52,8 @@ def lifecycle_where(view: str, *, completed_statuses: tuple[str, ...] = ("COMPLE
     deleted_null = "(deleted_at IS NULL OR deleted_at = '')"
     archived_null = "(archived_at IS NULL OR archived_at = '')"
     completed = ", ".join(f"'{item}'" for item in completed_statuses)
+    if view == "history":
+        return "(deleted_at IS NULL OR deleted_at = '')"
     if view == "trash":
         return "(deleted_at IS NOT NULL AND deleted_at != '')"
     if view == "archived":

@@ -50,6 +50,7 @@ from agents.supplier_quote_validation import load_official_manufacturer_price_bo
 from data.golden_cases.loader import IHI_QUOTE_001, load_quote_golden_case
 from models import (
     DomesticShippingMode,
+    ExportFileType,
     ExportPurpose,
     InsuranceMode,
     QuoteDraftStatus,
@@ -1082,6 +1083,19 @@ def _render_file_export(page: dict, snapshot) -> None:
         st.write(f"{page['export_saved']}: {item}")
 
 
+def _record_formal_document(snapshot, document_type: str) -> None:
+    from agents.activity_log import record_quote_document_generated
+    from repositories.sqlite_activity_repository import SqliteActivityRepository
+    from ui.quote_persistence import get_quote_repository
+
+    draft = st.session_state.get("quote_draft") or snapshot
+    record_quote_document_generated(
+        SqliteActivityRepository(getattr(get_quote_repository(), "path", None)),
+        draft,
+        document_type=document_type,
+    )
+
+
 def _run_pdf_export(page: dict, snapshot, official: str, generated_by: str) -> None:
     try:
         bundle, path = export_spaceone_quote_pdf(
@@ -1093,6 +1107,7 @@ def _run_pdf_export(page: dict, snapshot, official: str, generated_by: str) -> N
         saved = list(st.session_state.get("quote_export_files") or [])
         saved.append(str(path))
         st.session_state["quote_export_files"] = saved
+        _record_formal_document(snapshot, ExportFileType.SPACEONE_QUOTE_PDF.value)
         st.success(page.get("export_pdf_saved", "✓ PDFを生成しました"))
         st.write(path.name)
         st.write(f"{page['column_version']}: v{snapshot.quote_version}")
@@ -1114,6 +1129,8 @@ def _run_export(page: dict, snapshot, exporter, official: str, generated_by: str
         saved = list(st.session_state.get("quote_export_files") or [])
         saved.append(str(path))
         st.session_state["quote_export_files"] = saved
+        if purpose == ExportPurpose.FORMAL:
+            _record_formal_document(snapshot, ExportFileType.SPACEONE_QUOTE_XLSX.value)
         st.success(f"{page['export_saved']}: {path.name}")
     except QuoteExportError as error:
         st.error(str(error))

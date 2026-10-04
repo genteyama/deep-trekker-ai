@@ -1427,3 +1427,30 @@ class ApprovedQuoteExportBundle(BaseModel):
     file_manifest: list[ExportFileManifest] = Field(default_factory=list)
     status: ExportBundleStatus = ExportBundleStatus.VALIDATED
     warnings: list[str] = Field(default_factory=list)
+
+
+class ActivityEvent(BaseModel):
+    event_id: str
+    event_type: str
+    occurred_at: str
+    entity_kind: str
+    entity_id: str
+    entity_version: Optional[int] = None
+    customer_name: Optional[str] = None
+    title: Optional[str] = None
+    payload: dict = Field(default_factory=dict)
+    schema_version: int = 1
+
+
+class CustomerRecord(BaseModel):
+    customer_id: str
+    customer_name: str
+    department: Optional[str] = None
+    contact_name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    address: Optional[str] = None
+    end_user: Optional[str] = None
+    notes: Optional[str] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None

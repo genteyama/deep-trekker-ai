@@ -357,17 +357,42 @@ def reset_pending_form(session, step: int = 1) -> None:
 
 
 def maybe_autosave(repository: QuoteRepository, draft: QuoteDraft, session, *, from_widgets: bool = True) -> SaveResult:
+    previous = repository.get_draft(draft.quote_draft_id, draft.quote_version)
     ui_state = collect_ui_state(session, draft, from_widgets=from_widgets)
     result = repository.save_draft(draft, ui_state, force=False)
     _remember_result(session, result)
+    if result.saved:
+        _record_quote_activity(repository, previous, draft)
     return result
 
 
 def save_draft_now(repository: QuoteRepository, draft: QuoteDraft, session, *, from_widgets: bool = True) -> SaveResult:
+    previous = repository.get_draft(draft.quote_draft_id, draft.quote_version)
     ui_state = collect_ui_state(session, draft, from_widgets=from_widgets)
     result = repository.save_draft(draft, ui_state, force=True)
     _remember_result(session, result)
+    if result.saved:
+        _record_quote_activity(repository, previous, draft)
     return result
+
+
+def _record_quote_activity(repository, previous, draft) -> None:
+    from agents.activity_log import record_quote_saved
+    from repositories.sqlite_activity_repository import SqliteActivityRepository
+    from repositories.sqlite_customer_repository import SqliteCustomerRepository
+    from models import CustomerRecord
+
+    path = getattr(repository, "path", None)
+    record_quote_saved(
+        SqliteActivityRepository(path),
+        None if previous is None else previous.draft,
+        draft,
+        derived=bool(getattr(draft, "parent_quote_id", None)) and previous is None,
+    )
+    if draft.customer:
+        customers = SqliteCustomerRepository(path)
+        if customers.find(draft.customer, None) is None:
+            customers.save(CustomerRecord(customer_id="", customer_name=draft.customer))
 
 
 def _restore_pending_widgets(session, draft: Optional[QuoteDraft], pending: dict) -> None:

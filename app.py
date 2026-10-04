@@ -5,8 +5,9 @@ import os
 from dotenv import load_dotenv
 import streamlit as st
 
+from ui.activity_ledger import render_activity_ledger
 from ui.home import render_home
-from ui.navigation import PAGE_QUOTE_CONTROL, PAGE_TECHNICAL_CASE, get_current_page, init_navigation
+from ui.navigation import PAGE_ACTIVITY_LEDGER, PAGE_QUOTE_CONTROL, PAGE_TECHNICAL_CASE, get_current_page, init_navigation
 from ui.quote_control import render_quote_control
 from ui.technical_case import render_technical_case
 from ui.styles import page_icon_value
@@ -45,6 +46,8 @@ def main() -> None:
         render_technical_case(texts)
     elif current_page == PAGE_QUOTE_CONTROL:
         render_quote_control(texts)
+    elif current_page == PAGE_ACTIVITY_LEDGER:
+        render_activity_ledger(texts)
     else:
         render_home(texts)
 

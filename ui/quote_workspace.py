@@ -130,6 +130,11 @@ def _render_quote_lifecycle(page: dict, helpers: dict, draft) -> None:
         else:
             st.session_state["quote_draft"] = updated
             _save_draft(page, updated, manual=True)
+        from agents.activity_log import record_quote_lifecycle
+        from repositories.sqlite_activity_repository import SqliteActivityRepository
+
+        if action in {"archive", "restore", "trash"}:
+            record_quote_lifecycle(SqliteActivityRepository(getattr(repo, "path", None)), updated, action, previous=draft)
         st.rerun()
     if draft is None:
         return
@@ -467,7 +472,12 @@ def _render_step_review(page: dict, helpers, draft, snapshot) -> None:
             st.session_state["quote_outputs"] = generate_quote_outputs(snapshot)
             st.session_state[SESSION_QUOTE_STEP] = 5
             try:
-                get_quote_repository().save_snapshot(snapshot)
+                quote_repo = get_quote_repository()
+                quote_repo.save_snapshot(snapshot)
+                from agents.activity_log import record_quote_approved
+                from repositories.sqlite_activity_repository import SqliteActivityRepository
+
+                record_quote_approved(SqliteActivityRepository(getattr(quote_repo, "path", None)), draft, snapshot)
                 _save_draft(page, draft, manual=True)
             except QuoteRepositoryError as error:
                 st.session_state[SESSION_SAVE_ERROR] = str(error)
@@ -508,6 +518,18 @@ def _render_step_export(page: dict, helpers, draft, snapshot) -> None:
         helpers["render_export"](page, None)
         return
     st.success(workspace["approved_heading"])
+    if st.button(workspace.get("mark_submitted_button", "顧客へ提出済みにする"), key="mark_quote_submitted", type="secondary"):
+        from agents.activity_log import record_quote_submitted
+        from repositories.sqlite_activity_repository import SqliteActivityRepository
+
+        recorded = record_quote_submitted(
+            SqliteActivityRepository(getattr(get_quote_repository(), "path", None)),
+            draft if draft is not None else snapshot,
+        )
+        if recorded is None:
+            st.info(workspace.get("already_submitted", "この見積は提出済みとして記録済みです。"))
+        else:
+            st.success(workspace.get("submitted_recorded", "顧客への提出を記録しました。"))
     st.write(f"{page['column_version']}: v{snapshot.quote_version}")
     st.write(f"{workspace['approved_by']}: {snapshot.approved_by or page['no_value']}")
     approved_at = snapshot.approved_at

@@ -3,6 +3,7 @@ import streamlit as st
 PAGE_HOME = "home"
 PAGE_TECHNICAL_CASE = "technical_case"
 PAGE_QUOTE_CONTROL = "quote_control"
+PAGE_ACTIVITY_LEDGER = "activity_ledger"
 SESSION_CURRENT_PAGE = "current_page"
 
 

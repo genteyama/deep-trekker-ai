@@ -105,6 +105,7 @@ def persist_technical_case(
         session[SESSION_RECORD_ID] = saved.case_id if saved else record.case_id
         session[SESSION_SAVE_STATUS] = "saved"
         session[SESSION_SAVE_ERROR] = None
+        _record_case_activity(repo, existing, saved, response_received=append_response_revision, completed=completed)
         return saved
     except TechnicalCaseRepositoryError as error:
         session[SESSION_SAVE_STATUS] = "error"
@@ -169,3 +170,34 @@ def mark_completed(session, repository=None) -> Optional[TechnicalCaseRecord]:
 
 def status_is_completed(status: Optional[str]) -> bool:
     return status == TechnicalCaseStatus.COMPLETED.value
+
+
+def _record_case_activity(repo, existing, saved, *, response_received: bool, completed: bool) -> None:
+    if saved is None:
+        return
+    from agents.activity_log import record_case_saved
+    from repositories.sqlite_activity_repository import SqliteActivityRepository
+    from repositories.sqlite_customer_repository import SqliteCustomerRepository
+    from models import CustomerRecord
+
+    path = getattr(repo, "path", None)
+    record_case_saved(
+        SqliteActivityRepository(path),
+        existing,
+        saved,
+        response_received=response_received and existing is not None,
+        completed=completed,
+    )
+    if saved.customer_name:
+        customers = SqliteCustomerRepository(path)
+        found = customers.find(saved.customer_name, None)
+        if found is None:
+            customers.save(
+                CustomerRecord(
+                    customer_id="",
+                    customer_name=saved.customer_name,
+                    end_user=saved.end_user_name,
+                )
+            )
+        elif saved.end_user_name and not found.end_user:
+            customers.save(found.model_copy(update={"end_user": saved.end_user_name}))
