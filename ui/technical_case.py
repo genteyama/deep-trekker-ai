@@ -20,6 +20,9 @@ from agents.facts import (
     fact_registration_warnings,
     register_technical_fact,
 )
+from agents.fact_retrieval import detect_requested_products, retrieve_approved_facts_for_products
+from agents.knowledge import is_default_selected
+from agents.question_review import apply_question_review
 from agents.technical_case_agent import (
     ERROR_EMPTY_RESPONSE,
     ERROR_NO_QUESTIONS,
@@ -48,6 +51,7 @@ from ui.technical_case_flow import SESSION_ANALYSIS, SESSION_CASE, SESSION_INQUI
 SESSION_RUN = "technical_case_run"
 SESSION_RESPONSE_RUN = "manufacturer_response_run"
 SESSION_APPROVAL_BOARD = "manufacturer_approval_board"
+FACT_SELECT_PREFIX = "use_fact_"
 APPROVAL_STATUS_OPTIONS = (
     SuggestedQuestionStatus.ANSWERED,
     SuggestedQuestionStatus.PARTIAL,
@@ -80,20 +84,20 @@ def render_technical_case(texts: dict) -> None:
 
     st.divider()
 
+    st.subheader(page["section_inquiry"])
+    inquiry_text = st.text_area(
+        page["inquiry_label"],
+        key="input_customer_inquiry",
+        height=180,
+    )
+    _render_knowledge_selection(page, inquiry_text)
+
     with st.form("technical_case_intake"):
         st.subheader(page["section_case_info"])
         case_name = st.text_input(page["case_name"], key="input_case_name")
         customer_name = st.text_input(page["customer_name"], key="input_customer_name")
         end_user_name = st.text_input(page["end_user_name"], key="input_end_user_name")
         st.caption(page["end_user_hint"])
-
-        st.subheader(page["section_inquiry"])
-        inquiry_text = st.text_area(
-            page["inquiry_label"],
-            key="input_customer_inquiry",
-            height=180,
-        )
-
         submitted = st.form_submit_button(
             page["analyze_button"],
             key="analyze_inquiry",
@@ -106,6 +110,7 @@ def render_technical_case(texts: dict) -> None:
             customer_name,
             end_user_name,
             inquiry_text,
+            selected_fact_ids=_selected_fact_ids(inquiry_text),
         )
         st.session_state[SESSION_RUN] = run
         st.session_state[SESSION_CASE] = run.case
@@ -224,20 +229,94 @@ def _render_summary_section(page: dict, run: TechnicalCaseRun) -> None:
             for product in run.requested_products:
                 st.write(f"- {product}")
             st.caption(page["requested_products_note"])
-        _render_retrieved_facts(page, getattr(run, "retrieved_facts", []))
+        _render_retrieved_facts(page, run)
 
 
-def _render_retrieved_facts(page: dict, facts: list) -> None:
-    if not facts:
+def _selected_fact_ids(inquiry_text: Optional[str]) -> list:
+    products = detect_requested_products(inquiry_text)
+    selected = []
+    for item in retrieve_approved_facts_for_products(products):
+        fact_id = item.get("fact_id") or ""
+        if st.session_state.get(f"{FACT_SELECT_PREFIX}{fact_id}", is_default_selected(item)):
+            selected.append(fact_id)
+    return selected
+
+
+def _render_knowledge_selection(page: dict, inquiry_text: Optional[str]) -> None:
+    products = detect_requested_products(inquiry_text)
+    candidates = retrieve_approved_facts_for_products(products)
+    if not candidates:
+        return
+    st.markdown(f"**{page.get('knowledge_select_label', '参照する確認済み技術情報')}**")
+    st.caption(page.get("knowledge_select_note", "使用しないFactはProviderへ送りません。"))
+    scope_labels = page.get("fact_scope", {})
+    for item in candidates:
+        fact_id = item.get("fact_id") or ""
+        default_on = is_default_selected(item)
+        st.checkbox(
+            f"{item.get('product') or '-'} / {item.get('topic') or '-'}",
+            value=default_on,
+            key=f"{FACT_SELECT_PREFIX}{fact_id}",
+        )
+        st.write(item.get("fact") or "")
+        st.caption(
+            f"{page.get('fact_source_label', '情報源')}: {item.get('source_reference') or '-'} / "
+            f"{page.get('fact_scope_label', 'Scope')}: {scope_labels.get(item.get('scope'), item.get('scope'))} / "
+            f"{page.get('fact_status_label', '承認状態')}: {item.get('status')}"
+        )
+        with st.expander(page.get("knowledge_detail_label", "詳細")):
+            st.text(f"fact_id: {fact_id}")
+            st.text(f"source_reference: {item.get('source_reference')}")
+
+
+def _render_retrieved_facts(page: dict, run: TechnicalCaseRun) -> None:
+    snapshot = getattr(run, "knowledge_snapshot", None)
+    facts = getattr(run, "retrieved_facts", [])
+    if snapshot is None and not facts:
         return
     st.markdown(f"**{page.get('retrieved_facts_label', '参照した承認済み技術情報')}**")
     st.caption(page.get("retrieved_facts_note", "人が承認した再利用Factです。この案件への適用は未確定です。"))
+    if snapshot is not None:
+        for item in snapshot.items:
+            mark = page.get("knowledge_used", "使用") if item.selected else page.get("knowledge_unused", "未使用")
+            st.write(f"- [{mark}] {item.product or '-'} / {item.topic or '-'}: {item.statement}")
+            st.caption(f"{item.fact_id} / {item.source_reference or '-'} / {item.retrieved_at}")
+        return
     confidence_labels = page.get("fact_confidence", {})
     for fact in facts:
         confidence = getattr(fact.confidence, "value", fact.confidence) if fact.confidence else None
         label = confidence_labels.get(confidence, confidence or page.get("no_value", "-"))
         st.write(f"- {fact.product or page.get('unnamed_item', '項目')} / {fact.topic or '-'}: {fact.fact}")
         st.caption(f"{page.get('fact_confidence_label', '確信度')}: {label}")
+
+
+def _render_question_review_controls(page: dict, question: TechnicalQuestion) -> None:
+    cols = st.columns(3)
+    status_by_button = {
+        0: "APPROVED",
+        1: "EDITED",
+        2: "REJECTED",
+    }
+    labels = [
+        page.get("question_approve", "APPROVED"),
+        page.get("question_edit", "EDITED"),
+        page.get("question_reject", "REJECTED"),
+    ]
+    for index, column in enumerate(cols):
+        if column.button(labels[index], key=f"qrev_{status_by_button[index]}_{question.question_id}"):
+            run = st.session_state.get(SESSION_RUN)
+            if run is None:
+                return
+            edited = question.question
+            if status_by_button[index] == "EDITED":
+                edited = st.session_state.get(f"qrev_text_{question.question_id}", question.question)
+            updated = apply_question_review(question, status_by_button[index], edited)
+            for offset, current in enumerate(run.manufacturer_questions):
+                if current.question_id == question.question_id:
+                    run.manufacturer_questions[offset] = updated
+            st.rerun()
+    if (question.classification or question.source) == "AI_SUGGESTED":
+        st.caption(page.get("ai_suggested_not_auto", "AI_SUGGESTEDは自動APPROVEDしません。"))
 
 
 def _render_requirement_section(page: dict, requirements: list[CaseRequirement]) -> None:
@@ -266,8 +345,19 @@ def _render_question_section(
             if (item.classification or item.source) == "AI_SUGGESTED":
                 suffix = f" ({page.get('ai_suggested_review', 'AI_SUGGESTED・要確認')})"
             st.write(f"- {item.question}{suffix}")
+            st.caption(
+                f"{page.get('question_class_label', 'classification')}: {item.classification or '-'} / "
+                f"{page.get('question_source_label', 'source')}: {item.source or '-'} / "
+                f"{page.get('question_review_label', 'Human Review')}: {item.review_status or 'PENDING'}"
+            )
+            if item.related_products:
+                st.caption(f"{page.get('related_products_label', '関連product')}: {', '.join(item.related_products)}")
+            if item.grounding:
+                st.caption(f"{page.get('related_fact_label', '関連Fact')}: {item.grounding}")
             if item.original_text:
                 st.caption(f"{page.get('original_text_label', 'customer wording')}: {item.original_text}")
+            if title == page["section_manufacturer_checks"]:
+                _render_question_review_controls(page, item)
 
 
 def _render_completeness_issues(page: dict, issues: list) -> None:
@@ -415,6 +505,12 @@ def _render_approval_card(
         if candidate.evidence_text:
             st.markdown(f"**{page['evidence_label']}**")
             st.write(candidate.evidence_text)
+        validation = getattr(item, "validation", None)
+        if validation is not None and validation.reason:
+            st.caption(
+                f"{page.get('validation_reason_label', 'Validation')}: {validation.reason} / "
+                f"review={validation.requires_human_review}"
+            )
 
         if item.is_applied:
             st.success(page["applied_message"])

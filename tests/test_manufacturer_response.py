@@ -39,8 +39,8 @@ def _question(question_id: str, text: str) -> TechnicalQuestion:
 
 
 SAMPLE_QUESTIONS = [
-    _question("Q-MR-001", "Cygnus Thickness Gaugeと組み合わせて使用できるか"),
-    _question("Q-MR-002", "CygnusとElevated Pan Tiltを同時搭載できるか"),
+    _question("Q-MR-001", "指定アクセサリと組み合わせて使用できるか"),
+    _question("Q-MR-002", "追加カメラを同時搭載できるか"),
     _question("Q-MR-003", "水深情報を取得できるか"),
     _question("Q-MR-004", "メーカー推奨構成は何か"),
 ]
@@ -115,13 +115,14 @@ def test_missing_question_stays_as_follow_up_required():
                 suggested_status=SuggestedQuestionStatus.ANSWERED,
                 follow_up_required=False,
                 confidence=MatchConfidence.HIGH,
+                evidence_text="部分的な照合結果",
             )
         ],
         unmatched_information=[],
         overall_follow_up_required=True,
     )
 
-    views = merge_response_matches(SAMPLE_QUESTIONS, analysis)
+    views = merge_response_matches(SAMPLE_QUESTIONS, analysis, "部分的な照合結果")
     remaining_ids = [view.question.question_id for view in views]
 
     assert remaining_ids == ["Q-MR-001", "Q-MR-002", "Q-MR-003", "Q-MR-004"]

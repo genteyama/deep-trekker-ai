@@ -66,7 +66,7 @@ def build_default_manufacturer_response_payload(questions: Optional[list] = None
                     "follow_up_required": False,
                     "follow_up_question": None,
                     "confidence": "HIGH",
-                    "evidence_text": "開発用の固定根拠です。",
+                    "evidence_text": "メーカーからの返信",
                 }
             )
         elif index == 1:
@@ -78,7 +78,7 @@ def build_default_manufacturer_response_payload(questions: Optional[list] = None
                     "follow_up_required": True,
                     "follow_up_question": "残りの条件を確認してください。",
                     "confidence": "MEDIUM",
-                    "evidence_text": "一部の説明だけが含まれている体裁です。",
+                    "evidence_text": "メーカーからの返信",
                 }
             )
         else:

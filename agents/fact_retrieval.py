@@ -46,6 +46,8 @@ def is_retrievable_fact(item: dict) -> bool:
         return False
     if item.get("confidence") not in ALLOWED_CONFIDENCE:
         return False
+    if item.get("superseded"):
+        return False
     return bool((item.get("fact") or "").strip())
 
 
@@ -106,6 +108,7 @@ def build_fact_grounded_questions(inquiry_text: Optional[str], facts: list[dict]
                 "original_text": None,
                 "normalized_meaning": item.get("fact"),
                 "grounding": item.get("fact_id"),
+                "related_products": [item["product"]] if item.get("product") else [],
             }
         )
     return questions

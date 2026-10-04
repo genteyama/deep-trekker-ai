@@ -31,6 +31,13 @@ class QuestionClassification(str, Enum):
     AI_SUGGESTED = "AI_SUGGESTED"
 
 
+class QuestionReviewStatus(str, Enum):
+    PENDING = "PENDING"
+    APPROVED = "APPROVED"
+    EDITED = "EDITED"
+    REJECTED = "REJECTED"
+
+
 class QuestionGroundingSource(str, Enum):
     CUSTOMER_INPUT = "CUSTOMER_INPUT"
     EXTRACTED_REQUIREMENT = "EXTRACTED_REQUIREMENT"

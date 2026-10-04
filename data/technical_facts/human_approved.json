@@ -14,6 +14,7 @@
       "source_type": "MANUFACTURER_RESPONSE",
       "source_reference": "IHI-TECH-001-MR-001:mag_cannot_transition_surfaces",
       "is_time_sensitive": false,
+      "superseded": false,
       "notes": "Human approved. Applicability to a new tank still requires review.",
       "inquiry_triggers": ["側面", "底面", "タンク"],
       "remaining_open_question": "本タンクの側面・底面でも、この面移動制約が適用されるか確認してください。"
@@ -30,6 +31,7 @@
       "source_type": "MANUFACTURER_RESPONSE",
       "source_reference": "IHI-TECH-001-MR-001:mag_no_structure_self_position",
       "is_time_sensitive": false,
+      "superseded": false,
       "notes": "Human approved. Do not reinterpret as GPSがない.",
       "inquiry_triggers": ["測定した場所", "測定位置", "位置を把握"],
       "remaining_open_question": "自己位置機能がない前提で、測定位置の記録・管理方法を追加確認してください。顧客文言を別の測位技術名へ置き換えないでください。"
@@ -46,6 +48,7 @@
       "source_type": "MANUFACTURER_RESPONSE",
       "source_reference": "IHI-TECH-001-MR-001:cygnus_body_shareable;integration_kit_required_per_vehicle",
       "is_time_sensitive": false,
+      "superseded": false,
       "notes": "Human approved. Cygnus and Elevated Pan Tilt simultaneous use is not included.",
       "inquiry_triggers": ["超音波", "厚さ計", "肉厚測定"],
       "remaining_open_question": "本案件のMAG＋超音波厚さ計構成を確認してください。CygnusとElevated Pan Tiltの同時搭載可否はこのFactに含まれません。"
@@ -62,6 +65,7 @@
       "source_type": "MANUFACTURER_RESPONSE",
       "source_reference": "IHI-TECH-001-MR-001:manufacturer_recommends_rov_plus_gauge;photon_plus_cygnus_proposed",
       "is_time_sensitive": false,
+      "superseded": false,
       "notes": "Human approved. This is MANUFACTURER_RECOMMENDED, not a MAG recommendation. MAG remains CUSTOMER_REQUESTED. MAG remaining tank constraints still need follow-up.",
       "inquiry_triggers": ["水中", "タンク"],
       "remaining_open_question": "メーカー推奨はROV＋超音波肉厚計です。MAGを推奨したことではありません。本タンクにおけるMAGの残る適性制約を追加確認してください。"

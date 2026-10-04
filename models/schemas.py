@@ -92,6 +92,8 @@ class TechnicalQuestion(BaseModel):
     original_text: Optional[str] = None
     normalized_meaning: Optional[str] = None
     grounding: Optional[str] = None
+    related_products: list[str] = Field(default_factory=list)
+    review_status: Optional[str] = None
 
 
 class ResponseMatchCandidate(BaseModel):

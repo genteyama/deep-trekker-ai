@@ -15,10 +15,22 @@ from llm.analysis_schema import (
 from agents.fact_retrieval import (
     build_fact_grounded_questions,
     detect_requested_products,
-    facts_as_provider_payload,
     facts_to_models,
     merge_manufacturer_questions,
-    retrieve_approved_facts_for_products,
+)
+from agents.knowledge import (
+    KnowledgeContextSnapshot,
+    build_knowledge_snapshot,
+    provider_knowledge_payload,
+    selected_catalog_facts,
+)
+from agents.question_review import default_review_status
+from llm.evidence_guard import (
+    REASON_NO_MODEL_MATCH,
+    EvidenceCheck,
+    apply_evidence_guard,
+    extract_product_entities,
+    missing_match_candidate,
 )
 from llm.completeness import (
     ERROR_COMPLETENESS,
@@ -80,6 +92,7 @@ class TechnicalCaseRun:
         completeness_issues: Optional[list] = None,
         retrieved_facts: Optional[list] = None,
         detected_products: Optional[list] = None,
+        knowledge_snapshot: Optional[KnowledgeContextSnapshot] = None,
     ) -> None:
         self.success = success
         self.case = case
@@ -98,6 +111,7 @@ class TechnicalCaseRun:
         self.completeness_issues = completeness_issues or []
         self.retrieved_facts = retrieved_facts or []
         self.detected_products = detected_products or []
+        self.knowledge_snapshot = knowledge_snapshot
 
 
 class ManufacturerResponseRun:
@@ -129,9 +143,15 @@ class ManufacturerResponseRun:
 
 
 class QuestionMatchView:
-    def __init__(self, question: TechnicalQuestion, candidate: ResponseMatchCandidate) -> None:
+    def __init__(
+        self,
+        question: TechnicalQuestion,
+        candidate: ResponseMatchCandidate,
+        validation: Optional[EvidenceCheck] = None,
+    ) -> None:
         self.question = question
         self.candidate = candidate
+        self.validation = validation or EvidenceCheck()
 
 
 def load_system_prompt() -> str:
@@ -199,6 +219,17 @@ def convert_questions(
                 original_text=item.original_text,
                 normalized_meaning=item.normalized_meaning,
                 grounding=item.grounding,
+                related_products=extract_product_entities(
+                    " ".join([item.question or "", item.grounding or "", item.normalized_meaning or ""])
+                ),
+                review_status=default_review_status(
+                    TechnicalQuestion(
+                        question_id="TMP",
+                        case_id=case_id,
+                        classification=item.classification,
+                        source=item.source,
+                    )
+                ),
             )
         )
     return questions
@@ -212,6 +243,7 @@ def run_technical_case_analysis(
     provider: Optional[TechnicalCaseProvider] = None,
     case_id: Optional[str] = None,
     created_at: Optional[datetime] = None,
+    selected_fact_ids: Optional[list] = None,
 ) -> TechnicalCaseRun:
     active_provider = provider or get_technical_case_provider()
     case = build_case_from_inputs(
@@ -223,13 +255,14 @@ def run_technical_case_analysis(
     )
     inquiry = normalize_optional_text(inquiry_text)
     detected_products = detect_requested_products(inquiry)
-    retrieved_facts = retrieve_approved_facts_for_products(detected_products)
-    if retrieved_facts:
+    knowledge_snapshot = build_knowledge_snapshot(detected_products, selected_fact_ids)
+    retrieved_facts = selected_catalog_facts(detected_products, selected_fact_ids)
+    if knowledge_snapshot.items:
         logger.info(
-            "retrieved_facts products=%s count=%s fact_ids=%s",
+            "retrieved_facts products=%s selected=%s fact_ids=%s",
             detected_products,
-            len(retrieved_facts),
-            [item.get("fact_id") for item in retrieved_facts],
+            [item.fact_id for item in knowledge_snapshot.selected_facts()],
+            [item.fact_id for item in knowledge_snapshot.items],
         )
 
     try:
@@ -239,7 +272,7 @@ def run_technical_case_analysis(
             customer_name=case.customer_name,
             end_user_name=case.end_user_name,
             system_prompt=load_system_prompt(),
-            approved_technical_facts=facts_as_provider_payload(retrieved_facts),
+            approved_technical_facts=provider_knowledge_payload(retrieved_facts),
         )
         analysis = harden_analysis(inquiry, validate_analysis_payload(payload))
         issues = validate_analysis_completeness(inquiry, analysis)
@@ -295,6 +328,7 @@ def run_technical_case_analysis(
             completeness_issues=issues,
             retrieved_facts=facts_to_models(retrieved_facts),
             detected_products=detected_products,
+            knowledge_snapshot=knowledge_snapshot,
         )
     except CompletenessError as error:
         logger.exception("Technical case completeness failed")
@@ -334,8 +368,9 @@ def _failed_run(
         error_code=error_code,
         error_details=error_details,
         completeness_issues=completeness_issues,
-        retrieved_facts=facts_to_models(retrieve_approved_facts_for_products(detect_requested_products(inquiry))),
+        retrieved_facts=facts_to_models(selected_catalog_facts(detect_requested_products(inquiry))),
         detected_products=detect_requested_products(inquiry),
+        knowledge_snapshot=build_knowledge_snapshot(detect_requested_products(inquiry)),
     )
 
 
@@ -359,22 +394,18 @@ def build_question_payloads(questions: list[TechnicalQuestion]) -> list[dict]:
 def merge_response_matches(
     questions: list[TechnicalQuestion],
     analysis: ManufacturerResponseAnalysis,
+    response_text: Optional[str] = None,
 ) -> list[QuestionMatchView]:
     matches_by_id = {item.question_id: item for item in analysis.matches}
     views = []
     for question in questions:
         candidate = matches_by_id.get(question.question_id)
+        validation = EvidenceCheck(reason=REASON_NO_MODEL_MATCH, requires_human_review=True)
         if candidate is None:
-            candidate = ResponseMatchCandidate(
-                question_id=question.question_id,
-                answer_summary=None,
-                suggested_status=SuggestedQuestionStatus.FOLLOW_UP_REQUIRED,
-                follow_up_required=True,
-                follow_up_question=question.question,
-                confidence=MatchConfidence.LOW,
-                evidence_text=None,
-            )
-        views.append(QuestionMatchView(question=question, candidate=candidate))
+            candidate = missing_match_candidate(question)
+        else:
+            candidate, validation = apply_evidence_guard(question, candidate, response_text)
+        views.append(QuestionMatchView(question=question, candidate=candidate, validation=validation))
     return views
 
 
@@ -410,9 +441,10 @@ def run_manufacturer_response_analysis(
             system_prompt=load_manufacturer_response_prompt(),
         )
         analysis = validate_manufacturer_response_payload(payload)
-        issues = validate_manufacturer_match_completeness(questions, analysis, original_text)
+        matches = merge_response_matches(questions, analysis, original_text)
+        guarded = analysis.model_copy(update={"matches": [view.candidate for view in matches]})
+        issues = validate_manufacturer_match_completeness(questions, guarded, original_text)
         raise_if_fail(issues)
-        matches = merge_response_matches(questions, analysis)
         return ManufacturerResponseRun(
             success=True,
             provider_name=active_provider.name,
@@ -420,9 +452,9 @@ def run_manufacturer_response_analysis(
             response_summary=analysis.response_summary,
             matches=matches,
             unmatched_information=list(analysis.unmatched_information),
-            overall_follow_up_required=analysis.overall_follow_up_required
+            overall_follow_up_required=guarded.overall_follow_up_required
             or any(view.candidate.follow_up_required for view in matches),
-            analysis_json=analysis.model_dump(mode="json"),
+            analysis_json=guarded.model_dump(mode="json"),
             completeness_issues=issues,
         )
     except CompletenessError as error:

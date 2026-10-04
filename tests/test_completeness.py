@@ -1,6 +1,6 @@
 import pytest
 
-from agents.technical_case_agent import ERROR_COMPLETENESS, run_manufacturer_response_analysis
+from agents.technical_case_agent import run_manufacturer_response_analysis
 from llm.analysis_schema import ExtractedQuestion, TechnicalCaseAnalysisResponse
 from llm.completeness import (
     harden_analysis,
@@ -162,7 +162,7 @@ def test_missing_and_duplicate_question_match_failure():
     assert any(item.code == "DUPLICATE_QUESTION_MATCH" for item in duplicate)
 
 
-def test_empty_matches_makes_run_fail():
+def test_empty_matches_are_filled_as_follow_up():
     provider = MockTechnicalCaseProvider(
         response_payload={
             "response_summary": "empty",
@@ -172,8 +172,10 @@ def test_empty_matches_makes_run_fail():
         }
     )
     run = run_manufacturer_response_analysis([_question("Q-1")], "dumped reply", provider=provider)
-    assert run.success is False
-    assert run.error_code == ERROR_COMPLETENESS
+    assert run.success is True
+    assert len(run.matches) == 1
+    assert run.matches[0].candidate.suggested_status.value == "FOLLOW_UP_REQUIRED"
+    assert run.matches[0].validation.reason == "NO_MODEL_MATCH"
 
 
 def test_unsupported_assertion_failure():
