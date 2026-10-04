@@ -16,7 +16,50 @@
     "resume_label": "Resume",
     "progress_label": "Progress",
     "review_label": "Review",
-    "review_unit": ""
+    "review_unit": "",
+    "work_filter_label": "View",
+    "filter_in_progress": "In progress",
+    "filter_completed": "Completed",
+    "filter_archived": "Archived",
+    "filter_trash": "Trash"
+  },
+  "lifecycle": {
+    "actions_label": "Case actions",
+    "duplicate": "Duplicate",
+    "derive_case": "Create derived case",
+    "derive_quote": "Create additional / derived quote",
+    "archive": "Archive",
+    "trash": "Move to trash",
+    "restore_archive": "Restore from archive",
+    "restore_trash": "Restore from trash",
+    "create_derived": "Create derived",
+    "confirm_archive": "Archive this item. It will be hidden from the default list.",
+    "confirm_trash": "Move to trash. This is a soft delete. Approved snapshots are kept.",
+    "confirm_ok_archive": "Archive",
+    "confirm_ok_trash": "Move to trash",
+    "cancel": "Cancel",
+    "lineage_label": "Related work",
+    "parent_label": "Source",
+    "children_label": "Derived",
+    "open_parent": "Open source",
+    "open_child": "Open",
+    "relation_label": "Relation",
+    "save_first": "Save the case before duplicating or archiving.",
+    "case_relations": {
+      "DUPLICATE": "Duplicate",
+      "ADDITIONAL_REQUEST": "Additional request",
+      "ALTERNATIVE_CONFIGURATION": "Alternative configuration",
+      "FOLLOW_UP": "Follow-up",
+      "OTHER": "Other"
+    },
+    "quote_relations": {
+      "DUPLICATE": "Duplicate",
+      "ADDITIONAL": "Additional quote",
+      "ALTERNATIVE": "Alternative",
+      "REVISION": "Revision",
+      "CONFIGURATION_CHANGE": "Configuration change",
+      "OTHER": "Other"
+    }
   },
   "agents": {
     "technical_case": {

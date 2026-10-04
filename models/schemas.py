@@ -116,6 +116,10 @@ class TechnicalCaseRecord(BaseModel):
     inquiry_success: bool = False
     response_revisions: list[ManufacturerResponseRevision] = Field(default_factory=list)
     approval_board: Optional[dict] = None
+    archived_at: Optional[str] = None
+    deleted_at: Optional[str] = None
+    parent_case_id: Optional[str] = None
+    relation_type: Optional[str] = None
 
 
 class CaseRequirement(BaseModel):
@@ -1139,6 +1143,11 @@ class QuoteDraft(BaseModel):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     source_references: list[str] = Field(default_factory=list)
+    archived_at: Optional[str] = None
+    deleted_at: Optional[str] = None
+    parent_quote_id: Optional[str] = None
+    source_quote_id: Optional[str] = None
+    relation_type: Optional[str] = None
 
 
 class CostScenario(BaseModel):

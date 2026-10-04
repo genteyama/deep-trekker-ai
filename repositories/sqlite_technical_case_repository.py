@@ -6,7 +6,16 @@ from typing import Optional
 
 from models import ManufacturerResponseRevision, TechnicalCaseRecord, TechnicalCaseStatus
 from repositories.quote_repository import SaveResult
-from repositories.sqlite import connect_sqlite, default_sqlite_path, dumps_json, loads_json, now_iso, strip_secrets
+from repositories.sqlite import (
+    connect_sqlite,
+    default_sqlite_path,
+    dumps_json,
+    ensure_columns,
+    lifecycle_where,
+    loads_json,
+    now_iso,
+    strip_secrets,
+)
 from repositories.technical_case_repository import (
     SCHEMA_VERSION,
     TechnicalCaseListItem,
@@ -58,7 +67,11 @@ class SqliteTechnicalCaseRepository:
                 payload_json TEXT NOT NULL,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
-                schema_version INTEGER NOT NULL
+                schema_version INTEGER NOT NULL,
+                archived_at TEXT,
+                deleted_at TEXT,
+                parent_case_id TEXT,
+                relation_type TEXT
             );
             CREATE TABLE IF NOT EXISTS technical_case_response_revisions (
                 id INTEGER PRIMARY KEY,
@@ -74,6 +87,16 @@ class SqliteTechnicalCaseRepository:
             CREATE INDEX IF NOT EXISTS idx_technical_cases_updated
                 ON technical_cases(updated_at DESC);
             """
+        )
+        ensure_columns(
+            self._connection,
+            "technical_cases",
+            {
+                "archived_at": "TEXT",
+                "deleted_at": "TEXT",
+                "parent_case_id": "TEXT",
+                "relation_type": "TEXT",
+            },
         )
         self._connection.commit()
 
@@ -94,8 +117,9 @@ class SqliteTechnicalCaseRepository:
                 """
                 INSERT INTO technical_cases (
                     case_id, customer_name, case_title, status, provider, model,
-                    payload_json, created_at, updated_at, schema_version
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    payload_json, created_at, updated_at, schema_version,
+                    archived_at, deleted_at, parent_case_id, relation_type
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(case_id) DO UPDATE SET
                     customer_name = excluded.customer_name,
                     case_title = excluded.case_title,
@@ -103,7 +127,11 @@ class SqliteTechnicalCaseRepository:
                     provider = excluded.provider,
                     model = excluded.model,
                     payload_json = excluded.payload_json,
-                    updated_at = excluded.updated_at
+                    updated_at = excluded.updated_at,
+                    archived_at = excluded.archived_at,
+                    deleted_at = excluded.deleted_at,
+                    parent_case_id = excluded.parent_case_id,
+                    relation_type = excluded.relation_type
                 """,
                 (
                     record.case_id,
@@ -116,6 +144,10 @@ class SqliteTechnicalCaseRepository:
                     created,
                     updated,
                     SCHEMA_VERSION,
+                    record.archived_at,
+                    record.deleted_at,
+                    record.parent_case_id,
+                    record.relation_type,
                 ),
             )
             self._connection.commit()
@@ -137,11 +169,14 @@ class SqliteTechnicalCaseRepository:
             record = record.model_copy(update={"response_revisions": revisions})
         return record
 
-    def list_recent_cases(self, limit: int = 8) -> list[TechnicalCaseListItem]:
+    def list_recent_cases(self, limit: int = 8, *, view: str = "active") -> list[TechnicalCaseListItem]:
+        clause = lifecycle_where(view, completed_statuses=("COMPLETED",))
         rows = self._connection.execute(
-            """
-            SELECT case_id, customer_name, case_title, status, provider, updated_at
+            f"""
+            SELECT case_id, customer_name, case_title, status, provider, updated_at,
+                   archived_at, deleted_at, parent_case_id, relation_type
             FROM technical_cases
+            WHERE {clause}
             ORDER BY updated_at DESC
             LIMIT ?
             """,
@@ -155,6 +190,37 @@ class SqliteTechnicalCaseRepository:
                 status=row["status"],
                 provider=row["provider"],
                 updated_at=row["updated_at"],
+                archived_at=row["archived_at"],
+                deleted_at=row["deleted_at"],
+                parent_case_id=row["parent_case_id"],
+                relation_type=row["relation_type"],
+            )
+            for row in rows
+        ]
+
+    def list_child_cases(self, parent_case_id: str) -> list[TechnicalCaseListItem]:
+        rows = self._connection.execute(
+            """
+            SELECT case_id, customer_name, case_title, status, provider, updated_at,
+                   archived_at, deleted_at, parent_case_id, relation_type
+            FROM technical_cases
+            WHERE parent_case_id = ? AND (deleted_at IS NULL OR deleted_at = '')
+            ORDER BY updated_at DESC
+            """,
+            (parent_case_id,),
+        ).fetchall()
+        return [
+            TechnicalCaseListItem(
+                case_id=row["case_id"],
+                customer_name=row["customer_name"],
+                case_title=row["case_title"],
+                status=row["status"],
+                provider=row["provider"],
+                updated_at=row["updated_at"],
+                archived_at=row["archived_at"],
+                deleted_at=row["deleted_at"],
+                parent_case_id=row["parent_case_id"],
+                relation_type=row["relation_type"],
             )
             for row in rows
         ]

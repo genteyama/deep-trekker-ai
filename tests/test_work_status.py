@@ -161,7 +161,7 @@ def test_home_recent_work_distinguishes_technical_and_quote(monkeypatch):
     draft = _photon_draft()
 
     class TechRepo:
-        def list_recent_cases(self, limit=8):
+        def list_recent_cases(self, limit=8, *, view="active"):
             return [
                 SimpleNamespace(
                     case_id=record.case_id,
@@ -177,7 +177,7 @@ def test_home_recent_work_distinguishes_technical_and_quote(monkeypatch):
             return record
 
     class QuoteRepo:
-        def list_recent_drafts(self, limit=8):
+        def list_recent_drafts(self, limit=8, *, view="active"):
             return [
                 SimpleNamespace(
                     quote_draft_id="qd-1",

@@ -225,6 +225,10 @@ def build_record(
         inquiry_success=bool(run and run.success),
         response_revisions=list(existing.response_revisions) if existing else [],
         approval_board=serialize_approval_board(board),
+        archived_at=existing.archived_at if existing else None,
+        deleted_at=existing.deleted_at if existing else None,
+        parent_case_id=existing.parent_case_id if existing else None,
+        relation_type=existing.relation_type if existing else None,
     )
     return record
 

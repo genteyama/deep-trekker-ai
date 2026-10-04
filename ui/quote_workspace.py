@@ -31,6 +31,7 @@ from ui.components.portal import (
     render_recent_draft_list,
     resume_draft_into_session,
 )
+from ui.components.lifecycle import apply_quote_lifecycle, render_lineage_card, render_quote_actions_menu
 from ui.components.quote_action_bar import render_quote_action_bar
 from ui.components.quote_cards import (
     render_configuration_card,
@@ -76,6 +77,7 @@ def render_quote_workspace(page: dict, helpers: dict) -> None:
     validation = st.session_state.get("quote_approval_validation")
     current = normalize_quote_step(st.session_state.get(SESSION_QUOTE_STEP, 1))
     render_quote_header(page, draft, snapshot)
+    _render_quote_lifecycle(page, helpers, draft)
     st.divider()
     selected = render_quote_stepper(page, current, draft, snapshot, validation)
     if selected != current:
@@ -110,6 +112,50 @@ def render_quote_workspace(page: dict, helpers: dict) -> None:
     if next_step != current:
         st.session_state[SESSION_QUOTE_STEP] = next_step
         st.rerun()
+
+
+def _render_quote_lifecycle(page: dict, helpers: dict, draft) -> None:
+    texts = helpers.get("texts") or {}
+    action = render_quote_actions_menu(texts, draft)
+    repo = get_quote_repository()
+    if action and draft is not None:
+        relation = st.session_state.pop("quote_derive_relation", None)
+        updated = apply_quote_lifecycle(draft, action, relation_type=relation)
+        if action in {"duplicate", "derive"}:
+            st.session_state["quote_draft"] = updated
+            st.session_state["approved_quote_snapshot"] = None
+            st.session_state["quote_approval_validation"] = None
+            helpers["init_date_widgets"](updated, overwrite=True)
+            _save_draft(page, updated, manual=True, from_widgets=False)
+        else:
+            st.session_state["quote_draft"] = updated
+            _save_draft(page, updated, manual=True)
+        st.rerun()
+    if draft is None:
+        return
+    parent = None
+    if draft.parent_quote_id:
+        loaded = repo.get_draft(draft.parent_quote_id)
+        parent = loaded.draft if loaded is not None else None
+    children = repo.list_child_quotes(draft.quote_draft_id)
+
+    def _open_parent():
+        if parent is not None:
+            resume_draft_into_session(parent.quote_draft_id, parent.quote_version)
+            st.rerun()
+
+    def _open_child(child):
+        resume_draft_into_session(child.quote_draft_id, child.version)
+        st.rerun()
+
+    render_lineage_card(
+        texts=texts,
+        parent=parent,
+        children=children,
+        kind="quote",
+        parent_open=_open_parent if parent is not None else None,
+        child_open=_open_child,
+    )
 
 
 def _render_draft_start(page: dict, helpers) -> None:

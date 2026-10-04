@@ -6,6 +6,7 @@ from ui.components.portal import (
     render_portal_section_title,
     resume_draft_into_session,
 )
+from ui.components.lifecycle import render_home_filter
 from ui.components.status import render_recent_case_card
 from ui.navigation import PAGE_QUOTE_CONTROL, PAGE_TECHNICAL_CASE, set_current_page
 from ui.quote_persistence import get_quote_repository
@@ -63,7 +64,8 @@ def render_home(texts: dict) -> None:
             st.rerun()
 
     render_portal_section_title(portal.get("recent_work_label", "進行中の案件"))
-    items = _recent_work_items()
+    view = render_home_filter(texts)
+    items = _recent_work_items(view)
     if not items:
         st.caption(portal.get("recent_work_empty", "進行中の案件はまだありません。"))
         return
@@ -100,23 +102,15 @@ def render_home(texts: dict) -> None:
 
 
 def _open_counts() -> tuple[int, int]:
-    technical = [
-        item
-        for item in get_technical_case_repository().list_recent_cases(limit=20)
-        if item.status != "COMPLETED"
-    ]
-    quotes = [
-        item
-        for item in get_quote_repository().list_recent_drafts(limit=20)
-        if item.status != "APPROVED"
-    ]
+    technical = get_technical_case_repository().list_recent_cases(limit=20, view="in_progress")
+    quotes = get_quote_repository().list_recent_drafts(limit=20, view="in_progress")
     return len(technical), len(quotes)
 
 
-def _recent_work_items() -> list[dict]:
+def _recent_work_items(view: str = "in_progress") -> list[dict]:
     items = []
     tech_repo = get_technical_case_repository()
-    for item in tech_repo.list_recent_cases(limit=8):
+    for item in tech_repo.list_recent_cases(limit=8, view=view):
         record = tech_repo.get_case(item.case_id)
         summary = summarize_technical_case(record=record)
         items.append(
@@ -132,7 +126,7 @@ def _recent_work_items() -> list[dict]:
             }
         )
     quote_repo = get_quote_repository()
-    for item in quote_repo.list_recent_drafts(limit=8):
+    for item in quote_repo.list_recent_drafts(limit=8, view=view):
         loaded = quote_repo.get_draft(item.quote_draft_id, item.version)
         draft = loaded.draft if loaded is not None else None
         snapshot = quote_repo.get_snapshot_for_draft(item.quote_draft_id, item.version)

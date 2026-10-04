@@ -21,6 +21,12 @@ def test_home_dashboard_shows_both_work_kinds():
     assert "進行中の案件" in visible
     assert "営業・技術受付AI" in visible
     assert "見積・価格管理AI" in visible
+    filter_labels = []
+    for radio in at.radio:
+        filter_labels.extend(getattr(radio, "options", None) or [])
+        if getattr(radio, "label", None):
+            filter_labels.append(radio.label)
+    assert any("進行中" in str(label) for label in filter_labels) or at.radio
     assert at.button(key="open_technical_case").disabled is False
     assert at.button(key="open_quote_control").disabled is False
     assert "入力不足のため次へ進めません" not in visible

@@ -111,6 +111,7 @@ def render_quote_control(texts: dict) -> None:
             "render_dates": _render_quote_date_inputs,
             "render_export": _render_file_export,
             "ensure_store": _ensure_quote_approval_store,
+            "texts": texts,
         },
     )
 

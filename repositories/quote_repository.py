@@ -29,6 +29,11 @@ class DraftListItem:
     subject: Optional[str]
     configuration_name: Optional[str]
     updated_at: str
+    archived_at: Optional[str] = None
+    deleted_at: Optional[str] = None
+    parent_quote_id: Optional[str] = None
+    source_quote_id: Optional[str] = None
+    relation_type: Optional[str] = None
 
 
 @dataclass
@@ -46,7 +51,7 @@ class QuoteRepository(Protocol):
     def get_draft(self, quote_draft_id: str, version: Optional[int] = None) -> Optional[LoadedDraft]:
         ...
 
-    def list_recent_drafts(self, limit: int = 8) -> list[DraftListItem]:
+    def list_recent_drafts(self, limit: int = 8, *, view: str = "active") -> list[DraftListItem]:
         ...
 
     def save_snapshot(self, snapshot: ApprovedQuoteSnapshot) -> bool:

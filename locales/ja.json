@@ -16,7 +16,50 @@
     "resume_label": "再開",
     "progress_label": "進捗",
     "review_label": "要確認",
-    "review_unit": "件"
+    "review_unit": "件",
+    "work_filter_label": "表示",
+    "filter_in_progress": "進行中",
+    "filter_completed": "完了",
+    "filter_archived": "アーカイブ",
+    "filter_trash": "ゴミ箱"
+  },
+  "lifecycle": {
+    "actions_label": "案件操作",
+    "duplicate": "複製",
+    "derive_case": "派生案件を作成",
+    "derive_quote": "追加・派生見積を作成",
+    "archive": "アーカイブ",
+    "trash": "ゴミ箱へ移動",
+    "restore_archive": "アーカイブから戻す",
+    "restore_trash": "ゴミ箱から戻す",
+    "create_derived": "派生を作成",
+    "confirm_archive": "このデータをアーカイブします。通常一覧から非表示になります。",
+    "confirm_trash": "ゴミ箱へ移動します。物理削除はしません。Approved Snapshotは残します。",
+    "confirm_ok_archive": "アーカイブする",
+    "confirm_ok_trash": "ゴミ箱へ移動する",
+    "cancel": "キャンセル",
+    "lineage_label": "関連案件・見積",
+    "parent_label": "元",
+    "children_label": "派生先",
+    "open_parent": "元を開く",
+    "open_child": "開く",
+    "relation_label": "関係",
+    "save_first": "保存済み案件に対して複製・アーカイブできます。",
+    "case_relations": {
+      "DUPLICATE": "複製",
+      "ADDITIONAL_REQUEST": "追加依頼",
+      "ALTERNATIVE_CONFIGURATION": "別構成",
+      "FOLLOW_UP": "フォローアップ",
+      "OTHER": "その他"
+    },
+    "quote_relations": {
+      "DUPLICATE": "複製",
+      "ADDITIONAL": "追加見積",
+      "ALTERNATIVE": "別案",
+      "REVISION": "修正版",
+      "CONFIGURATION_CHANGE": "構成変更",
+      "OTHER": "その他"
+    }
   },
   "agents": {
     "technical_case": {

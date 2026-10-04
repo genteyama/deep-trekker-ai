@@ -371,6 +371,31 @@ class SkuMappingSource(str, Enum):
     UNMAPPED = "UNMAPPED"
 
 
+class CaseLineageType(str, Enum):
+    DUPLICATE = "DUPLICATE"
+    ADDITIONAL_REQUEST = "ADDITIONAL_REQUEST"
+    ALTERNATIVE_CONFIGURATION = "ALTERNATIVE_CONFIGURATION"
+    FOLLOW_UP = "FOLLOW_UP"
+    OTHER = "OTHER"
+
+
+class QuoteLineageType(str, Enum):
+    DUPLICATE = "DUPLICATE"
+    ADDITIONAL = "ADDITIONAL"
+    ALTERNATIVE = "ALTERNATIVE"
+    REVISION = "REVISION"
+    CONFIGURATION_CHANGE = "CONFIGURATION_CHANGE"
+    OTHER = "OTHER"
+
+
+class WorkListView(str, Enum):
+    ACTIVE = "active"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    ARCHIVED = "archived"
+    TRASH = "trash"
+
+
 class MatchStatus(str, Enum):
     EXACT_MATCH = "EXACT_MATCH"
     PRICE_MISMATCH = "PRICE_MISMATCH"

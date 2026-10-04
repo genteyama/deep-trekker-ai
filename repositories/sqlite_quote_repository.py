@@ -14,7 +14,7 @@ from repositories.quote_repository import (
     QuoteRepositoryError,
     SaveResult,
 )
-from repositories.sqlite import connect_sqlite, default_sqlite_path, now_iso
+from repositories.sqlite import connect_sqlite, default_sqlite_path, ensure_columns, lifecycle_where, now_iso
 
 DEFAULT_DB_NAME = "deep_trekker.sqlite3"
 
@@ -52,6 +52,11 @@ class SqliteQuoteRepository:
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 schema_version INTEGER NOT NULL,
+                archived_at TEXT,
+                deleted_at TEXT,
+                parent_quote_id TEXT,
+                source_quote_id TEXT,
+                relation_type TEXT,
                 UNIQUE(quote_draft_id, version)
             );
             CREATE TABLE IF NOT EXISTS approved_quote_snapshots (
@@ -66,6 +71,17 @@ class SqliteQuoteRepository:
             CREATE INDEX IF NOT EXISTS idx_quote_drafts_updated
                 ON quote_drafts(updated_at DESC);
             """
+        )
+        ensure_columns(
+            self._connection,
+            "quote_drafts",
+            {
+                "archived_at": "TEXT",
+                "deleted_at": "TEXT",
+                "parent_quote_id": "TEXT",
+                "source_quote_id": "TEXT",
+                "relation_type": "TEXT",
+            },
         )
         self._connection.commit()
 
@@ -91,8 +107,9 @@ class SqliteQuoteRepository:
                 INSERT INTO quote_drafts (
                     quote_draft_id, case_id, version, status, customer_name, subject,
                     configuration_name, payload_json, ui_state_json, content_hash,
-                    created_at, updated_at, schema_version
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    created_at, updated_at, schema_version,
+                    archived_at, deleted_at, parent_quote_id, source_quote_id, relation_type
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(quote_draft_id, version) DO UPDATE SET
                     case_id = excluded.case_id,
                     status = excluded.status,
@@ -102,7 +119,12 @@ class SqliteQuoteRepository:
                     payload_json = excluded.payload_json,
                     ui_state_json = excluded.ui_state_json,
                     content_hash = excluded.content_hash,
-                    updated_at = excluded.updated_at
+                    updated_at = excluded.updated_at,
+                    archived_at = excluded.archived_at,
+                    deleted_at = excluded.deleted_at,
+                    parent_quote_id = excluded.parent_quote_id,
+                    source_quote_id = excluded.source_quote_id,
+                    relation_type = excluded.relation_type
                 """,
                 (
                     draft.quote_draft_id,
@@ -118,6 +140,11 @@ class SqliteQuoteRepository:
                     created,
                     now,
                     SCHEMA_VERSION,
+                    draft.archived_at,
+                    draft.deleted_at,
+                    draft.parent_quote_id,
+                    draft.source_quote_id,
+                    draft.relation_type,
                 ),
             )
             self._connection.commit()
@@ -157,12 +184,15 @@ class SqliteQuoteRepository:
             content_hash=row["content_hash"],
         )
 
-    def list_recent_drafts(self, limit: int = 8) -> list[DraftListItem]:
+    def list_recent_drafts(self, limit: int = 8, *, view: str = "active") -> list[DraftListItem]:
+        clause = lifecycle_where(view, completed_statuses=("APPROVED",))
         rows = self._connection.execute(
-            """
+            f"""
             SELECT quote_draft_id, version, status, customer_name, subject,
-                   configuration_name, updated_at
+                   configuration_name, updated_at, archived_at, deleted_at,
+                   parent_quote_id, source_quote_id, relation_type
             FROM quote_drafts
+            WHERE {clause}
             ORDER BY updated_at DESC
             LIMIT ?
             """,
@@ -177,6 +207,41 @@ class SqliteQuoteRepository:
                 subject=row["subject"],
                 configuration_name=row["configuration_name"],
                 updated_at=row["updated_at"],
+                archived_at=row["archived_at"],
+                deleted_at=row["deleted_at"],
+                parent_quote_id=row["parent_quote_id"],
+                source_quote_id=row["source_quote_id"],
+                relation_type=row["relation_type"],
+            )
+            for row in rows
+        ]
+
+    def list_child_quotes(self, parent_quote_id: str) -> list[DraftListItem]:
+        rows = self._connection.execute(
+            """
+            SELECT quote_draft_id, version, status, customer_name, subject,
+                   configuration_name, updated_at, archived_at, deleted_at,
+                   parent_quote_id, source_quote_id, relation_type
+            FROM quote_drafts
+            WHERE parent_quote_id = ? AND (deleted_at IS NULL OR deleted_at = '')
+            ORDER BY updated_at DESC
+            """,
+            (parent_quote_id,),
+        ).fetchall()
+        return [
+            DraftListItem(
+                quote_draft_id=row["quote_draft_id"],
+                version=row["version"],
+                status=row["status"],
+                customer_name=row["customer_name"],
+                subject=row["subject"],
+                configuration_name=row["configuration_name"],
+                updated_at=row["updated_at"],
+                archived_at=row["archived_at"],
+                deleted_at=row["deleted_at"],
+                parent_quote_id=row["parent_quote_id"],
+                source_quote_id=row["source_quote_id"],
+                relation_type=row["relation_type"],
             )
             for row in rows
         ]

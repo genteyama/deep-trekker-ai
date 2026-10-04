@@ -35,6 +35,34 @@ def default_sqlite_path() -> Path:
     return directory / DEFAULT_DB_NAME
 
 
+def table_columns(connection: sqlite3.Connection, table: str) -> set[str]:
+    rows = connection.execute(f"PRAGMA table_info({table})").fetchall()
+    return {row[1] for row in rows}
+
+
+def ensure_columns(connection: sqlite3.Connection, table: str, columns: dict[str, str]) -> None:
+    existing = table_columns(connection, table)
+    for name, definition in columns.items():
+        if name in existing:
+            continue
+        connection.execute(f"ALTER TABLE {table} ADD COLUMN {name} {definition}")
+
+
+def lifecycle_where(view: str, *, completed_statuses: tuple[str, ...] = ("COMPLETED", "APPROVED")) -> str:
+    deleted_null = "(deleted_at IS NULL OR deleted_at = '')"
+    archived_null = "(archived_at IS NULL OR archived_at = '')"
+    completed = ", ".join(f"'{item}'" for item in completed_statuses)
+    if view == "trash":
+        return "(deleted_at IS NOT NULL AND deleted_at != '')"
+    if view == "archived":
+        return f"{deleted_null} AND archived_at IS NOT NULL AND archived_at != ''"
+    if view == "completed":
+        return f"{deleted_null} AND {archived_null} AND status IN ({completed})"
+    if view == "in_progress":
+        return f"{deleted_null} AND {archived_null} AND IFNULL(status, '') NOT IN ({completed})"
+    return f"{deleted_null} AND {archived_null}"
+
+
 def connect_sqlite(path: Optional[Path] = None) -> sqlite3.Connection:
     resolved = Path(path) if path else default_sqlite_path()
     resolved.parent.mkdir(parents=True, exist_ok=True)

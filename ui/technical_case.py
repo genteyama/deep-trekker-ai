@@ -58,6 +58,7 @@ from ui.technical_case_flow import (
     SESSION_RESPONSE_RUN,
     SESSION_RUN,
 )
+from ui.components.lifecycle import apply_case_lifecycle, render_case_actions_menu, render_lineage_card
 from ui.components.status import item_badge_label, render_progress_summary, render_work_card
 from ui.technical_case_persistence import (
     get_technical_case_repository,
@@ -97,6 +98,7 @@ def render_technical_case(texts: dict) -> None:
     summary = _current_work_summary()
     _render_case_summary(page, summary)
     _render_case_actions(page)
+    _render_case_lifecycle(texts, page)
 
     if get_active_provider_name() == "mock":
         st.warning(page["mock_warning"])
@@ -249,6 +251,11 @@ def _render_case_summary(page: dict, summary) -> None:
             st.caption(f"{page.get('model_label', 'Model')}: {summary.model or '-'}")
             if summary.updated_at:
                 st.caption(f"{page.get('updated_at_label', '最終更新')}: {summary.updated_at}")
+            record = _current_record()
+            if record is not None and record.deleted_at:
+                st.caption("ゴミ箱")
+            elif record is not None and record.archived_at:
+                st.caption("アーカイブ")
 
 
 def _render_case_actions(page: dict) -> None:
@@ -281,6 +288,52 @@ def _render_case_actions(page: dict) -> None:
         st.success(page.get("case_saved", "案件を保存しました"))
     elif st.session_state.get("technical_case_save_error"):
         st.error(page.get("case_save_error", "案件を保存できませんでした"))
+
+
+def _current_record():
+    saved_id = st.session_state.get("technical_case_saved_id")
+    if not saved_id:
+        return None
+    return get_technical_case_repository().get_case(saved_id)
+
+
+def _render_case_lifecycle(texts: dict, page: dict) -> None:
+    repo = get_technical_case_repository()
+    record = _current_record()
+    action = render_case_actions_menu(page, texts, record)
+    if action and record is not None:
+        relation = st.session_state.pop("case_derive_relation", None)
+        updated = apply_case_lifecycle(record, repo, action, relation_type=relation)
+        repo.save_case(updated)
+        if action in {"duplicate", "derive"}:
+            resume_case_into_session(updated, st.session_state)
+        elif action in {"archive", "trash", "restore"}:
+            st.session_state["technical_case_saved_id"] = updated.case_id
+        st.rerun()
+    if record is None:
+        return
+    parent = repo.get_case(record.parent_case_id) if record.parent_case_id else None
+    children = repo.list_child_cases(record.case_id)
+
+    def _open_parent():
+        if parent is not None:
+            resume_case_into_session(parent, st.session_state)
+            st.rerun()
+
+    def _open_child(child):
+        loaded = repo.get_case(child.case_id)
+        if loaded is not None:
+            resume_case_into_session(loaded, st.session_state)
+            st.rerun()
+
+    render_lineage_card(
+        texts=texts,
+        parent=parent,
+        children=children,
+        kind="case",
+        parent_open=_open_parent if parent is not None else None,
+        child_open=_open_child,
+    )
 
 
 def _render_evidence_card(page: dict, run: Optional[ManufacturerResponseRun]) -> None:

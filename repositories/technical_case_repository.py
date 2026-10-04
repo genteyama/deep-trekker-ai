@@ -21,6 +21,10 @@ class TechnicalCaseListItem:
     status: Optional[str]
     provider: Optional[str]
     updated_at: str
+    archived_at: Optional[str] = None
+    deleted_at: Optional[str] = None
+    parent_case_id: Optional[str] = None
+    relation_type: Optional[str] = None
 
 
 class TechnicalCaseRepository(Protocol):
@@ -30,7 +34,7 @@ class TechnicalCaseRepository(Protocol):
     def get_case(self, case_id: str) -> Optional[TechnicalCaseRecord]:
         ...
 
-    def list_recent_cases(self, limit: int = 8) -> list[TechnicalCaseListItem]:
+    def list_recent_cases(self, limit: int = 8, *, view: str = "active") -> list[TechnicalCaseListItem]:
         ...
 
     def update_case(self, record: TechnicalCaseRecord) -> SaveResult:
