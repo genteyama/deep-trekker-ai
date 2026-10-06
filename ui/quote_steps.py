@@ -1,14 +1,21 @@
 from __future__ import annotations
 
+from agents.pricing_policy import DEFAULT_QUOTE_EXCHANGE_RATE
 from agents.sku_link import is_official_price_snapshot, price_source_type_of
 from models import (
     CustomerPresentationMode,
+    ExchangeRateSource,
     PriceSourceType,
     QuoteDraftStatus,
     RequirementType,
 )
+from ui.quote_format import display_number
 
 SESSION_QUOTE_STEP = "quote_workspace_step"
+SESSION_NEW_QUOTE_FX = "quote_new_exchange_rate"
+SESSION_NEW_QUOTE_FX_CHANGED = "quote_new_exchange_rate_changed"
+SESSION_FX_EDITOR = "quote_fx_editor"
+SESSION_FX_EDITOR_TOKEN = "quote_fx_editor_token"
 REVIEW_WIDGET_KEYS = (
     "confirm_configuration",
     "confirm_presentation",
@@ -114,6 +121,40 @@ def reference_value(text: str, line, workspace: dict) -> str:
     if line.manufacturer_price_snapshot is not None and not is_official_price_snapshot(line.manufacturer_price_snapshot):
         return f"{text}{workspace.get('reference_value_suffix', '')}"
     return text
+
+
+def ensure_new_quote_exchange_rate(session) -> None:
+    if not session.get(SESSION_NEW_QUOTE_FX):
+        session[SESSION_NEW_QUOTE_FX] = display_number(DEFAULT_QUOTE_EXCHANGE_RATE, "")
+
+
+def mark_new_quote_exchange_rate_changed(session) -> None:
+    session[SESSION_NEW_QUOTE_FX_CHANGED] = True
+
+
+def new_quote_exchange_rate_source(session) -> ExchangeRateSource:
+    # Decided by what the person did, not by the value: 160 typed by a person is still a manual choice.
+    if session.get(SESSION_NEW_QUOTE_FX_CHANGED):
+        return ExchangeRateSource.MANUAL_OVERRIDE
+    return ExchangeRateSource.STANDARD_DEFAULT
+
+
+def sync_exchange_rate_editor(session, draft) -> None:
+    # The saved draft is the source of truth; the editor is reset whenever another draft/version/rate is shown.
+    token = f"{draft.quote_draft_id}:{draft.quote_version}:{draft.exchange_rate}"
+    if session.get(SESSION_FX_EDITOR_TOKEN) != token:
+        session[SESSION_FX_EDITOR] = display_number(draft.exchange_rate, "")
+        session[SESSION_FX_EDITOR_TOKEN] = token
+
+
+def exchange_rate_summary(workspace: dict, source) -> tuple[str, str]:
+    rate = getattr(source, "exchange_rate", None)
+    context = getattr(source, "pricing_context", None)
+    origin = getattr(context, "exchange_rate_source", None) if context is not None else getattr(source, "exchange_rate_source", None)
+    origin_key = getattr(origin, "value", origin) or "UNRECORDED"
+    unset = workspace.get("unset_label", "未設定")
+    value = workspace.get("fx_value", "{rate}").format(rate=display_number(rate, unset)) if rate is not None else unset
+    return value, workspace.get("fx_sources", {}).get(origin_key, origin_key)
 
 
 def warning_count(draft) -> int:

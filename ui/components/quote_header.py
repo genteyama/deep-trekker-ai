@@ -4,7 +4,7 @@ from ui.components.quote_summary import render_summary_cards
 from ui.components.status import render_progress_summary
 from ui.quote_format import display_percent, display_yen
 from ui.quote_persistence import SESSION_SAVE_AT, SESSION_SAVE_ERROR, SESSION_SAVE_STATUS, format_saved_at
-from ui.quote_steps import build_header_summary
+from ui.quote_steps import build_header_summary, exchange_rate_summary
 from ui.work_status import summarize_quote
 
 
@@ -27,6 +27,8 @@ def render_quote_header(page: dict, draft, snapshot) -> None:
         meta[1].markdown(f"{workspace['header_status']}：<span class='status-badge'>{status_text}</span>", unsafe_allow_html=True)
         if summary["quote_version"] is not None:
             meta[2].write(f"{page['column_version']}：v{summary['quote_version']}")
+        fx_value, fx_origin = exchange_rate_summary(workspace, draft if draft is not None else snapshot)
+        st.write(f"{workspace['fx_label']}：{fx_value}（{fx_origin}）")
         if summary["quote_draft_id"]:
             st.caption(f"{workspace['draft_id_label']}: {summary['quote_draft_id']}")
         render_progress_summary(work, workspace)

@@ -47,6 +47,7 @@ CRITICAL_MARKERS = (
     "Manufacturer SKU is not set",
     "Manufacturer Price Snapshot is missing",
     "Official manufacturer price book is not set",
+    "Exchange rate is not set",
     "Landed cost is missing",
     "Customer presentation is UNDECIDED",
     "Final sales price is not set",
@@ -371,6 +372,7 @@ def draft_pricing_from_snapshot(snapshot: ApprovedQuoteSnapshot):
 
     return QuoteDraftPricingContext(
         exchange_rate=snapshot.exchange_rate,
+        exchange_rate_source=snapshot.exchange_rate_source,
         tax_rate=snapshot.tax_rate,
         landed_cost_policy_candidate_id=(
             snapshot.landed_cost_policy_snapshot.landed_cost_policy_candidate_id
@@ -628,6 +630,7 @@ def _build_approved_snapshot(
             else None
         ),
         exchange_rate=draft.exchange_rate,
+        exchange_rate_source=draft.pricing_context.exchange_rate_source,
         subtotal_ex_tax_jpy=draft.subtotal_ex_tax_jpy,
         tax_rate=draft.tax_rate,
         tax_jpy=draft.tax_jpy,

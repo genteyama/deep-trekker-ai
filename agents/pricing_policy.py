@@ -21,6 +21,9 @@ from models import (
     SpaceOnePricingPolicyCandidate,
 )
 
+# SpaceOne standard quote simulation rate (JPY per USD). 170 is used only when a person chooses it.
+DEFAULT_QUOTE_EXCHANGE_RATE = 160.0
+
 MULTIPLIER_RE = re.compile(
     r"^=(?P<col>[EF])(?P<row>\d+)\*(?P<mult>\d+(?:\.\d+)?)$",
     re.IGNORECASE,
@@ -97,6 +100,16 @@ def detected_exchange_rate_scenario(
             notes="Detected from the master sheet. Not a permanent 160/170 rule.",
         )
     return None
+
+
+def parse_exchange_rate(value) -> float:
+    try:
+        rate = float(str(value).strip().replace(",", ""))
+    except (TypeError, ValueError):
+        raise ValueError("Exchange rate must be a number.") from None
+    if not math.isfinite(rate) or rate <= 0:
+        raise ValueError("Exchange rate must be greater than 0.")
+    return rate
 
 
 def build_exchange_rate_scenario(rate: float, *, name: Optional[str] = None) -> ExchangeRateScenario:

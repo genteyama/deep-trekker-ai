@@ -10,7 +10,9 @@ from agents.quote_approval import (
     generate_quote_outputs,
     validate_for_approval,
 )
+from agents.pricing_policy import DEFAULT_QUOTE_EXCHANGE_RATE, parse_exchange_rate
 from agents.quote_builder import (
+    apply_exchange_rate,
     apply_final_price,
     apply_issue_date,
     apply_lead_time_text,
@@ -59,8 +61,14 @@ from ui.quote_persistence import (
     save_draft_now,
 )
 from ui.quote_steps import (
+    SESSION_FX_EDITOR,
+    SESSION_NEW_QUOTE_FX,
     SESSION_QUOTE_STEP,
     customer_facing_preview,
+    ensure_new_quote_exchange_rate,
+    exchange_rate_summary,
+    mark_new_quote_exchange_rate_changed,
+    new_quote_exchange_rate_source,
     normalize_quote_step,
     price_source_display,
     reference_value,
@@ -68,6 +76,7 @@ from ui.quote_steps import (
     save_review_widget_state,
     separate_product_lines,
     shipping_customer_lines,
+    sync_exchange_rate_editor,
 )
 
 
@@ -98,7 +107,7 @@ def render_quote_workspace(page: dict, helpers: dict) -> None:
         if current == 1:
             _render_step_configuration(page, draft)
         elif current == 2:
-            _render_step_costing(page, draft)
+            _render_step_costing(page, helpers, draft)
         elif current == 3:
             _render_step_customer(page, draft)
         elif current == 4:
@@ -186,6 +195,7 @@ def _render_draft_start(page: dict, helpers) -> None:
 def _render_new_quote_buttons(page: dict, helpers) -> None:
     st.write(page["section_quote_builder_description"])
     st.caption(page["quote_builder_hint"])
+    _render_new_quote_exchange_rate(page)
     case = load_quote_golden_case(IHI_QUOTE_001)
     left, right = st.columns(2)
     with left:
@@ -196,6 +206,54 @@ def _render_new_quote_buttons(page: dict, helpers) -> None:
         render_product_choice_card("MAG", page["ihi_mag_draft_button"])
         if st.button(page["ihi_mag_draft_button"], key="ihi_mag_draft", type="primary"):
             _create_draft(page, helpers, case, "MAG")
+
+
+def _render_new_quote_exchange_rate(page: dict) -> None:
+    workspace = page["workspace"]
+    ensure_new_quote_exchange_rate(st.session_state)
+    st.markdown(f"**{workspace['fx_label']}**")
+    text = st.text_input(
+        workspace["fx_new_input_label"],
+        key=SESSION_NEW_QUOTE_FX,
+        on_change=mark_new_quote_exchange_rate_changed,
+        args=(st.session_state,),
+    )
+    try:
+        parse_exchange_rate(text)
+    except ValueError:
+        st.error(workspace["fx_invalid"])
+        return
+    origin = new_quote_exchange_rate_source(st.session_state).value
+    default = display_number(DEFAULT_QUOTE_EXCHANGE_RATE, "")
+    st.caption(f"{workspace['fx_sources'][origin]} / {workspace['fx_default_hint'].format(default=default)}")
+
+
+def _render_exchange_rate_editor(page: dict, helpers, draft) -> None:
+    workspace = page["workspace"]
+    value, origin = exchange_rate_summary(workspace, draft)
+    st.markdown(f"**{workspace['fx_label']}：{value}**（{origin}）")
+    if draft.status in {QuoteDraftStatus.APPROVED, QuoteDraftStatus.SUPERSEDED}:
+        st.caption(workspace["fx_locked"])
+        return
+    sync_exchange_rate_editor(st.session_state, draft)
+    text = st.text_input(workspace["fx_input_label"], key=SESSION_FX_EDITOR)
+    st.caption(workspace["fx_apply_hint"])
+    if st.button(workspace["fx_apply_button"], key="apply_quote_exchange_rate"):
+        try:
+            rate = parse_exchange_rate(text)
+        except ValueError:
+            st.warning(workspace["fx_invalid"])
+            return
+        recalculate = helpers.get("sales_candidates_for_rate")
+        try:
+            apply_exchange_rate(draft, rate, sales_candidates=recalculate(rate) if recalculate else None)
+        except ValueError:
+            st.error(workspace["fx_reprice_failed"])
+            return
+        st.session_state["quote_draft"] = draft
+        st.session_state["quote_approval_validation"] = None
+        _save_draft(page, draft, manual=True, from_widgets=False)
+        st.rerun()
 
 
 def _create_draft(page: dict, helpers, case: dict, configuration: str) -> None:
@@ -262,9 +320,10 @@ def _render_2601_choice(page: dict, draft) -> None:
         st.rerun()
 
 
-def _render_step_costing(page: dict, draft) -> None:
+def _render_step_costing(page: dict, helpers, draft) -> None:
     st.subheader(page["workspace"]["step_costing"])
     render_warning_panel(page, draft)
+    _render_exchange_rate_editor(page, helpers, draft)
     _render_pending_price_key_reviews(page)
     render_costing_summary(page, draft)
     workspace = page["workspace"]

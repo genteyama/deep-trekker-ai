@@ -522,6 +522,50 @@ def _product_cost_line(
     )
 
 
+def reprice_product_cost_line(
+    item: dict,
+    *,
+    exchange_rate: float,
+    policy: LandedCostPolicyCandidate,
+    domestic_shipping_jpy: float,
+) -> ProductCostLine:
+    # Re-runs the same per-line landed-cost rules with a new exchange rate. The price snapshot in
+    # item["manufacturer_price_snapshot"] is kept, so price provenance never changes here.
+    line, _warnings = _product_cost_line(
+        item,
+        exchange_rate=exchange_rate,
+        policy=policy,
+        insurance_mode=policy.insurance_mode,
+        sales_candidates=[],
+        domestic_shipping_jpy=domestic_shipping_jpy,
+        price_book_candidates=[],
+        snapshot_id=f"reprice-{item.get('sku')}",
+        captured_at=datetime.now(timezone.utc),
+    )
+    return line
+
+
+def reprice_shipping_line(
+    line: LandedCostShippingLine,
+    *,
+    exchange_rate: float,
+    policy: LandedCostPolicyCandidate,
+) -> LandedCostShippingLine:
+    if line.rate_usd is None or line.shipping_type is None:
+        return line.model_copy(update={"exchange_rate": exchange_rate})
+    return build_shipping_line(
+        line.shipping_type,
+        line.quantity or 0,
+        line.rate_usd,
+        exchange_rate,
+        policy,
+        source_type=line.source_type,
+        source_reference=line.source_reference,
+        rule_status=line.rule_status,
+        notes=line.notes,
+    )
+
+
 def _declared_non_official_source(item: dict) -> PriceSourceType:
     # Only an imported price book (create_quote_price_snapshot) can mark a price as official.
     declared = item.get("price_source_type")

@@ -42,6 +42,7 @@ from agents.pricing_policy import (
     compare_ihi_historical_prices,
     extract_pricing_policies,
     ihi_historical_comparison_lines,
+    parse_exchange_rate,
     simulate_sales_price_candidates,
     summarize_pricing_patterns,
 )
@@ -71,6 +72,7 @@ from models import (
 )
 from parsers.spaceone_master_parser import parse_spaceone_master
 from ui.navigation import PAGE_HOME, set_current_page
+from ui.quote_steps import SESSION_NEW_QUOTE_FX, ensure_new_quote_exchange_rate, new_quote_exchange_rate_source
 from ui.quote_workspace import render_quote_debug_details, render_quote_workspace
 
 SESSION_IMPORT = "price_book_import"
@@ -112,6 +114,7 @@ def render_quote_control(texts: dict) -> None:
             "render_dates": _render_quote_date_inputs,
             "render_export": _render_file_export,
             "ensure_store": _ensure_quote_approval_store,
+            "sales_candidates_for_rate": _sales_candidates_for_rate,
             "texts": texts,
         },
     )
@@ -432,7 +435,8 @@ def _render_pricing_policy(page: dict) -> None:
     detected = next((item.detected_exchange_rate for item in items if item.detected_exchange_rate), None)
     if detected:
         st.caption(page["detected_rate_caption"].format(rate=detected))
-    rate_text = st.text_input(page["exchange_rate_label"], key="input_sales_exchange_rate")
+    st.caption(page.get("debug_fx_not_applied", ""))
+    rate_text = st.text_input(page.get("scenario_exchange_rate_label", page["exchange_rate_label"]), key="input_sales_exchange_rate")
     if st.button(page["simulate_sales_button"], key="simulate_sales_prices"):
         try:
             rate = float(rate_text)
@@ -723,6 +727,7 @@ def _render_landed_cost(page: dict) -> None:
     st.caption(page["landed_cost_not_applied"])
     st.caption(page["import_tax_basis_caption"])
     st.caption(page["domestic_shipping_caption"])
+    st.caption(page.get("debug_fx_not_applied", ""))
     rate_text = st.text_input(page["exchange_rate_label"], key="input_landed_exchange_rate")
     tax_text = st.text_input(page["import_tax_rate_label"], key="input_landed_import_tax")
     insurance_labels = page["insurance_modes"]
@@ -784,6 +789,7 @@ def _render_landed_cost(page: dict) -> None:
 def _render_ihi_landed_cost_cases(page: dict, case: dict) -> None:
     st.markdown(f"**{page['ihi_mag_landed_label']} / {page['ihi_photon_landed_label']}**")
     st.caption(page["ihi_landed_hint"])
+    st.caption(page.get("debug_fx_not_applied", ""))
     rate_text = st.text_input(page["exchange_rate_label"], key="input_ihi_landed_rate")
     if st.button(page["ihi_mag_landed_button"], key="estimate_ihi_mag_landed"):
         st.session_state["ihi_mag_landed"] = _run_ihi_landed(page, case, "MAG", rate_text)
@@ -1196,16 +1202,16 @@ def _display_percent(value, page: dict) -> str:
 
 
 def _build_ihi_draft_from_ui(page: dict, case: dict, configuration: str):
-    rate_text = st.session_state.get("input_landed_exchange_rate") or st.session_state.get("input_ihi_landed_rate") or "170"
+    ensure_new_quote_exchange_rate(st.session_state)
     try:
-        rate = float(rate_text)
-    except (TypeError, ValueError):
-        st.warning(page["exchange_rate_invalid"])
+        rate = parse_exchange_rate(st.session_state[SESSION_NEW_QUOTE_FX])
+    except ValueError:
+        st.warning(page["workspace"].get("fx_invalid", page["exchange_rate_invalid"]))
         return None
     books = load_official_manufacturer_price_books()
     candidates = collect_manufacturer_candidates(*books) if books else []
     dealer_values = resolve_ihi_dealer_values(candidates)
-    sales = st.session_state.get(SESSION_SALES_CANDIDATES) or []
+    sales = _sales_candidates_for_rate(rate) or []
     policy = _extracted_landed_policy()
     if policy is None or policy.import_tax_rate is None:
         policy = policy_from_inputs(
@@ -1229,9 +1235,22 @@ def _build_ihi_draft_from_ui(page: dict, case: dict, configuration: str):
         scenario,
         sales,
         tax_rate=_optional_float(st.session_state.get("input_draft_tax_rate")),
+        exchange_rate_source=new_quote_exchange_rate_source(st.session_state),
     )
     apply_historical_acceptance_preview(draft, quote)
     return draft
+
+
+def _sales_candidates_for_rate(rate: float):
+    # Standard sales candidates for a quote are always simulated at that quote's exchange rate.
+    # Candidates stored by the scenario panel (SESSION_SALES_CANDIDATES) are never used for quotes.
+    items = st.session_state.get(SESSION_SPACEONE_ITEMS)
+    preview = st.session_state.get(SESSION_SKU_LINKS)
+    if not items or preview is None:
+        return None
+    return simulate_sales_price_candidates(
+        preview, extract_pricing_policies(items), build_exchange_rate_scenario(rate), items
+    )
 
 
 def _ensure_official_master() -> None:

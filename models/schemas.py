@@ -14,6 +14,7 @@ from models.enums import (
     CostBasis,
     CustomerPresentationMode,
     DomesticShippingMode,
+    ExchangeRateSource,
     FinalPriceStatus,
     PriceSourceType,
     HistoricalComparisonStatus,
@@ -1089,6 +1090,7 @@ class CustomerQuoteLineDraft(BaseModel):
 
 class QuoteDraftPricingContext(BaseModel):
     exchange_rate: Optional[float] = None
+    exchange_rate_source: Optional[ExchangeRateSource] = None
     tax_rate: Optional[float] = None
     minimum_margin_reference: Optional[float] = None
     landed_cost_policy_candidate_id: Optional[str] = None
@@ -1247,6 +1249,7 @@ class ApprovedQuoteSnapshot(BaseModel):
     pricing_policy_references: list[str] = Field(default_factory=list)
     landed_cost_policy_snapshot: Optional[LandedCostPolicyCandidate] = None
     exchange_rate: Optional[float] = None
+    exchange_rate_source: Optional[ExchangeRateSource] = None
     subtotal_ex_tax_jpy: Optional[float] = None
     tax_rate: Optional[float] = None
     tax_jpy: Optional[float] = None

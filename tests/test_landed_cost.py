@@ -58,12 +58,14 @@ def _policy(**overrides):
     return policy_from_inputs(**values)
 
 
-def _sales(sku: str, price: float) -> SalesPriceCandidate:
+def _sales(sku: str, price: float, exchange_rate: float = 170.0) -> SalesPriceCandidate:
+    # Simulated candidates always record their rate; IHI Golden scenarios are calculated at 170.
     return SalesPriceCandidate(
         sales_price_candidate_id=f"spc-{sku}",
         spaceone_item_id=f"so-{sku}",
         manufacturer_sku=sku,
         raw_sales_price_jpy=price,
+        exchange_rate=exchange_rate,
     )
 
 

@@ -2,12 +2,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Sequence
 import json
+import math
 
 from agents.quote_dates import default_issue_date, default_valid_until, to_iso_date
+from agents.landed_cost import reprice_product_cost_line, reprice_shipping_line
+from agents.pricing_policy import parse_exchange_rate
 from agents.sku_link import price_source_type_of
 from models import (
     CustomerPresentationMode,
     CustomerQuoteLineDraft,
+    ExchangeRateSource,
     FinalPriceStatus,
     LandedCostScenario,
     PriceSourceType,
@@ -54,9 +58,12 @@ def build_quote_draft(
     minimum_margin_reference: Optional[float] = None,
     shipping_snapshot_id: Optional[str] = None,
     created_at: Optional[datetime] = None,
+    exchange_rate_source: Optional[ExchangeRateSource] = None,
 ) -> QuoteDraft:
     captured = created_at or datetime.now(timezone.utc)
-    sales_by_sku = _sales_by_sku(sales_candidates, configuration_name)
+    usable = [item for item in sales_candidates if _candidate_matches_rate(item, landed_scenario.exchange_rate)]
+    rejected = {item.manufacturer_sku: item.exchange_rate for item in sales_candidates if item not in usable}
+    sales_by_sku = _sales_by_sku(usable, configuration_name)
     presentations = {item["sku"]: item for item in presentation.get("product_presentations") or []}
     configuration_lines = []
     snapshots = []
@@ -64,6 +71,11 @@ def build_quote_draft(
     for index, product in enumerate(landed_scenario.product_lines, start=1):
         spec = presentations.get(product.sku or "", {})
         sales = sales_by_sku.get(product.sku or "")
+        line_warnings = list(product.warnings)
+        if sales is None and product.sku in rejected:
+            line_warnings.append(
+                _stale_candidate_warning(product.sku, rejected[product.sku], landed_scenario.exchange_rate)
+            )
         if sales and sales.pricing_policy_candidate_id:
             policy_ids.append(sales.pricing_policy_candidate_id)
         snapshot = product.manufacturer_price_snapshot
@@ -98,7 +110,7 @@ def build_quote_draft(
                 final_sales_price_jpy=None,
                 final_price_status=FinalPriceStatus.NOT_SET,
                 customer_presentation_status=presentation_mode,
-                warnings=list(product.warnings),
+                warnings=line_warnings,
             )
         )
     draft = QuoteDraft(
@@ -112,6 +124,7 @@ def build_quote_draft(
         exchange_rate=landed_scenario.exchange_rate,
         pricing_context=QuoteDraftPricingContext(
             exchange_rate=landed_scenario.exchange_rate,
+            exchange_rate_source=exchange_rate_source,
             tax_rate=tax_rate,
             minimum_margin_reference=minimum_margin_reference,
             landed_cost_policy_candidate_id=(
@@ -153,6 +166,7 @@ def build_ihi_quote_draft(
     minimum_margin_reference: Optional[float] = None,
     load_historical_preview: bool = False,
     historical_quote: Optional[dict] = None,
+    exchange_rate_source: Optional[ExchangeRateSource] = None,
 ) -> QuoteDraft:
     presentation = load_quote_presentation()[configuration.upper()]
     draft = build_quote_draft(
@@ -167,10 +181,77 @@ def build_ihi_quote_draft(
         tax_rate=tax_rate,
         minimum_margin_reference=minimum_margin_reference,
         shipping_snapshot_id="dealer-update-2026-09-shipping",
+        exchange_rate_source=exchange_rate_source,
     )
     if load_historical_preview and historical_quote:
         apply_historical_acceptance_preview(draft, historical_quote)
     return draft
+
+
+def apply_exchange_rate(
+    draft: QuoteDraft,
+    exchange_rate,
+    *,
+    sales_candidates: Optional[Sequence[SalesPriceCandidate]] = None,
+    presentation: Optional[dict] = None,
+) -> QuoteDraft:
+    # A human changed the rate. sales_candidates must be recalculated at the new rate; without them the
+    # previous standard sales candidates are cleared as stale. Final sales prices are never changed here.
+    ensure_draft_editable(draft)
+    rate = parse_exchange_rate(exchange_rate)
+    if rate == draft.exchange_rate:
+        return draft
+    policy = draft.pricing_context.landed_cost_policy_snapshot
+    if policy is None:
+        raise ValueError("Landed cost policy is missing. The exchange rate cannot be re-applied.")
+    previous_rate = draft.exchange_rate
+    fresh = _sales_by_sku(
+        [item for item in sales_candidates or [] if _candidate_matches_rate(item, rate)],
+        draft.configuration_name or "",
+    )
+    for line in draft.configuration_lines:
+        snapshot = (
+            line.manufacturer_price_snapshot.model_copy(update={"exchange_rate": rate})
+            if line.manufacturer_price_snapshot
+            else None
+        )
+        product = reprice_product_cost_line(
+            {
+                "sku": line.manufacturer_sku,
+                "quantity": line.quantity,
+                "dealer_price_usd": line.dealer_price_usd,
+                "description": line.manufacturer_description,
+                "manufacturer_price_snapshot": snapshot,
+                "standard_sales_price_jpy": line.standard_sales_price_candidate_jpy,
+            },
+            exchange_rate=rate,
+            policy=policy,
+            domestic_shipping_jpy=line.domestic_shipping_jpy or 0.0,
+        )
+        line.manufacturer_price_snapshot = snapshot
+        line.dealer_cost_jpy = product.dealer_cost_jpy
+        line.import_tax_jpy = product.import_tax_jpy
+        line.insurance_jpy = product.insurance_jpy
+        line.landed_cost_jpy = product.landed_cost_jpy
+        line.warnings = [item for item in line.warnings if STALE_CANDIDATE_MARKER not in item]
+        candidate = fresh.get(line.manufacturer_sku or "")
+        if candidate is not None:
+            line.standard_sales_price_candidate_jpy = candidate.raw_sales_price_jpy
+            line.standard_sales_price_candidate_id = candidate.sales_price_candidate_id
+        elif line.standard_sales_price_candidate_jpy is not None or line.standard_sales_price_candidate_id:
+            line.standard_sales_price_candidate_jpy = None
+            line.standard_sales_price_candidate_id = None
+            line.warnings.append(_stale_candidate_warning(line.manufacturer_sku, previous_rate, rate))
+    draft.shipping_lines = [
+        reprice_shipping_line(line, exchange_rate=rate, policy=policy) for line in draft.shipping_lines
+    ]
+    draft.pricing_context.manufacturer_price_snapshots = [
+        item.model_copy(update={"exchange_rate": rate}) for item in draft.pricing_context.manufacturer_price_snapshots
+    ]
+    draft.exchange_rate = rate
+    draft.pricing_context.exchange_rate = rate
+    draft.pricing_context.exchange_rate_source = ExchangeRateSource.MANUAL_OVERRIDE
+    return refresh_quote_draft(draft, presentation=presentation)
 
 
 def ensure_draft_editable(draft: QuoteDraft) -> None:
@@ -564,6 +645,8 @@ def _readiness(
     total_landed: Optional[float],
 ) -> tuple[bool, list[str]]:
     warnings = []
+    if draft.exchange_rate is None or draft.exchange_rate <= 0:
+        warnings.append("Exchange rate is not set. Costs cannot be confirmed.")
     for line in draft.configuration_lines:
         if not line.manufacturer_sku:
             warnings.append(f"{line.line_id}: Manufacturer SKU is not set.")
@@ -622,6 +705,26 @@ def customer_line_landed_cost(draft: QuoteDraft, customer_line: CustomerQuoteLin
             return None
         total += config.landed_cost_jpy
     return round(total, 4)
+
+
+STALE_CANDIDATE_MARKER = "Standard sales price candidate does not match the quote exchange rate"
+
+
+def _candidate_matches_rate(candidate: SalesPriceCandidate, rate: Optional[float]) -> bool:
+    # Only a candidate that explicitly records the quote's own rate may enter a quote. A missing or
+    # invalid rate is treated as unverified, never as a match.
+    candidate_rate = candidate.exchange_rate
+    if rate is None or not isinstance(candidate_rate, (int, float)) or isinstance(candidate_rate, bool):
+        return False
+    return math.isfinite(candidate_rate) and candidate_rate > 0 and candidate_rate == rate
+
+
+def _stale_candidate_warning(sku: Optional[str], candidate_rate: Optional[float], quote_rate: Optional[float]) -> str:
+    recorded = f"{candidate_rate} JPY/USD" if candidate_rate is not None else "rate not recorded"
+    return (
+        f"{sku}: {STALE_CANDIDATE_MARKER} (candidate {recorded}, quote {quote_rate} JPY/USD). "
+        "It is not used. Recalculate it before using it."
+    )
 
 
 def _sales_by_sku(candidates: Sequence[SalesPriceCandidate], configuration: str) -> dict[str, SalesPriceCandidate]:

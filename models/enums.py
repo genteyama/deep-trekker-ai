@@ -351,6 +351,11 @@ class FinalPriceStatus(str, Enum):
     MANUAL_OVERRIDE = "MANUAL_OVERRIDE"
 
 
+class ExchangeRateSource(str, Enum):
+    STANDARD_DEFAULT = "STANDARD_DEFAULT"
+    MANUAL_OVERRIDE = "MANUAL_OVERRIDE"
+
+
 class PriceSourceType(str, Enum):
     OFFICIAL_PRICE_BOOK = "OFFICIAL_PRICE_BOOK"
     DEVELOPMENT_REFERENCE = "DEVELOPMENT_REFERENCE"
