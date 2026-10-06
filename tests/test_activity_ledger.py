@@ -327,7 +327,12 @@ def test_existing_quote_and_technical_case_persistence_unchanged(tmp_path):
     assert loaded.draft.configuration_lines == draft.configuration_lines
 
 
-def test_last_activity_uses_event_not_created_at(tmp_path):
+def test_last_activity_uses_event_not_created_at(tmp_path, monkeypatch):
+    # save_case() stamps updated_at with the current time; pin it so the event stays newest on any run date.
+    monkeypatch.setattr(
+        "repositories.sqlite_technical_case_repository.now_iso",
+        lambda: "2026-09-02T00:00:00+00:00",
+    )
     db = tmp_path / "ledger.sqlite3"
     cases = SqliteTechnicalCaseRepository(db)
     quotes = SqliteQuoteRepository(db)
@@ -351,6 +356,7 @@ def test_last_activity_uses_event_not_created_at(tmp_path):
     )
     rows = sort_activity_rows(load_activity_rows(cases, quotes, events))
     assert rows[0].entity_id == record.case_id
+    assert rows[0].updated_at == "2026-09-02T00:00:00+00:00"
     assert rows[0].last_activity_at.startswith("2026-10-04")
     assert rows[0].date.startswith("2026-09-01")
 
