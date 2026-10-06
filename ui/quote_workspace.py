@@ -62,6 +62,8 @@ from ui.quote_steps import (
     SESSION_QUOTE_STEP,
     customer_facing_preview,
     normalize_quote_step,
+    price_source_display,
+    reference_value,
     restore_review_widget_state,
     save_review_widget_state,
     separate_product_lines,
@@ -265,13 +267,16 @@ def _render_step_costing(page: dict, draft) -> None:
     render_warning_panel(page, draft)
     _render_pending_price_key_reviews(page)
     render_costing_summary(page, draft)
-    empty = page["workspace"].get("unset_label", "未設定")
+    workspace = page["workspace"]
+    empty = workspace.get("unset_label", "未設定")
     st.table(
         [
             {
                 page["column_sku"]: line.manufacturer_sku or empty,
                 page["column_name_ja"]: line.manufacturer_description or empty,
-                page["column_landed"]: display_yen(line.landed_cost_jpy, empty),
+                workspace.get("price_source_label", "価格ソース"): price_source_display(workspace, line)[0],
+                workspace.get("price_state_label", "価格状態"): price_source_display(workspace, line)[1],
+                page["column_landed"]: reference_value(display_yen(line.landed_cost_jpy, empty), line, workspace),
                 page["column_sales_candidate"]: display_yen(line.standard_sales_price_candidate_jpy, empty),
                 page["column_final_price"]: display_yen(line.final_sales_price_jpy, empty),
             }
@@ -327,9 +332,10 @@ def _render_step_costing(page: dict, draft) -> None:
             [
                 {
                     page["column_sku"]: line.manufacturer_sku or empty,
-                    page["column_dealer_usd"]: display_number(line.dealer_price_usd, empty),
-                    page["column_dealer_jpy"]: display_yen(line.dealer_cost_jpy, empty),
-                    page["column_landed"]: display_yen(line.landed_cost_jpy, empty),
+                    workspace.get("price_source_label", "価格ソース"): price_source_display(workspace, line)[0],
+                    page["column_dealer_usd"]: reference_value(display_number(line.dealer_price_usd, empty), line, workspace),
+                    page["column_dealer_jpy"]: reference_value(display_yen(line.dealer_cost_jpy, empty), line, workspace),
+                    page["column_landed"]: reference_value(display_yen(line.landed_cost_jpy, empty), line, workspace),
                 }
                 for line in draft.configuration_lines
             ]

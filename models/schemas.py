@@ -15,6 +15,7 @@ from models.enums import (
     CustomerPresentationMode,
     DomesticShippingMode,
     FinalPriceStatus,
+    PriceSourceType,
     HistoricalComparisonStatus,
     InsuranceMode,
     QuoteAdjustmentType,
@@ -868,6 +869,7 @@ class QuotePriceSnapshot(BaseModel):
     exchange_rate: Optional[float] = None
     captured_at: Optional[datetime] = None
     source_reference: Optional[str] = None
+    price_source_type: Optional[PriceSourceType] = None
 
 
 class SkuLinkPreviewItem(BaseModel):

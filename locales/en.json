@@ -556,6 +556,23 @@
         },
         "snapshot_ready": "Manufacturer price snapshot: captured",
         "snapshot_missing": "Manufacturer price snapshot: missing",
+        "price_source_label": "Price source",
+        "price_state_label": "Price status",
+        "price_sources": {
+          "OFFICIAL_PRICE_BOOK": "{price_book}",
+          "DEVELOPMENT_REFERENCE": "Development reference price (not an official price book)",
+          "MANUAL_REVIEW": "Manual price (review required)",
+          "UNKNOWN": "Unverified"
+        },
+        "price_states": {
+          "OFFICIAL_PRICE_BOOK": "Official price book",
+          "DEVELOPMENT_REFERENCE": "No official price book / review required",
+          "MANUAL_REVIEW": "Price check required",
+          "UNKNOWN": "Price check required"
+        },
+        "official_price_book_fallback": "Manufacturer price book",
+        "price_source_blocked": "Official price book is not set ({count} lines). This quote is internal reference only and cannot be approved or issued as a formal quote. Import the official manufacturer price book and recreate the draft.",
+        "reference_value_suffix": " (reference)",
         "required_yes": "Required: yes",
         "required_no": "Required: no",
         "customer_display": "Customer display",
@@ -604,6 +621,7 @@
           "presentation": "Customer presentation undecided: {count}",
           "required": "Required component unresolved: {count}",
           "landed": "Landed cost not set: {count}",
+          "price_source": "Official price book not set: {count}",
           "snapshot": "Manufacturer snapshot missing: {count}",
           "other": "Other review items: {count}"
         },

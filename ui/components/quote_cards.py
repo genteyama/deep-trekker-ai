@@ -2,7 +2,7 @@ import streamlit as st
 
 from models import RequirementType
 from ui.quote_format import display_number, display_yen
-from ui.quote_steps import prices_adjusted
+from ui.quote_steps import price_source_display, prices_adjusted, reference_value
 
 
 def render_configuration_card(page: dict, line) -> None:
@@ -18,6 +18,11 @@ def render_configuration_card(page: dict, line) -> None:
         required = line.requirement_type in {RequirementType.BASE_PRODUCT, RequirementType.REQUIRED_DEPENDENCY}
         cols[1].write(workspace["required_yes"] if required else workspace["required_no"])
         cols[2].write(workspace["snapshot_ready"] if line.manufacturer_price_snapshot else workspace["snapshot_missing"])
+        source_label, source_state = price_source_display(workspace, line)
+        st.write(
+            f"{workspace.get('price_source_label', '価格ソース')}：{source_label} ／ "
+            f"{workspace.get('price_state_label', '価格状態')}：{source_state}"
+        )
         st.write(
             f"{workspace['customer_display']}：{line.customer_display_name or empty} / "
             f"{presentation_labels.get(line.customer_presentation_status.value, line.customer_presentation_status.value)}"
@@ -42,8 +47,8 @@ def render_configuration_card(page: dict, line) -> None:
                 st.text(empty)
             else:
                 st.write(f"SKU: {snapshot.sku}")
-                st.write(f"MSRP USD: {display_number(snapshot.manufacturer_msrp_usd, empty)}")
-                st.write(f"Dealer USD: {display_number(snapshot.manufacturer_dealer_price_usd, empty)}")
+                st.write(f"MSRP USD: {reference_value(display_number(snapshot.manufacturer_msrp_usd, empty), line, workspace)}")
+                st.write(f"Dealer USD: {reference_value(display_number(snapshot.manufacturer_dealer_price_usd, empty), line, workspace)}")
                 st.write(f"{page['column_fx']}: {display_number(snapshot.exchange_rate, empty)}")
                 if snapshot.source_reference:
                     st.caption(snapshot.source_reference)

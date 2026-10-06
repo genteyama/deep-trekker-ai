@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from agents.sku_link import is_official_price_snapshot, price_source_type_of
 from models import (
     CustomerPresentationMode,
+    PriceSourceType,
     QuoteDraftStatus,
     RequirementType,
 )
@@ -82,6 +84,36 @@ def unresolved_required_lines(draft) -> list:
         if line.requirement_type == RequirementType.REQUIRED_DEPENDENCY
         and line.customer_presentation_status == CustomerPresentationMode.UNDECIDED
     ]
+
+
+def non_official_price_lines(draft) -> list:
+    if draft is None:
+        return []
+    return [
+        line
+        for line in draft.configuration_lines
+        if line.manufacturer_price_snapshot is not None
+        and not is_official_price_snapshot(line.manufacturer_price_snapshot)
+    ]
+
+
+def price_source_display(workspace: dict, line) -> tuple[str, str]:
+    snapshot = line.manufacturer_price_snapshot
+    source = price_source_type_of(snapshot).value
+    sources = workspace.get("price_sources", {})
+    states = workspace.get("price_states", {})
+    if source == PriceSourceType.OFFICIAL_PRICE_BOOK.value:
+        book = snapshot.price_book or workspace.get("official_price_book_fallback", "")
+        label = sources.get(source, "{price_book}").format(price_book=book)
+    else:
+        label = sources.get(source, source)
+    return label, states.get(source, source)
+
+
+def reference_value(text: str, line, workspace: dict) -> str:
+    if line.manufacturer_price_snapshot is not None and not is_official_price_snapshot(line.manufacturer_price_snapshot):
+        return f"{text}{workspace.get('reference_value_suffix', '')}"
+    return text
 
 
 def warning_count(draft) -> int:

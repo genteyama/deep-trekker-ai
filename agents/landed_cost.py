@@ -13,6 +13,7 @@ from models import (
     LandedCostPolicyCandidate,
     LandedCostScenario,
     LandedCostShippingLine,
+    PriceSourceType,
     PricingPolicyStatus,
     ProductCostLine,
     QuoteAdjustment,
@@ -41,13 +42,15 @@ IHI_SHIPPING = {
     "PHOTON": ((ShippingType.LARGE_BOX, 1), (ShippingType.SMALL_BOX, 1)),
 }
 IHI_SHEET_DOMESTIC_FIRST_LINE_JPY = 10000.0
+_DEVELOPMENT_REFERENCE = PriceSourceType.DEVELOPMENT_REFERENCE.value
+# Development / Golden Case reference only. Never an official price book; approval is blocked when used.
 IHI_DEVELOPMENT_DEALER_VALUES = {
-    "9701-MAG-4K": {"dealer_price_usd": 21262.2, "msrp_usd": 35437, "description": "MAG CRAWLER PACKAGE 4K", "price_book": "DT40"},
-    "9735": {"dealer_price_usd": 7245.0, "msrp_usd": 12075, "description": "ELEVATING PAN TILT CAMERA KIT", "price_book": "DT40"},
-    "5608": {"dealer_price_usd": 10448.0, "msrp_usd": 10448, "description": "CYGNUS THICKNESS GAUGE", "price_book": "DT40"},
-    "9680-BASE": {"dealer_price_usd": 10434.6, "msrp_usd": 17391, "description": "PHOTON BASE PACKAGE", "price_book": "DT40"},
-    "8459": {"dealer_price_usd": 472.2, "msrp_usd": 787, "description": "SPARE BATTERY - PHOTON", "price_book": "DT40"},
-    "7851-PHOTON": {"dealer_price_usd": 1047.6, "msrp_usd": 1746, "description": "CYGNUS INTEGRATION KIT - PHOTON", "price_book": "DT40"},
+    "9701-MAG-4K": {"dealer_price_usd": 21262.2, "msrp_usd": 35437, "description": "MAG CRAWLER PACKAGE 4K", "price_source_type": _DEVELOPMENT_REFERENCE},
+    "9735": {"dealer_price_usd": 7245.0, "msrp_usd": 12075, "description": "ELEVATING PAN TILT CAMERA KIT", "price_source_type": _DEVELOPMENT_REFERENCE},
+    "5608": {"dealer_price_usd": 10448.0, "msrp_usd": 10448, "description": "CYGNUS THICKNESS GAUGE", "price_source_type": _DEVELOPMENT_REFERENCE},
+    "9680-BASE": {"dealer_price_usd": 10434.6, "msrp_usd": 17391, "description": "PHOTON BASE PACKAGE", "price_source_type": _DEVELOPMENT_REFERENCE},
+    "8459": {"dealer_price_usd": 472.2, "msrp_usd": 787, "description": "SPARE BATTERY - PHOTON", "price_source_type": _DEVELOPMENT_REFERENCE},
+    "7851-PHOTON": {"dealer_price_usd": 1047.6, "msrp_usd": 1746, "description": "CYGNUS INTEGRATION KIT - PHOTON", "price_source_type": _DEVELOPMENT_REFERENCE},
 }
 
 
@@ -310,6 +313,7 @@ def build_ihi_landed_cost_scenario(
                 "description": values.get("description"),
                 "price_book": values.get("price_book"),
                 "price_book_version": values.get("price_book_version"),
+                "price_source_type": values.get("price_source_type"),
                 "sales_sheet": key,
             }
         )
@@ -457,6 +461,8 @@ def _product_cost_line(
             )
             dealer_usd = snapshot.manufacturer_dealer_price_usd if snapshot.manufacturer_dealer_price_usd is not None else dealer_usd
             msrp_usd = snapshot.manufacturer_msrp_usd if snapshot.manufacturer_msrp_usd is not None else msrp_usd
+            if snapshot.price_source_type != PriceSourceType.OFFICIAL_PRICE_BOOK:
+                snapshot.price_source_type = _declared_non_official_source(item)
         else:
             snapshot = QuotePriceSnapshot(
                 snapshot_id=snapshot_id,
@@ -468,6 +474,7 @@ def _product_cost_line(
                 exchange_rate=exchange_rate,
                 captured_at=captured_at,
                 source_reference="scenario-input",
+                price_source_type=_declared_non_official_source(item),
             )
     dealer_jpy = _round_money(dealer_usd * quantity * exchange_rate) if dealer_usd is not None else None
     import_tax = None
@@ -513,6 +520,14 @@ def _product_cost_line(
         ),
         warnings,
     )
+
+
+def _declared_non_official_source(item: dict) -> PriceSourceType:
+    # Only an imported price book (create_quote_price_snapshot) can mark a price as official.
+    declared = item.get("price_source_type")
+    if declared in {PriceSourceType.DEVELOPMENT_REFERENCE.value, PriceSourceType.MANUAL_REVIEW.value}:
+        return PriceSourceType(declared)
+    return PriceSourceType.UNKNOWN
 
 
 def _domestic_for_line(index: int, policy: LandedCostPolicyCandidate, amount: Optional[float]) -> float:

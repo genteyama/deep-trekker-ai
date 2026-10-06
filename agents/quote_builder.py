@@ -4,11 +4,13 @@ from typing import Optional, Sequence
 import json
 
 from agents.quote_dates import default_issue_date, default_valid_until, to_iso_date
+from agents.sku_link import price_source_type_of
 from models import (
     CustomerPresentationMode,
     CustomerQuoteLineDraft,
     FinalPriceStatus,
     LandedCostScenario,
+    PriceSourceType,
     QuoteAdjustment,
     QuoteAdjustmentType,
     QuoteConfigurationLine,
@@ -567,6 +569,13 @@ def _readiness(
             warnings.append(f"{line.line_id}: Manufacturer SKU is not set.")
         if line.manufacturer_price_snapshot is None:
             warnings.append(f"{line.manufacturer_sku or line.line_id}: Manufacturer Price Snapshot is missing.")
+        else:
+            source = price_source_type_of(line.manufacturer_price_snapshot)
+            if source != PriceSourceType.OFFICIAL_PRICE_BOOK:
+                warnings.append(
+                    f"{line.manufacturer_sku or line.line_id}: Official manufacturer price book is not set "
+                    f"({source.value}). This price cannot be approved."
+                )
         if line.landed_cost_jpy is None:
             warnings.append(f"{line.manufacturer_sku or line.line_id}: Landed cost is missing.")
         if line.customer_presentation_status == CustomerPresentationMode.UNDECIDED:

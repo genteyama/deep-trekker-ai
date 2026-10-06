@@ -1,7 +1,7 @@
 import streamlit as st
 
 from ui.quote_format import display_percent, display_yen
-from ui.quote_steps import costing_summary
+from ui.quote_steps import costing_summary, non_official_price_lines
 
 
 def render_summary_cards(items: list[tuple[str, object]], unset_label: str = "未設定") -> None:
@@ -19,11 +19,12 @@ def render_costing_summary(page: dict, draft) -> None:
     workspace = page["workspace"]
     summary = costing_summary(draft)
     unset = workspace.get("unset_label", "未設定")
+    suffix = workspace.get("reference_value_suffix", "") if non_official_price_lines(draft) else ""
     render_summary_cards(
         [
-            (workspace["metric_product_cost"], display_yen(summary["product_cost"], None)),
+            (workspace["metric_product_cost"] + suffix, display_yen(summary["product_cost"], None)),
             (workspace["metric_shipping_cost"], display_yen(summary["shipping_cost"], None)),
-            (workspace["metric_total_cost"], display_yen(summary["total_cost"], None)),
+            (workspace["metric_total_cost"] + suffix, display_yen(summary["total_cost"], None)),
             (workspace["metric_standard"], display_yen(summary["standard_sales"], None)),
             (workspace["metric_final"], display_yen(summary["final_sales"], None)),
             (workspace["metric_profit"], display_yen(summary["gross_profit"], None)),

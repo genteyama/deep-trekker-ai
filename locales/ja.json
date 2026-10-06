@@ -556,6 +556,23 @@
         },
         "snapshot_ready": "メーカー価格Snapshot：取得済み",
         "snapshot_missing": "メーカー価格Snapshot：未取得",
+        "price_source_label": "価格ソース",
+        "price_state_label": "価格状態",
+        "price_sources": {
+          "OFFICIAL_PRICE_BOOK": "{price_book}",
+          "DEVELOPMENT_REFERENCE": "開発用参考価格（正式価格表ではありません）",
+          "MANUAL_REVIEW": "手入力価格（要確認）",
+          "UNKNOWN": "未確認"
+        },
+        "price_states": {
+          "OFFICIAL_PRICE_BOOK": "正式価格表",
+          "DEVELOPMENT_REFERENCE": "正式価格表なし / 要確認",
+          "MANUAL_REVIEW": "価格確認が必要",
+          "UNKNOWN": "価格確認が必要"
+        },
+        "official_price_book_fallback": "メーカー価格表",
+        "price_source_blocked": "正式価格表が未設定です（{count}件）。この見積は社内参考のみで、承認・正式見積書の出力はできません。正式なメーカー価格表を取り込んでから見積ドラフトを作り直してください。",
+        "reference_value_suffix": "（参考）",
         "required_yes": "必須構成：はい",
         "required_no": "必須構成：いいえ",
         "customer_display": "顧客表示",
@@ -604,6 +621,7 @@
           "presentation": "顧客向け表示 未決定：{count}件",
           "required": "必須構成 未解決：{count}件",
           "landed": "仕入原価 未設定：{count}件",
+          "price_source": "正式価格表 未設定：{count}件",
           "snapshot": "メーカー価格Snapshot 未取得：{count}件",
           "other": "その他の要確認：{count}件"
         },

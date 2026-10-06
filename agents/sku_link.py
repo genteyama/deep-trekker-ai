@@ -16,6 +16,7 @@ from models import (
     MatchStatus,
     PriceBookImportResult,
     PriceDifference,
+    PriceSourceType,
     QuotePriceSnapshot,
     SKUMasterCandidate,
     SkuDuplicateClass,
@@ -96,6 +97,7 @@ def create_quote_price_snapshot(
     exchange_rate: Optional[float] = None,
 ) -> QuotePriceSnapshot:
     current = get_current_manufacturer_values(sku, price_book_candidates, price_book_version=price_book_version)
+    found = current is not None and current.dealer_price_usd is not None
     return QuotePriceSnapshot(
         snapshot_id=snapshot_id,
         sku=sku,
@@ -106,7 +108,28 @@ def create_quote_price_snapshot(
         exchange_rate=exchange_rate,
         captured_at=captured_at or datetime.now(timezone.utc),
         source_reference=source_reference,
+        price_source_type=PriceSourceType.OFFICIAL_PRICE_BOOK if found else PriceSourceType.UNKNOWN,
     )
+
+
+def price_source_type_of(snapshot: Optional[QuotePriceSnapshot]) -> PriceSourceType:
+    if snapshot is None:
+        return PriceSourceType.UNKNOWN
+    if snapshot.price_source_type is not None:
+        return PriceSourceType(snapshot.price_source_type)
+    # Snapshots saved before price_source_type existed: only create_quote_price_snapshot() read values
+    # from an imported price book. "scenario-input" snapshots never had a verified source.
+    if (
+        snapshot.source_reference != "scenario-input"
+        and snapshot.price_book
+        and snapshot.manufacturer_dealer_price_usd is not None
+    ):
+        return PriceSourceType.OFFICIAL_PRICE_BOOK
+    return PriceSourceType.UNKNOWN
+
+
+def is_official_price_snapshot(snapshot: Optional[QuotePriceSnapshot]) -> bool:
+    return price_source_type_of(snapshot) == PriceSourceType.OFFICIAL_PRICE_BOOK
 
 
 def build_sku_link_preview(

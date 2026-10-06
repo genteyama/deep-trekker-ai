@@ -5,6 +5,7 @@ from collections import Counter
 from ui.quote_steps import unresolved_required_lines
 
 WARNING_RULES = (
+    ("Official manufacturer price book is not set", "price_source"),
     ("Final sales price is not set", "final_price"),
     ("Shipping customer price is not set", "shipping"),
     ("Customer tax rate is not set", "tax"),
@@ -40,6 +41,8 @@ def summarize_draft_warnings(draft) -> dict:
     if unresolved and not counts["required"]:
         counts["required"] += len(unresolved)
     lines = []
+    if counts["price_source"]:
+        lines.append(("price_source", counts["price_source"]))
     if counts["final_price"]:
         lines.append(("final_price", counts["final_price"]))
     if counts["shipping"]:

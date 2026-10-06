@@ -46,6 +46,7 @@ CRITICAL_MARKERS = (
     "Required Component unresolved",
     "Manufacturer SKU is not set",
     "Manufacturer Price Snapshot is missing",
+    "Official manufacturer price book is not set",
     "Landed cost is missing",
     "Customer presentation is UNDECIDED",
     "Final sales price is not set",
