@@ -192,6 +192,10 @@ def _parse_sheet(sheet, aliases, book_name, version, timestamp, result) -> None:
         return
 
     summary.header_found = True
+    dealer_index = header["columns"].get("dealer_price")
+    if dealer_index is not None:
+        # The dealer column label identifies the price book (e.g. "DT40" / "PT30" in manufacturer books).
+        summary.dealer_price_label = _normalize_header(_cell(header["values"], dealer_index)) or None
     missing = [field for field in REQUIRED_FIELDS if field not in header["columns"]]
     if missing:
         _add_issue(
@@ -233,7 +237,7 @@ def _find_header(sheet, aliases) -> Optional[dict]:
         columns = _map_columns(values, aliases)
         if "sku" not in columns:
             continue
-        return {"columns": columns, "rows": rows[header_index + 1 :]}
+        return {"columns": columns, "values": values, "rows": rows[header_index + 1 :]}
     return None
 
 

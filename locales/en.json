@@ -370,6 +370,54 @@
       "exchange_rate_label": "Exchange rate (JPY/USD)",
       "exchange_rate_invalid": "Enter a numeric exchange rate. 160/170 is not a hardcoded rule.",
       "debug_fx_not_applied": "Scenario analysis only. This rate and its results are not applied to quote drafts, standard sales candidates, approvals or formal quotes. Set the quote exchange rate in the main screen.",
+      "price_masters": {
+        "summary_title": "Price master status",
+        "management_title": "Price master management",
+        "management_description": "Import manufacturer price books, the SpaceOne price master and the quote-calc policy. Any file name is fine. A file becomes active only after validation succeeds and is used for new quotes. Existing and approved quotes do not change.",
+        "labels": {
+          "DT40": "DT40 (Deep Trekker price book)",
+          "PT30": "PT30 (PipeTrekker price book)",
+          "SO_MASTER": "SpaceOne price master",
+          "QUOTE_CALC": "Quote-calc policy (import tax, insurance, shipping markup)"
+        },
+        "short_labels": {
+          "DT40": "DT40",
+          "PT30": "PT30",
+          "SO_MASTER": "SpaceOne master",
+          "QUOTE_CALC": "Quote-calc policy"
+        },
+        "status_active": "Active",
+        "status_inactive": "Inactive (previous version)",
+        "status_unset": "Not set",
+        "summary_active": "Imported {date}",
+        "summary_unset": "Not set (import required)",
+        "current_label": "Current",
+        "imported_at_label": "Imported",
+        "file_label": "File",
+        "hash_label": "Hash",
+        "validation_label": "Validation",
+        "upload_label": "Choose a file (.xlsx)",
+        "import_button": "Import (validate and activate)",
+        "history_label": "Import history",
+        "no_history": "No imports yet.",
+        "no_file": "Choose a file first.",
+        "validation_formats": {
+          "DT40": "{sku_count} SKUs",
+          "PT30": "{sku_count} SKUs",
+          "SO_MASTER": "{item_count} SKUs / {policy_count} price rules",
+          "QUOTE_CALC": "Import tax {import_tax_rate} / insurance {insurance_rate} / shipping markup {shipping_markup}"
+        },
+        "outcomes": {
+          "ACTIVATED": "{label} was imported and activated ({file}). It is used for new quotes. Existing quotes do not change.",
+          "ALREADY_ACTIVE": "The same {label} is already active. Nothing new was imported.",
+          "REACTIVATED": "The previously imported identical {label} (imported {date}) is active again.",
+          "NOT_XLSX": "Choose an Excel (.xlsx) file for {label}. The current price master was not changed.",
+          "VALIDATION_FAILED": "The file could not be read as {label}. Check the file. The current price master was not changed.",
+          "MASTER_TYPE_UNCONFIRMED": "The file could not be confirmed as {label}. Check which price book you selected (for example DT40 vs PT30). The current price master was not changed.",
+          "POLICY_INCOMPLETE": "Not all required values (import tax, insurance, shipping markup) could be read for {label}. Check the file. The current price master was not changed.",
+          "STORAGE_FAILED": "Saving {label} failed. The current price master was not changed."
+        }
+      },
       "scenario_exchange_rate_label": "Scenario-only exchange rate (JPY/USD, not applied to quotes)",
       "detected_rate_caption": "Detected on the master: {rate} (reference only, not a permanent rule)",
       "simulate_sales_button": "Simulate standard sales price candidates",
@@ -640,6 +688,7 @@
           "landed": "Landed cost not set: {count}",
           "price_source": "Official price book not set: {count}",
           "stale_candidate": "Standard sales candidate needs recalculation (rate differs or unknown): {count}",
+          "sales_master": "SpaceOne price master not set (no standard sales candidate): {count}",
           "snapshot": "Manufacturer snapshot missing: {count}",
           "other": "Other review items: {count}"
         },

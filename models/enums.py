@@ -351,6 +351,30 @@ class FinalPriceStatus(str, Enum):
     MANUAL_OVERRIDE = "MANUAL_OVERRIDE"
 
 
+class PriceMasterType(str, Enum):
+    DT40 = "DT40"
+    PT30 = "PT30"
+    SO_MASTER = "SO_MASTER"
+    QUOTE_CALC = "QUOTE_CALC"
+
+
+class PriceMasterSourceType(str, Enum):
+    # Future sources (e.g. GOOGLE_SHEETS) go through the same validation, hashing and activation.
+    FILE_UPLOAD = "FILE_UPLOAD"
+
+
+class PriceMasterValidationStatus(str, Enum):
+    VALID = "VALID"
+    INVALID = "INVALID"
+
+
+class PriceMasterImportStatus(str, Enum):
+    ACTIVATED = "ACTIVATED"
+    ALREADY_ACTIVE = "ALREADY_ACTIVE"
+    REACTIVATED = "REACTIVATED"
+    REJECTED = "REJECTED"
+
+
 class ExchangeRateSource(str, Enum):
     STANDARD_DEFAULT = "STANDARD_DEFAULT"
     MANUAL_OVERRIDE = "MANUAL_OVERRIDE"

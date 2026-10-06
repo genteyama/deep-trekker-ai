@@ -1,9 +1,7 @@
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Optional, Sequence
 
 from agents.master_reconciliation import collect_manufacturer_candidates, get_manufacturer_price_by_sku
-from agents.quote_control_agent import import_price_book
 from models import (
     PriceBookImportResult,
     QuoteKnownIssue,
@@ -24,8 +22,6 @@ from models import (
 )
 
 DEFAULT_PRICE_TOLERANCE_USD = 0.01
-OFFICIAL_DT40_PATH = Path("/tmp/dt_price_investigation/DT40.xlsx")
-OFFICIAL_PT30_PATH = Path("/tmp/dt_price_investigation/PT30.xlsx")
 REVIEW_STATUSES = {
     SupplierQuoteValidationStatus.MSRP_MATCH,
     SupplierQuoteValidationStatus.PRICE_MISMATCH,
@@ -37,12 +33,10 @@ REVIEW_STATUSES = {
 
 
 def load_official_manufacturer_price_books() -> list[PriceBookImportResult]:
-    books = []
-    if OFFICIAL_DT40_PATH.exists():
-        books.append(import_price_book(OFFICIAL_DT40_PATH, source_price_book="DT40", version="official"))
-    if OFFICIAL_PT30_PATH.exists():
-        books.append(import_price_book(OFFICIAL_PT30_PATH, source_price_book="PT30", version="official"))
-    return books
+    # Only the DT40 / PT30 masters activated in the price master registry are official.
+    from agents.price_master import active_price_books
+
+    return [item.book for item in active_price_books()]
 
 
 def prices_equal(

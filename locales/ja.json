@@ -370,6 +370,54 @@
       "exchange_rate_label": "Exchange Rate (JPY/USD)",
       "exchange_rate_invalid": "為替レートを数値で入力してください。160/170は固定ルールではありません。",
       "debug_fx_not_applied": "シナリオ試算専用です。この為替と試算結果は見積ドラフト・標準売価候補・承認・正式見積書には反映されません。見積の為替レートは通常画面の「為替レート」で設定します。",
+      "price_masters": {
+        "summary_title": "価格マスター状態",
+        "management_title": "価格マスター管理",
+        "management_description": "メーカー価格表・SpaceOne価格マスター・見積試算ポリシーを取り込みます。ファイル名は自由です。取り込んだファイルは検証に成功した場合だけ有効になり、新しく作成する見積から使用されます。既存の見積と承認済みの見積は変わりません。",
+        "labels": {
+          "DT40": "DT40（Deep Trekker 価格表）",
+          "PT30": "PT30（PipeTrekker 価格表）",
+          "SO_MASTER": "SpaceOne価格マスター",
+          "QUOTE_CALC": "見積試算ポリシー（輸入税・保険・Shipping倍率）"
+        },
+        "short_labels": {
+          "DT40": "DT40",
+          "PT30": "PT30",
+          "SO_MASTER": "SpaceOne価格マスター",
+          "QUOTE_CALC": "見積試算ポリシー"
+        },
+        "status_active": "有効",
+        "status_inactive": "無効（過去の版）",
+        "status_unset": "未設定",
+        "summary_active": "{date}取込",
+        "summary_unset": "未設定（取り込みが必要です）",
+        "current_label": "現在の状態",
+        "imported_at_label": "取込日時",
+        "file_label": "ファイル",
+        "hash_label": "ハッシュ",
+        "validation_label": "検証結果",
+        "upload_label": "ファイルを選択（.xlsx）",
+        "import_button": "取り込む（検証して有効化）",
+        "history_label": "過去の取込履歴",
+        "no_history": "取込履歴はありません。",
+        "no_file": "ファイルを選択してください。",
+        "validation_formats": {
+          "DT40": "SKU {sku_count}件",
+          "PT30": "SKU {sku_count}件",
+          "SO_MASTER": "SKU {item_count}件 / 売価ルール {policy_count}件",
+          "QUOTE_CALC": "輸入税 {import_tax_rate} / 保険 {insurance_rate} / Shipping倍率 {shipping_markup}"
+        },
+        "outcomes": {
+          "ACTIVATED": "{label}を取り込み、有効にしました（{file}）。新しく作成する見積から使用されます。既存の見積は変わりません。",
+          "ALREADY_ACTIVE": "同じ内容の{label}がすでに有効です。新しい取り込みは行っていません。",
+          "REACTIVATED": "以前取り込んだ同じ内容の{label}（{date}取込）を有効に戻しました。",
+          "NOT_XLSX": "{label}はExcel（.xlsx）ファイルを選択してください。現在の価格マスターは変更していません。",
+          "VALIDATION_FAILED": "{label}として読み込めませんでした。ファイル内容をご確認ください。現在の価格マスターは変更していません。",
+          "MASTER_TYPE_UNCONFIRMED": "{label}として確認できませんでした。選択したファイルの種類をご確認ください（PT30とDT40など、別の種類の価格表の可能性があります）。現在の価格マスターは変更していません。",
+          "POLICY_INCOMPLETE": "{label}として必要な値（輸入税・保険・Shipping倍率）をすべて読み取れませんでした。ファイル内容をご確認ください。現在の価格マスターは変更していません。",
+          "STORAGE_FAILED": "{label}の保存に失敗しました。現在の価格マスターは変更していません。"
+        }
+      },
       "scenario_exchange_rate_label": "シナリオ試算専用の為替（円/USD・見積には反映されません）",
       "detected_rate_caption": "社内マスター検出値: {rate}（参考。恒久ルールではありません）",
       "simulate_sales_button": "標準売価候補を試算",
@@ -640,6 +688,7 @@
           "landed": "仕入原価 未設定：{count}件",
           "price_source": "正式価格表 未設定：{count}件",
           "stale_candidate": "標準売価候補 要再計算（為替が異なる・不明）：{count}件",
+          "sales_master": "SpaceOne価格マスター未設定（標準売価候補なし）：{count}件",
           "snapshot": "メーカー価格Snapshot 未取得：{count}件",
           "other": "その他の要確認：{count}件"
         },

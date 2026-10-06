@@ -16,6 +16,10 @@ from models.enums import (
     DomesticShippingMode,
     ExchangeRateSource,
     FinalPriceStatus,
+    PriceMasterImportStatus,
+    PriceMasterSourceType,
+    PriceMasterType,
+    PriceMasterValidationStatus,
     PriceSourceType,
     HistoricalComparisonStatus,
     InsuranceMode,
@@ -505,6 +509,7 @@ class PriceBookSheetSummary(BaseModel):
     skipped: bool = False
     skip_reason: Optional[str] = None
     source_status: Optional[SkuSourceStatus] = None
+    dealer_price_label: Optional[str] = None
 
 
 class PriceBookImportResult(BaseModel):
@@ -871,6 +876,32 @@ class QuotePriceSnapshot(BaseModel):
     captured_at: Optional[datetime] = None
     source_reference: Optional[str] = None
     price_source_type: Optional[PriceSourceType] = None
+    price_master_import_id: Optional[str] = None
+    price_master_sha256: Optional[str] = None
+    price_master_filename: Optional[str] = None
+
+
+class PriceMasterImport(BaseModel):
+    import_id: str
+    master_type: PriceMasterType
+    source_type: PriceMasterSourceType = PriceMasterSourceType.FILE_UPLOAD
+    original_filename: Optional[str] = None
+    stored_path: str
+    sha256: str
+    size_bytes: Optional[int] = None
+    imported_at: str
+    active: bool = False
+    validation_status: PriceMasterValidationStatus = PriceMasterValidationStatus.VALID
+    validation_summary: dict = Field(default_factory=dict)
+    activated_at: Optional[str] = None
+    deactivated_at: Optional[str] = None
+
+
+class PriceMasterImportOutcome(BaseModel):
+    status: PriceMasterImportStatus
+    master_type: PriceMasterType
+    record: Optional[PriceMasterImport] = None
+    reason_code: Optional[str] = None
 
 
 class SkuLinkPreviewItem(BaseModel):

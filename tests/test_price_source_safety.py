@@ -257,9 +257,11 @@ def test_price_source_display_labels():
 
 
 def test_ihi_button_without_official_price_books_shows_reference_only(tmp_path, monkeypatch):
-    monkeypatch.setattr("agents.supplier_quote_validation.OFFICIAL_DT40_PATH", tmp_path / "missing-DT40.xlsx")
-    monkeypatch.setattr("agents.supplier_quote_validation.OFFICIAL_PT30_PATH", tmp_path / "missing-PT30.xlsx")
-    monkeypatch.setattr("parsers.quote_calc_parser.DEFAULT_QUOTE_CALC_PATHS", ())
+    from agents.price_master import get_active_master
+    from models import PriceMasterType
+
+    # The per-test database starts with no active price masters, so no official file can be used.
+    assert all(get_active_master(master_type) is None for master_type in PriceMasterType)
 
     at = AppTest.from_file(str(APP_PATH)).run()
     at.button(key="open_quote_control").click().run()

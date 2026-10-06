@@ -24,17 +24,16 @@ KNOWN_OPERATIONAL_DOMESTIC_JPY = 5000.0
 TAX_FORMULA_RE = re.compile(r"^=H(?P<row>\d+)\*(?P<rate>\d+(?:\.\d+)?)$", re.IGNORECASE)
 INSURANCE_FORMULA_RE = re.compile(r"^=H(?P<row>\d+)\*(?P<rate>\d+(?:\.\d+)?)$", re.IGNORECASE)
 SUM_HK_RE = re.compile(r"^=SUM\(H(?P<row>\d+):K(?P=row)\)$", re.IGNORECASE)
-DEFAULT_QUOTE_CALC_PATHS = (
-    Path("/tmp/dt_price_investigation/QUOTE_CALC.xlsx"),
-    Path.home() / "Downloads" / "DT_PT見積もり試算シート.xlsx",
-)
 
 
 def locate_quote_calc_workbook() -> Optional[Path]:
-    for path in DEFAULT_QUOTE_CALC_PATHS:
-        if path.exists():
-            return path
-    return None
+    # The quote-calc workbook is the QUOTE_CALC master activated in the price master registry.
+    # Explicit paths can still be passed to extract_quote_calc_audit() directly.
+    from agents.price_master import get_active_master
+    from models import PriceMasterType
+
+    active = get_active_master(PriceMasterType.QUOTE_CALC)
+    return active.path if active else None
 
 
 def extract_quote_calc_audit(

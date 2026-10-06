@@ -1,4 +1,3 @@
-from pathlib import Path
 from typing import Optional
 
 import streamlit as st
@@ -47,6 +46,14 @@ from agents.pricing_policy import (
     summarize_pricing_patterns,
 )
 from agents.sku_link import build_sku_link_preview, try_manual_link
+from agents.price_master import (
+    active_price_books,
+    attach_price_master_provenance,
+    get_active_master,
+    load_active_landed_policy,
+    load_active_spaceone_master,
+    mark_sales_master_missing,
+)
 from agents.supplier_quote_validation import load_official_manufacturer_price_books, validate_supplier_quote
 from data.golden_cases.loader import IHI_QUOTE_001, load_quote_golden_case
 from models import (
@@ -54,12 +61,12 @@ from models import (
     ExportFileType,
     ExportPurpose,
     InsuranceMode,
+    PriceMasterType,
     QuoteDraftStatus,
     RequiredConfigurationItem,
     ShippingType,
     SupplierQuote,
 )
-from parsers.quote_calc_parser import extract_quote_calc_audit, locate_quote_calc_workbook
 from agents.update_inbox_agent import UpdateInboxStore, create_manual_candidate, organize_pasted_update
 from models import (
     LinkStatus,
@@ -72,6 +79,7 @@ from models import (
 )
 from parsers.spaceone_master_parser import parse_spaceone_master
 from ui.navigation import PAGE_HOME, set_current_page
+from ui.price_master import render_price_master_management, render_price_master_summary
 from ui.quote_steps import SESSION_NEW_QUOTE_FX, ensure_new_quote_exchange_rate, new_quote_exchange_rate_source
 from ui.quote_workspace import render_quote_debug_details, render_quote_workspace
 
@@ -104,6 +112,8 @@ def render_quote_control(texts: dict) -> None:
     st.title(page["title"])
     st.caption(page["internal_name"])
     st.write(page["description"])
+    render_price_master_summary(page)
+    render_price_master_management(page)
     st.divider()
 
     render_quote_workspace(
@@ -689,11 +699,11 @@ def _render_ihi_pricing_comparison(page: dict, case: dict) -> None:
             st.warning(page["exchange_rate_invalid"])
             return
         books = load_official_manufacturer_price_books()
-        spaceone_path = Path("/tmp/dt_price_investigation/SO_MASTER.xlsx")
-        if not books or not spaceone_path.exists():
+        active_spaceone = load_active_spaceone_master()
+        if not books or active_spaceone is None:
             st.warning(page["golden_validation_no_books"])
             return
-        spaceone = parse_spaceone_master(spaceone_path, source_name="SO_MASTER")
+        spaceone = active_spaceone[0]
         preview = build_sku_link_preview(spaceone.items, *books)
         policies = extract_pricing_policies(spaceone.items)
         sales = simulate_sales_price_candidates(
@@ -892,9 +902,9 @@ def _run_ihi_landed(page: dict, case: dict, configuration: str, rate_text: str):
     candidates = collect_manufacturer_candidates(*books) if books else []
     dealer_values = resolve_ihi_dealer_values(candidates)
     sales = st.session_state.get(SESSION_SALES_CANDIDATES) or []
-    spaceone_path = Path("/tmp/dt_price_investigation/SO_MASTER.xlsx")
-    if spaceone_path.exists() and books:
-        spaceone = parse_spaceone_master(spaceone_path, source_name="SO_MASTER")
+    active_spaceone = load_active_spaceone_master()
+    if active_spaceone is not None and books:
+        spaceone = active_spaceone[0]
         preview = build_sku_link_preview(spaceone.items, *books)
         policies = extract_pricing_policies(spaceone.items)
         sales = simulate_sales_price_candidates(
@@ -929,9 +939,7 @@ def _run_ihi_landed(page: dict, case: dict, configuration: str, rate_text: str):
     if sales:
         comparisons = compare_ihi_historical_prices(
             sales,
-            extract_pricing_policies(parse_spaceone_master(spaceone_path, source_name="SO_MASTER").items)
-            if spaceone_path.exists()
-            else [],
+            extract_pricing_policies(active_spaceone[0].items) if active_spaceone is not None else [],
             historical_lines=[
                 line for line in ihi_historical_comparison_lines(case) if line.get("quote") == configuration
             ],
@@ -1002,12 +1010,14 @@ def _shipping_lines_from_inputs(snapshot_key: str, parsed: dict, policy) -> list
 
 
 def _extracted_landed_policy():
+    # Cached per active QUOTE_CALC import so a newly activated master is picked up immediately.
+    active = get_active_master(PriceMasterType.QUOTE_CALC)
+    key = active.record.import_id if active else None
     cached = st.session_state.get("quote_calc_policy")
-    if "quote_calc_policy" in st.session_state:
-        return cached
-    path = locate_quote_calc_workbook()
-    policy = extract_quote_calc_audit(path).policy_candidate if path else None
-    st.session_state["quote_calc_policy"] = policy
+    if isinstance(cached, tuple) and cached[0] == key:
+        return cached[1]
+    policy = load_active_landed_policy() if active else None
+    st.session_state["quote_calc_policy"] = (key, policy)
     return policy
 
 
@@ -1208,10 +1218,12 @@ def _build_ihi_draft_from_ui(page: dict, case: dict, configuration: str):
     except ValueError:
         st.warning(page["workspace"].get("fx_invalid", page["exchange_rate_invalid"]))
         return None
-    books = load_official_manufacturer_price_books()
+    masters = active_price_books()
+    books = [item.book for item in masters]
     candidates = collect_manufacturer_candidates(*books) if books else []
     dealer_values = resolve_ihi_dealer_values(candidates)
-    sales = _sales_candidates_for_rate(rate) or []
+    simulated = _sales_candidates_for_rate(rate, books=books)
+    sales = simulated or []
     policy = _extracted_landed_policy()
     if policy is None or policy.import_tax_rate is None:
         policy = policy_from_inputs(
@@ -1238,16 +1250,26 @@ def _build_ihi_draft_from_ui(page: dict, case: dict, configuration: str):
         exchange_rate_source=new_quote_exchange_rate_source(st.session_state),
     )
     apply_historical_acceptance_preview(draft, quote)
+    used = [item.record for item in masters]
+    for master_type in (PriceMasterType.SO_MASTER, PriceMasterType.QUOTE_CALC):
+        active = get_active_master(master_type)
+        if active is not None:
+            used.append(active.record)
+    attach_price_master_provenance(draft, used)
+    if simulated is None:
+        mark_sales_master_missing(draft)
     return draft
 
 
-def _sales_candidates_for_rate(rate: float):
-    # Standard sales candidates for a quote are always simulated at that quote's exchange rate.
-    # Candidates stored by the scenario panel (SESSION_SALES_CANDIDATES) are never used for quotes.
-    items = st.session_state.get(SESSION_SPACEONE_ITEMS)
-    preview = st.session_state.get(SESSION_SKU_LINKS)
-    if not items or preview is None:
+def _sales_candidates_for_rate(rate: float, books=None):
+    # Standard sales candidates for a quote come only from the active SO_MASTER (and active DT40/PT30),
+    # simulated at the quote's own exchange rate. Scenario-panel session candidates are never used.
+    active_spaceone = load_active_spaceone_master()
+    if active_spaceone is None:
         return None
+    items = active_spaceone[0].items
+    manufacturer_books = load_official_manufacturer_price_books() if books is None else books
+    preview = build_sku_link_preview(items, *manufacturer_books)
     return simulate_sales_price_candidates(
         preview, extract_pricing_policies(items), build_exchange_rate_scenario(rate), items
     )

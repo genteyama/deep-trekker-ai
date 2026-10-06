@@ -34,9 +34,11 @@ APP_PATH = Path(__file__).resolve().parents[1] / "app.py"
 
 
 def _no_official_files(tmp_path, monkeypatch):
-    monkeypatch.setattr("agents.supplier_quote_validation.OFFICIAL_DT40_PATH", tmp_path / "missing-DT40.xlsx")
-    monkeypatch.setattr("agents.supplier_quote_validation.OFFICIAL_PT30_PATH", tmp_path / "missing-PT30.xlsx")
-    monkeypatch.setattr("parsers.quote_calc_parser.DEFAULT_QUOTE_CALC_PATHS", ())
+    # The per-test database starts with no active price masters, so no official file can be used.
+    from agents.price_master import get_active_master
+    from models import PriceMasterType
+
+    assert all(get_active_master(master_type) is None for master_type in PriceMasterType)
 
 
 def _open_quote_page() -> AppTest:
@@ -283,10 +285,13 @@ def _candidate(sku, price, rate):
 
 
 def _load_master_into(at: AppTest):
-    spaceone, _, _, preview = _load_policy_case()
-    at.session_state["spaceone_master_items"] = spaceone.items
-    at.session_state["sku_link_preview"] = preview
-    return spaceone, preview
+    # Standard sales candidates come only from the active SO_MASTER (+ DT40) in the price master registry.
+    from agents.price_master import import_price_master
+    from models import PriceMasterType
+    from tests.price_book_fixtures import pricing_policy_manufacturer_book, pricing_policy_master_book
+
+    import_price_master(PriceMasterType.SO_MASTER, "so.xlsx", pricing_policy_master_book().getvalue())
+    import_price_master(PriceMasterType.DT40, "dt40.xlsx", pricing_policy_manufacturer_book().getvalue())
 
 
 def _expected_candidate(rate, sku="9680-BASE"):
