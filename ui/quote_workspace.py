@@ -35,10 +35,7 @@ from ui.components.portal import (
 )
 from ui.components.lifecycle import apply_quote_lifecycle, render_lineage_card, render_quote_actions_menu
 from ui.components.quote_action_bar import render_quote_action_bar
-from ui.components.quote_cards import (
-    render_configuration_card,
-    render_price_adjustment,
-)
+from ui.components.quote_cards import render_configuration_card
 from ui.components.quote_header import render_quote_header
 from ui.components.quote_stepper import render_quote_stepper
 from ui.components.quote_summary import render_costing_summary, render_summary_cards
@@ -60,7 +57,24 @@ from ui.quote_persistence import (
     restore_pending_form_widgets,
     save_draft_now,
 )
+from ui.pricing_display import (
+    display_signed_percent,
+    display_signed_yen,
+    exchange_rate_reason_options,
+    market_reference_candidate,
+    optional_number,
+    parse_exchange_rate_form,
+    price_adjustment_reason_options,
+    price_comparison,
+    rate_change_notice,
+    reason_label,
+    standard_price_basis,
+    submit_exchange_rate,
+    submit_final_price,
+    validate_final_price_input,
+)
 from ui.quote_steps import (
+    FX_METADATA_KEYS,
     SESSION_FX_EDITOR,
     SESSION_NEW_QUOTE_FX,
     SESSION_QUOTE_STEP,
@@ -228,32 +242,122 @@ def _render_new_quote_exchange_rate(page: dict) -> None:
     st.caption(f"{workspace['fx_sources'][origin]} / {workspace['fx_default_hint'].format(default=default)}")
 
 
+SESSION_FX_FLASH = "quote_fx_flash"
+
+
 def _render_exchange_rate_editor(page: dict, helpers, draft) -> None:
     workspace = page["workspace"]
+    locked = draft.status in {QuoteDraftStatus.APPROVED, QuoteDraftStatus.SUPERSEDED}
+    if not locked:
+        sync_exchange_rate_editor(st.session_state, draft)
+    market_column, adopted_column = st.columns(2)
+    with market_column.container(border=True):
+        _render_market_reference(workspace, draft, locked)
+    with adopted_column.container(border=True):
+        _render_adopted_exchange_rate(page, helpers, draft, locked)
+
+
+def _render_market_reference(workspace: dict, draft, locked: bool) -> None:
+    # Market reference values are information only; the quote is always calculated with draft.exchange_rate.
+    st.markdown(f"**{workspace['fx_market_title']}**")
+    context = draft.pricing_context
+    if locked:
+        market, buffer = context.market_reference_rate, context.exchange_rate_buffer
+    else:
+        st.text_input(workspace["fx_market_rate_label"], key=FX_METADATA_KEYS["market_reference_rate"])
+        st.text_input(workspace["fx_buffer_label"], key=FX_METADATA_KEYS["exchange_rate_buffer"])
+        st.text_input(workspace["fx_market_date_label"], key=FX_METADATA_KEYS["market_reference_date"])
+        st.text_input(workspace["fx_market_source_label"], key=FX_METADATA_KEYS["market_reference_source"])
+        try:
+            market = optional_number(st.session_state.get(FX_METADATA_KEYS["market_reference_rate"]))
+            buffer = optional_number(st.session_state.get(FX_METADATA_KEYS["exchange_rate_buffer"]))
+        except ValueError:
+            market = buffer = None
+    empty = workspace.get("unset_label", "未設定")
+    rate_text = workspace.get("fx_value", "{rate}")
+    rows = [
+        (workspace["fx_market_row"], rate_text.format(rate=display_number(market, empty)) if market is not None else empty),
+        (workspace["fx_buffer_row"], f"{buffer:+,.2f}" if buffer is not None else empty),
+        (
+            workspace["fx_candidate_row"],
+            rate_text.format(rate=display_number(market_reference_candidate(market, buffer), empty))
+            if market is not None
+            else empty,
+        ),
+    ]
+    st.markdown("  \n".join(f"{label}：{value}" for label, value in rows))
+
+
+def _render_adopted_exchange_rate(page: dict, helpers, draft, locked: bool) -> None:
+    workspace = page["workspace"]
+    reasons = workspace.get("fx_reasons", {})
     value, origin = exchange_rate_summary(workspace, draft)
-    st.markdown(f"**{workspace['fx_label']}：{value}**（{origin}）")
-    if draft.status in {QuoteDraftStatus.APPROVED, QuoteDraftStatus.SUPERSEDED}:
+    st.markdown(f"**{workspace['fx_adopted_title']}**")
+    st.markdown(f"### {value}")
+    reason = reason_label(reasons, draft.pricing_context.exchange_rate_reason_code)
+    st.caption(f"{origin}" + (f" ／ {workspace['fx_reason_label']}：{reason}" if reason else ""))
+    if st.session_state.get(SESSION_FX_FLASH) == "metadata":
+        st.session_state.pop(SESSION_FX_FLASH)
+        st.success(workspace["fx_metadata_saved"])
+    if locked:
         st.caption(workspace["fx_locked"])
         return
-    sync_exchange_rate_editor(st.session_state, draft)
-    text = st.text_input(workspace["fx_input_label"], key=SESSION_FX_EDITOR)
+    st.text_input(workspace["fx_input_label"], key=SESSION_FX_EDITOR)
+    st.selectbox(
+        workspace["fx_reason_label"],
+        options=[""] + exchange_rate_reason_options(),
+        format_func=lambda code: reasons.get(code, code) if code else workspace["fx_reason_none"],
+        key=FX_METADATA_KEYS["exchange_rate_reason_code"],
+    )
+    st.text_input(workspace["fx_note_label"], key=FX_METADATA_KEYS["exchange_rate_reason_note"])
+    st.text_input(workspace["fx_set_by_label"], key=FX_METADATA_KEYS["exchange_rate_set_by"])
     st.caption(workspace["fx_apply_hint"])
-    if st.button(workspace["fx_apply_button"], key="apply_quote_exchange_rate"):
-        try:
-            rate = parse_exchange_rate(text)
-        except ValueError:
-            st.warning(workspace["fx_invalid"])
-            return
-        recalculate = helpers.get("sales_candidates_for_rate")
-        try:
-            apply_exchange_rate(draft, rate, sales_candidates=recalculate(rate) if recalculate else None)
-        except ValueError:
-            st.error(workspace["fx_reprice_failed"])
-            return
-        st.session_state["quote_draft"] = draft
-        st.session_state["quote_approval_validation"] = None
-        _save_draft(page, draft, manual=True, from_widgets=False)
-        st.rerun()
+    if not st.button(workspace["fx_apply_button"], key="apply_quote_exchange_rate"):
+        return
+    session = st.session_state
+    try:
+        parsed = parse_exchange_rate_form(
+            {
+                "rate": session.get(SESSION_FX_EDITOR),
+                "reason_code": session.get(FX_METADATA_KEYS["exchange_rate_reason_code"]),
+                "reason_note": session.get(FX_METADATA_KEYS["exchange_rate_reason_note"]),
+                "set_by": session.get(FX_METADATA_KEYS["exchange_rate_set_by"]),
+                "market_rate": session.get(FX_METADATA_KEYS["market_reference_rate"]),
+                "market_date": session.get(FX_METADATA_KEYS["market_reference_date"]),
+                "market_source": session.get(FX_METADATA_KEYS["market_reference_source"]),
+                "buffer": session.get(FX_METADATA_KEYS["exchange_rate_buffer"]),
+            }
+        )
+    except ValueError as error:
+        st.warning(workspace[str(error)])
+        return
+    try:
+        changed = submit_exchange_rate(draft, parsed, recalculate=helpers.get("sales_candidates_for_rate"))
+    except ValueError:
+        st.error(workspace["fx_reprice_failed"])
+        return
+    session["quote_draft"] = draft
+    session["quote_approval_validation"] = None
+    session[SESSION_FX_FLASH] = "rate" if changed else "metadata"
+    _save_draft(page, draft, manual=True, from_widgets=False)
+    st.rerun()
+
+
+def _render_rate_change_notice(page: dict, draft) -> None:
+    # One notice for the whole step, instead of repeating the same line warning on every card.
+    workspace = page["workspace"]
+    notice = rate_change_notice(draft)
+    changed = st.session_state.get(SESSION_FX_FLASH) == "rate"
+    if changed:
+        st.session_state.pop(SESSION_FX_FLASH)
+    if not (changed or notice["kept"] or notice["diverged"]):
+        return
+    lines = [workspace["fx_rate_changed_notice"]]
+    if notice["kept"]:
+        lines.append(workspace["fx_final_kept_lines"].format(items="、".join(notice["kept"])))
+    if notice["diverged"]:
+        lines.append(workspace["fx_diverged_lines"].format(items="、".join(notice["diverged"])))
+    st.info("  \n".join(lines))
 
 
 def _create_draft(page: dict, helpers, case: dict, configuration: str) -> None:
@@ -323,6 +427,7 @@ def _render_2601_choice(page: dict, draft) -> None:
 def _render_step_costing(page: dict, helpers, draft) -> None:
     st.subheader(page["workspace"]["step_costing"])
     render_warning_panel(page, draft)
+    _render_rate_change_notice(page, draft)
     _render_exchange_rate_editor(page, helpers, draft)
     _render_pending_price_key_reviews(page)
     render_costing_summary(page, draft)
@@ -333,37 +438,16 @@ def _render_step_costing(page: dict, helpers, draft) -> None:
             {
                 page["column_sku"]: line.manufacturer_sku or empty,
                 page["column_name_ja"]: line.manufacturer_description or empty,
-                workspace.get("price_source_label", "価格ソース"): price_source_display(workspace, line)[0],
-                workspace.get("price_state_label", "価格状態"): price_source_display(workspace, line)[1],
                 page["column_landed"]: reference_value(display_yen(line.landed_cost_jpy, empty), line, workspace),
-                page["column_sales_candidate"]: display_yen(line.standard_sales_price_candidate_jpy, empty),
-                page["column_final_price"]: display_yen(line.final_sales_price_jpy, empty),
+                workspace["price_standard_label"]: _standard_price_text(workspace, line, empty),
+                workspace["column_standard_basis"]: standard_price_basis(workspace, line)["text"],
+                workspace["price_final_label"]: display_yen(line.final_sales_price_jpy, empty),
             }
             for line in draft.configuration_lines
         ]
     )
     for line in separate_product_lines(draft):
-        render_price_adjustment(page, line)
-        if st.button(page["use_standard_button"], key=f"use_standard_{line.line_id}"):
-            apply_final_price(draft, line.line_id, FinalPriceStatus.USE_STANDARD_CANDIDATE)
-            clear_pending_final_price(st.session_state, line)
-            st.session_state["quote_draft"] = draft
-            st.rerun()
-        entered = st.text_input(page["manual_price_label"], key=f"manual_price_{line.line_id}")
-        if st.button(page["apply_manual_price_button"], key=f"apply_manual_{line.line_id}"):
-            try:
-                apply_final_price(
-                    draft,
-                    line.line_id,
-                    FinalPriceStatus.MANUAL_OVERRIDE,
-                    amount_jpy=float(entered),
-                    reason="UI manual override",
-                )
-                clear_pending_final_price(st.session_state, line)
-                st.session_state["quote_draft"] = draft
-                st.rerun()
-            except (TypeError, ValueError):
-                st.warning(page["exchange_rate_invalid"])
+        _render_final_price_editor(page, draft, line)
     st.markdown(f"**{page['workspace']['shipping_section']}**")
     shipping_rows = shipping_customer_lines(draft)
     if shipping_rows:
@@ -392,6 +476,15 @@ def _render_step_costing(page: dict, helpers, draft) -> None:
                 {
                     page["column_sku"]: line.manufacturer_sku or empty,
                     workspace.get("price_source_label", "価格ソース"): price_source_display(workspace, line)[0],
+                    workspace.get("price_state_label", "価格状態"): price_source_display(workspace, line)[1],
+                    workspace["column_msrp_usd"]: reference_value(
+                        display_number(
+                            line.manufacturer_price_snapshot.manufacturer_msrp_usd if line.manufacturer_price_snapshot else None,
+                            empty,
+                        ),
+                        line,
+                        workspace,
+                    ),
                     page["column_dealer_usd"]: reference_value(display_number(line.dealer_price_usd, empty), line, workspace),
                     page["column_dealer_jpy"]: reference_value(display_yen(line.dealer_cost_jpy, empty), line, workspace),
                     page["column_landed"]: reference_value(display_yen(line.landed_cost_jpy, empty), line, workspace),
@@ -399,6 +492,72 @@ def _render_step_costing(page: dict, helpers, draft) -> None:
                 for line in draft.configuration_lines
             ]
         )
+
+
+def _standard_price_text(workspace: dict, line, empty: str) -> str:
+    if line.standard_sales_price_candidate_jpy is None:
+        return workspace["standard_basis"]["review"]
+    return display_yen(line.standard_sales_price_candidate_jpy, empty)
+
+
+def _render_final_price_editor(page: dict, draft, line) -> None:
+    workspace = page["workspace"]
+    empty = workspace.get("unset_label", "未設定")
+    reasons = workspace.get("adjustment_reasons", {})
+    basis = standard_price_basis(workspace, line)
+    with st.container(border=True):
+        st.markdown(f"**{line.customer_display_name or line.manufacturer_description or line.manufacturer_sku or empty}**")
+        if basis["status"] == "REVIEW":
+            st.warning(f"{workspace['standard_review_label']} — {basis['reason']}")
+            st.caption(workspace["standard_unset_note"])
+        else:
+            st.write(
+                f"{workspace['price_standard_label']}：{display_yen(line.standard_sales_price_candidate_jpy, empty)}"
+                f"（{basis['text']}）"
+            )
+        _render_price_comparison_text(workspace, line, empty)
+        if line.standard_sales_price_candidate_jpy is not None and st.button(
+            page["use_standard_button"], key=f"use_standard_{line.line_id}"
+        ):
+            apply_final_price(draft, line.line_id, FinalPriceStatus.USE_STANDARD_CANDIDATE)
+            clear_pending_final_price(st.session_state, line)
+            st.session_state["quote_draft"] = draft
+            st.rerun()
+        entered = st.text_input(workspace["final_price_input_label"], key=f"manual_price_{line.line_id}")
+        reason_key = f"adjust_reason_{line.line_id}"
+        note_key = f"adjust_note_{line.line_id}"
+        st.selectbox(
+            workspace["adjustment_reason_label"],
+            options=[""] + price_adjustment_reason_options(),
+            format_func=lambda code: reasons.get(code, code) if code else workspace["adjustment_reason_none"],
+            key=reason_key,
+        )
+        st.text_input(workspace["adjustment_note_label"], key=note_key)
+        if not st.button(page["apply_manual_price_button"], key=f"apply_manual_{line.line_id}"):
+            return
+        values = validate_final_price_input(
+            line, entered, st.session_state.get(reason_key), st.session_state.get(note_key)
+        )
+        if values["error"]:
+            st.warning(workspace["adjustment_errors"][values["error"]])
+            return
+        if not submit_final_price(draft, line, values, reason_labels=reasons):
+            st.info(workspace["adjustment_unchanged"])
+            return
+        clear_pending_final_price(st.session_state, line)
+        st.session_state["quote_draft"] = draft
+        st.rerun()
+
+
+def _render_price_comparison_text(workspace: dict, line, empty: str) -> None:
+    comparison = price_comparison(line)
+    if comparison["final"] is None:
+        return
+    parts = [f"{workspace['price_final_label']}：{display_yen(comparison['final'], empty)}"]
+    if comparison["difference"] is not None:
+        parts.append(f"{workspace['price_difference_label']}：{display_signed_yen(comparison['difference'], empty)}")
+        parts.append(f"{workspace['price_rate_label']}：{display_signed_percent(comparison['rate'], empty)}")
+    st.write(" ／ ".join(parts))
 
 
 def _render_step_customer(page: dict, draft) -> None:
@@ -442,6 +601,7 @@ def _render_step_customer(page: dict, draft) -> None:
         ],
         unset_label=empty,
     )
+    _render_customer_price_decisions(page, draft)
     tax_text = st.text_input(page["tax_rate_label"], key="input_draft_tax_rate")
     if tax_text and st.button(page["apply_manual_price_button"], key="apply_draft_tax"):
         try:
@@ -451,6 +611,37 @@ def _render_step_customer(page: dict, draft) -> None:
             st.rerun()
         except (TypeError, ValueError):
             st.warning(page["exchange_rate_invalid"])
+
+
+def _render_customer_price_decisions(page: dict, draft) -> None:
+    workspace = page["workspace"]
+    empty = workspace.get("unset_label", "未設定")
+    st.markdown(f"**{workspace['customer_price_title']}**")
+    rows = []
+    for line in separate_product_lines(draft):
+        comparison = price_comparison(line)
+        rows.append(
+            {
+                page["column_item"]: line.customer_display_name or line.manufacturer_description or empty,
+                workspace["price_standard_label"]: _standard_price_text(workspace, line, empty),
+                workspace["price_final_label"]: display_yen(comparison["final"], empty),
+                workspace["price_difference_label"]: display_signed_yen(comparison["difference"], "—"),
+                workspace["price_rate_label"]: display_signed_percent(comparison["rate"], "—"),
+            }
+        )
+    if rows:
+        st.table(rows)
+    # Official draft economics (landed cost basis). Not the reference margin that excludes import costs.
+    economics = draft.economics_result
+    st.markdown(f"**{workspace['margin_title']}**")
+    render_summary_cards(
+        [
+            (workspace["metric_total_cost"], display_yen(getattr(economics, "total_landed_cost_jpy", None), None)),
+            (workspace["metric_profit"], display_yen(getattr(economics, "gross_profit_jpy", None), None)),
+            (workspace["metric_margin"], display_percent(getattr(economics, "gross_margin_rate", None), None)),
+        ],
+        unset_label=empty,
+    )
 
 
 def _render_step_review(page: dict, helpers, draft, snapshot) -> None:

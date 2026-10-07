@@ -16,6 +16,16 @@ SESSION_NEW_QUOTE_FX = "quote_new_exchange_rate"
 SESSION_NEW_QUOTE_FX_CHANGED = "quote_new_exchange_rate_changed"
 SESSION_FX_EDITOR = "quote_fx_editor"
 SESSION_FX_EDITOR_TOKEN = "quote_fx_editor_token"
+# Exchange rate decision metadata inputs, keyed by pricing_context field.
+FX_METADATA_KEYS = {
+    "market_reference_rate": "quote_fx_market_rate",
+    "market_reference_date": "quote_fx_market_date",
+    "market_reference_source": "quote_fx_market_source",
+    "exchange_rate_buffer": "quote_fx_buffer",
+    "exchange_rate_reason_code": "quote_fx_reason",
+    "exchange_rate_reason_note": "quote_fx_reason_note",
+    "exchange_rate_set_by": "quote_fx_set_by",
+}
 REVIEW_WIDGET_KEYS = (
     "confirm_configuration",
     "confirm_presentation",
@@ -144,6 +154,15 @@ def sync_exchange_rate_editor(session, draft) -> None:
     token = f"{draft.quote_draft_id}:{draft.quote_version}:{draft.exchange_rate}"
     if session.get(SESSION_FX_EDITOR_TOKEN) != token:
         session[SESSION_FX_EDITOR] = display_number(draft.exchange_rate, "")
+        context = draft.pricing_context
+        for field, key in FX_METADATA_KEYS.items():
+            value = getattr(context, field, None)
+            if field == "exchange_rate_reason_code":
+                session[key] = getattr(value, "value", value) or ""
+            elif isinstance(value, (int, float)):
+                session[key] = display_number(value, "")
+            else:
+                session[key] = value or ""
         session[SESSION_FX_EDITOR_TOKEN] = token
 
 

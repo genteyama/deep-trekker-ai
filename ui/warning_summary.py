@@ -8,6 +8,9 @@ WARNING_RULES = (
     ("Official manufacturer price book is not set", "price_source"),
     ("SpaceOne price master (SO_MASTER) is not set", "sales_master"),
     ("Standard sales price candidate does not match the quote exchange rate", "stale_candidate"),
+    ("Standard sales price candidate was not applied", "standard_review"),
+    ("Final sales price was kept after the quote exchange rate changed", "fx_final_kept"),
+    ("Standard sales price candidate changed but the final sales price keeps the previous value", "fx_diverged"),
     ("Final sales price is not set", "final_price"),
     ("Shipping customer price is not set", "shipping"),
     ("Customer tax rate is not set", "tax"),
@@ -47,6 +50,9 @@ def summarize_draft_warnings(draft) -> dict:
         lines.append(("price_source", counts["price_source"]))
     if counts["stale_candidate"]:
         lines.append(("stale_candidate", counts["stale_candidate"]))
+    for kind in ("fx_final_kept", "fx_diverged", "standard_review"):
+        if counts[kind]:
+            lines.append((kind, counts[kind]))
     if counts["sales_master"]:
         lines.append(("sales_master", counts["sales_master"]))
     if counts["final_price"]:
