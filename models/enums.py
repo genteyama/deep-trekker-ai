@@ -245,6 +245,13 @@ class PricingFormulaType(str, Enum):
     MANUAL = "MANUAL"
 
 
+class PricingPolicyType(str, Enum):
+    # Pricing Policy v1. Anything that cannot be calculated safely is MANUAL_REVIEW, never an approximation.
+    MSRP_MULTIPLIER = "MSRP_MULTIPLIER"
+    FIXED_JPY = "FIXED_JPY"
+    MANUAL_REVIEW = "MANUAL_REVIEW"
+
+
 class RoundingMethod(str, Enum):
     NONE = "NONE"
     ROUND = "ROUND"

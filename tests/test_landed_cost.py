@@ -22,6 +22,7 @@ from models import (
     InsuranceMode,
     QuoteAdjustment,
     QuoteAdjustmentType,
+    PricingPolicyType,
     SalesPriceCandidate,
     ScenarioCompleteness,
     ShippingType,
@@ -58,14 +59,25 @@ def _policy(**overrides):
     return policy_from_inputs(**values)
 
 
+# Official MSRP of each IHI fixture SKU, as recorded in the quote manufacturer snapshot.
+FIXTURE_MSRP = {**{sku: item["msrp_usd"] for sku, item in IHI_DEALER.items()}, "2604": 1707, "2601": 945}
+
+
 def _sales(sku: str, price: float, exchange_rate: float = 170.0) -> SalesPriceCandidate:
     # Simulated candidates always record their rate; IHI Golden scenarios are calculated at 170.
+    # Like a Pricing Policy v1 MSRP_MULTIPLIER candidate, it carries the MSRP and multiplier behind price.
+    msrp = FIXTURE_MSRP.get(sku)
+    # Some tests pass an invalid rate on purpose; the multiplier is then left unknown.
+    valid = msrp is not None and isinstance(exchange_rate, (int, float)) and exchange_rate > 0
     return SalesPriceCandidate(
         sales_price_candidate_id=f"spc-{sku}",
         spaceone_item_id=f"so-{sku}",
         manufacturer_sku=sku,
+        manufacturer_msrp_usd=msrp,
         raw_sales_price_jpy=price,
         exchange_rate=exchange_rate,
+        pricing_policy_type=PricingPolicyType.MSRP_MULTIPLIER,
+        multiplier=price / (msrp * exchange_rate) if valid else None,
     )
 
 

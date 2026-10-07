@@ -5,8 +5,8 @@ import json
 import math
 
 from agents.quote_dates import default_issue_date, default_valid_until, to_iso_date
-from agents.landed_cost import reprice_product_cost_line, reprice_shipping_line
-from agents.pricing_policy import parse_exchange_rate
+from agents.landed_cost import _round_money, reprice_product_cost_line, reprice_shipping_line
+from agents.pricing_policy import parse_exchange_rate, standard_sales_price_jpy
 from agents.sku_link import price_source_type_of
 from models import (
     CustomerPresentationMode,
@@ -17,6 +17,7 @@ from models import (
     LandedCostScenario,
     PriceAdjustmentReason,
     PriceSourceType,
+    PricingPolicyType,
     QuoteAdjustment,
     QuoteAdjustmentType,
     QuoteConfigurationLine,
@@ -65,7 +66,7 @@ def build_quote_draft(
     captured = created_at or datetime.now(timezone.utc)
     usable = [item for item in sales_candidates if _candidate_matches_rate(item, landed_scenario.exchange_rate)]
     rejected = {item.manufacturer_sku: item.exchange_rate for item in sales_candidates if item not in usable}
-    sales_by_sku = _sales_by_sku(usable, configuration_name)
+    sales_by_sku, ambiguous = _sales_by_sku(usable, configuration_name)
     presentations = {item["sku"]: item for item in presentation.get("product_presentations") or []}
     configuration_lines = []
     snapshots = []
@@ -78,6 +79,8 @@ def build_quote_draft(
             line_warnings.append(
                 _stale_candidate_warning(product.sku, rejected[product.sku], landed_scenario.exchange_rate)
             )
+        if product.sku in ambiguous:
+            line_warnings.append(ambiguous[product.sku])
         if sales and sales.pricing_policy_candidate_id:
             policy_ids.append(sales.pricing_policy_candidate_id)
         snapshot = product.manufacturer_price_snapshot
@@ -107,14 +110,16 @@ def build_quote_draft(
                 import_tax_jpy=product.import_tax_jpy,
                 insurance_jpy=product.insurance_jpy,
                 domestic_shipping_jpy=product.domestic_shipping_jpy,
-                standard_sales_price_candidate_jpy=sales.raw_sales_price_jpy if sales else None,
-                standard_sales_price_candidate_id=sales.sales_price_candidate_id if sales else None,
                 final_sales_price_jpy=None,
                 final_price_status=FinalPriceStatus.NOT_SET,
                 customer_presentation_status=presentation_mode,
                 warnings=line_warnings,
             )
         )
+    for line, product in zip(configuration_lines, landed_scenario.product_lines):
+        sales = sales_by_sku.get(product.sku or "")
+        if sales is not None:
+            _apply_standard_candidate(line, sales, landed_scenario.exchange_rate)
     draft = QuoteDraft(
         quote_draft_id=quote_draft_id,
         case_id=case_id,
@@ -233,7 +238,7 @@ def apply_exchange_rate(
     if policy is None:
         raise ValueError("Landed cost policy is missing. The exchange rate cannot be re-applied.")
     previous_rate = draft.exchange_rate
-    fresh = _sales_by_sku(
+    fresh, ambiguous = _sales_by_sku(
         [item for item in sales_candidates or [] if _candidate_matches_rate(item, rate)],
         draft.configuration_name or "",
     )
@@ -262,15 +267,23 @@ def apply_exchange_rate(
         line.insurance_jpy = product.insurance_jpy
         line.landed_cost_jpy = product.landed_cost_jpy
         line.warnings = _without_rate_change_warnings(
-            line.warnings, STALE_CANDIDATE_MARKER, FINAL_PRICE_KEPT_MARKER, STANDARD_DIVERGED_MARKER
+            line.warnings,
+            STALE_CANDIDATE_MARKER,
+            FINAL_PRICE_KEPT_MARKER,
+            STANDARD_DIVERGED_MARKER,
+            CANDIDATE_NOT_APPLIED_MARKER,
         )
         candidate = fresh.get(line.manufacturer_sku or "")
-        if candidate is not None:
-            line.standard_sales_price_candidate_jpy = candidate.raw_sales_price_jpy
-            line.standard_sales_price_candidate_id = candidate.sales_price_candidate_id
+        if line.pricing_policy_type == PricingPolicyType.FIXED_JPY:
+            # A fixed JPY standard price does not depend on the exchange rate.
+            pass
+        elif candidate is not None:
+            _apply_standard_candidate(line, candidate, rate)
+        elif (line.manufacturer_sku or "") in ambiguous:
+            _clear_standard_candidate(line)
+            line.warnings.append(ambiguous[line.manufacturer_sku])
         elif line.standard_sales_price_candidate_jpy is not None or line.standard_sales_price_candidate_id:
-            line.standard_sales_price_candidate_jpy = None
-            line.standard_sales_price_candidate_id = None
+            _clear_standard_candidate(line)
             line.warnings.append(_stale_candidate_warning(line.manufacturer_sku, previous_rate, rate))
         line.warnings.extend(_final_price_kept_warnings(line, previous_rate, rate))
     draft.shipping_lines = [
@@ -754,6 +767,7 @@ def customer_line_landed_cost(draft: QuoteDraft, customer_line: CustomerQuoteLin
 STALE_CANDIDATE_MARKER = "Standard sales price candidate does not match the quote exchange rate"
 FINAL_PRICE_KEPT_MARKER = "Final sales price was kept after the quote exchange rate changed"
 STANDARD_DIVERGED_MARKER = "Standard sales price candidate changed but the final sales price keeps the previous value"
+CANDIDATE_NOT_APPLIED_MARKER = "Standard sales price candidate was not applied"
 
 
 def _candidate_matches_rate(candidate: SalesPriceCandidate, rate: Optional[float]) -> bool:
@@ -812,16 +826,96 @@ def _stale_candidate_warning(sku: Optional[str], candidate_rate: Optional[float]
     )
 
 
-def _sales_by_sku(candidates: Sequence[SalesPriceCandidate], configuration: str) -> dict[str, SalesPriceCandidate]:
-    matches = {}
+def _sales_by_sku(
+    candidates: Sequence[SalesPriceCandidate], configuration: str
+) -> tuple[dict[str, SalesPriceCandidate], dict[str, str]]:
+    """Select one candidate per SKU, or none. Returns (selected, review warnings by SKU).
+
+    A policy is never chosen by SKU alone when several exist: exactly one candidate whose master sheet
+    equals the configuration is required. Otherwise nothing is chosen (no first/last fallback).
+    """
+    by_sku: dict[str, list[SalesPriceCandidate]] = {}
     for candidate in candidates:
-        sku = candidate.manufacturer_sku
-        if not sku:
+        if candidate.manufacturer_sku:
+            by_sku.setdefault(candidate.manufacturer_sku, []).append(candidate)
+    selected = {}
+    ambiguous = {}
+    for sku, items in by_sku.items():
+        if len(items) == 1:
+            selected[sku] = items[0]
             continue
-        current = matches.get(sku)
-        if current is None or (candidate.source_reference or "").upper() == configuration.upper():
-            matches[sku] = candidate
-    return matches
+        matched = [item for item in items if (item.source_reference or "").upper() == (configuration or "").upper()]
+        if len(matched) == 1:
+            selected[sku] = matched[0]
+            continue
+        sources = ", ".join(f"{item.source_reference}:{item.source_row}" for item in items)
+        reason = (
+            f"several candidates on sheet {configuration}" if matched else f"no candidate on sheet {configuration}"
+        )
+        ambiguous[sku] = f"{sku}: {CANDIDATE_NOT_APPLIED_MARKER}: policy identity is ambiguous ({reason}; {sources})."
+    return selected, ambiguous
+
+
+def _apply_standard_candidate(
+    line: QuoteConfigurationLine, candidate: SalesPriceCandidate, rate: Optional[float]
+) -> None:
+    """Set the standard candidate from Pricing Policy v1, or leave it empty with a review warning."""
+    _clear_standard_candidate(line)
+    policy_type = candidate.pricing_policy_type
+    line.pricing_policy_type = policy_type
+    line.pricing_policy_candidate_id = candidate.pricing_policy_candidate_id
+    line.pricing_source_formula = candidate.source_formula
+    line.pricing_source_sheet = candidate.source_reference
+    line.pricing_source_row = candidate.source_row
+    line.standard_sales_price_candidate_id = candidate.sales_price_candidate_id
+    sku = line.manufacturer_sku or line.line_id
+    if policy_type == PricingPolicyType.FIXED_JPY:
+        line.pricing_fixed_price_jpy = candidate.fixed_price_jpy
+    elif policy_type == PricingPolicyType.MSRP_MULTIPLIER:
+        line.pricing_multiplier = candidate.multiplier
+        snapshot_msrp = line.manufacturer_price_snapshot.manufacturer_msrp_usd if line.manufacturer_price_snapshot else None
+        if (
+            snapshot_msrp is None
+            or candidate.manufacturer_msrp_usd is None
+            or _round_money(snapshot_msrp) != _round_money(candidate.manufacturer_msrp_usd)
+        ):
+            line.standard_sales_price_candidate_id = None
+            line.warnings.append(
+                f"{sku}: {CANDIDATE_NOT_APPLIED_MARKER}: candidate MSRP {candidate.manufacturer_msrp_usd} USD "
+                f"does not match the quote manufacturer snapshot MSRP {snapshot_msrp} USD."
+            )
+            return
+    else:
+        line.standard_sales_price_candidate_id = None
+        line.warnings.append(
+            f"{sku}: {CANDIDATE_NOT_APPLIED_MARKER}: pricing policy is "
+            f"{policy_type.value if policy_type else 'not classified'} and needs manual review."
+        )
+        return
+    standard = standard_sales_price_jpy(
+        policy_type,
+        msrp_usd=line.manufacturer_price_snapshot.manufacturer_msrp_usd if line.manufacturer_price_snapshot else None,
+        exchange_rate=rate,
+        multiplier=line.pricing_multiplier,
+        fixed_price_jpy=line.pricing_fixed_price_jpy,
+    )
+    if standard is None:
+        line.standard_sales_price_candidate_id = None
+        line.warnings.append(f"{sku}: {CANDIDATE_NOT_APPLIED_MARKER}: standard sales price could not be calculated.")
+        return
+    line.standard_sales_price_candidate_jpy = standard
+
+
+def _clear_standard_candidate(line: QuoteConfigurationLine) -> None:
+    line.standard_sales_price_candidate_jpy = None
+    line.standard_sales_price_candidate_id = None
+    line.pricing_policy_type = None
+    line.pricing_policy_candidate_id = None
+    line.pricing_multiplier = None
+    line.pricing_fixed_price_jpy = None
+    line.pricing_source_formula = None
+    line.pricing_source_sheet = None
+    line.pricing_source_row = None
 
 
 def _config_line(draft: QuoteDraft, line_id: str) -> QuoteConfigurationLine:

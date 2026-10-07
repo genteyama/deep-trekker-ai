@@ -37,6 +37,7 @@ from models.enums import (
     PriceBasis,
     PriceBookDiffType,
     PricingFormulaType,
+    PricingPolicyType,
     PricingPolicyStatus,
     PricingScopeType,
     QuestionStatus,
@@ -592,6 +593,8 @@ class SpaceOnePricingPolicyCandidate(BaseModel):
     status: PricingPolicyStatus = PricingPolicyStatus.CANDIDATE
     confidence: Optional[str] = None
     notes: Optional[str] = None
+    policy_type: PricingPolicyType = PricingPolicyType.MANUAL_REVIEW
+    review_reason: Optional[str] = None
 
 
 class ExchangeRateScenario(BaseModel):
@@ -641,6 +644,11 @@ class SalesPriceCandidate(BaseModel):
     warnings: list[str] = Field(default_factory=list)
     source_reference: Optional[str] = None
     skipped_reason: Optional[str] = None
+    # Pricing Policy v1 provenance. source_reference holds the SpaceOne master sheet.
+    pricing_policy_type: Optional[PricingPolicyType] = None
+    multiplier: Optional[float] = None
+    fixed_price_jpy: Optional[float] = None
+    source_row: Optional[int] = None
 
 
 class HistoricalPriceComparison(BaseModel):
@@ -1101,6 +1109,15 @@ class QuoteConfigurationLine(BaseModel):
     domestic_shipping_jpy: Optional[float] = None
     standard_sales_price_candidate_jpy: Optional[float] = None
     standard_sales_price_candidate_id: Optional[str] = None
+    # Pricing Policy v1 provenance of the standard candidate. SpaceOne master import / SHA is recorded in
+    # the draft source_references. All optional so drafts saved before Step B still load.
+    pricing_policy_type: Optional[PricingPolicyType] = None
+    pricing_policy_candidate_id: Optional[str] = None
+    pricing_multiplier: Optional[float] = None
+    pricing_fixed_price_jpy: Optional[float] = None
+    pricing_source_formula: Optional[str] = None
+    pricing_source_sheet: Optional[str] = None
+    pricing_source_row: Optional[int] = None
     final_sales_price_jpy: Optional[float] = None
     final_price_status: FinalPriceStatus = FinalPriceStatus.NOT_SET
     customer_presentation_status: CustomerPresentationMode = CustomerPresentationMode.UNDECIDED

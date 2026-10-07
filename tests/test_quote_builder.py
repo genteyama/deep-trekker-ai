@@ -6,7 +6,9 @@ from agents.landed_cost import (
     policy_from_inputs,
 )
 from agents.quote_builder import (
+    CANDIDATE_NOT_APPLIED_MARKER,
     HISTORICAL_PRICING_SOURCE,
+    apply_exchange_rate,
     apply_final_price,
     apply_historical_acceptance_preview,
     apply_minimum_margin_reference,
@@ -18,6 +20,7 @@ from agents.quote_builder import (
     customer_preview_rows,
     internal_configuration_rows,
 )
+from agents.pricing_policy import standard_sales_price_jpy
 from agents.quote_control_agent import import_price_book
 from data.golden_cases.loader import load_quote_golden_case
 from models import (
@@ -25,13 +28,15 @@ from models import (
     DomesticShippingMode,
     FinalPriceStatus,
     InsuranceMode,
+    PricingPolicyType,
+    QuoteDraft,
     QuoteDraftStatus,
     RequirementType,
     SalesPriceCandidate,
     ScenarioCompleteness,
 )
 from tests.price_book_fixtures import official_ihi_sku_snapshot_book
-from tests.test_landed_cost import IHI_DEALER, _policy, _sales
+from tests.test_landed_cost import FIXTURE_MSRP, IHI_DEALER, _policy, _sales
 
 
 def _sales_list(*skus_and_prices):
@@ -263,3 +268,166 @@ def test_ihi_photon_and_mag_drafts_follow_golden_rules():
     snapshot.manufacturer_dealer_price_usd = 1
     assert photon.configuration_lines[0].manufacturer_price_snapshot.manufacturer_dealer_price_usd == original
     assert original != 1
+
+
+def _v1(sku, multiplier=None, *, rate=170.0, sheet="MAG", row=13, msrp=None, fixed=None):
+    # A simulated Pricing Policy v1 candidate: MSRP_MULTIPLIER unless a fixed JPY price is given.
+    policy_type = PricingPolicyType.FIXED_JPY if fixed is not None else PricingPolicyType.MSRP_MULTIPLIER
+    msrp = FIXTURE_MSRP[sku] if msrp is None else msrp
+    return SalesPriceCandidate(
+        sales_price_candidate_id=f"spc-{sheet}-{row}",
+        spaceone_item_id=f"so-{sheet}-{row}",
+        pricing_policy_candidate_id=f"ppc-{sheet}-{row}",
+        manufacturer_sku=sku,
+        manufacturer_msrp_usd=msrp,
+        exchange_rate=rate,
+        raw_sales_price_jpy=standard_sales_price_jpy(
+            policy_type, msrp_usd=msrp, exchange_rate=rate, multiplier=multiplier, fixed_price_jpy=fixed
+        ),
+        pricing_policy_type=policy_type,
+        multiplier=multiplier if fixed is None else None,
+        fixed_price_jpy=fixed,
+        source_formula=str(fixed) if fixed is not None else f"=E{row}*{multiplier}",
+        source_reference=sheet,
+        source_row=row,
+    )
+
+
+def _mag_v1(rate=170.0, *extra):
+    return [
+        _v1("9701-MAG-4K", 1.1, rate=rate, row=13),
+        _v1("9735", 1.1, rate=rate, row=19),
+        _v1("5608", 1.25, rate=rate, row=21),
+        _v1("2604", rate=rate, row=23, fixed=360000),
+        *extra,
+    ]
+
+
+def _v1_mag_draft(sales):
+    scenario, _ = _landed("MAG", sales)
+    return build_ihi_quote_draft("MAG", scenario, sales)
+
+
+def _line(draft, sku):
+    return next(line for line in draft.configuration_lines if line.manufacturer_sku == sku)
+
+
+def test_v1_msrp_multiplier_line_uses_snapshot_msrp_quote_rate_and_keeps_provenance():
+    draft = _v1_mag_draft(_mag_v1())
+    mag = _line(draft, "9701-MAG-4K")
+
+    assert mag.standard_sales_price_candidate_jpy == 6626719
+    assert mag.pricing_policy_type == PricingPolicyType.MSRP_MULTIPLIER
+    assert mag.pricing_multiplier == 1.1
+    assert mag.pricing_fixed_price_jpy is None
+    assert (mag.pricing_source_sheet, mag.pricing_source_row) == ("MAG", 13)
+    assert mag.pricing_source_formula == "=E13*1.1"
+    assert mag.pricing_policy_candidate_id == "ppc-MAG-13"
+    assert mag.standard_sales_price_candidate_id == "spc-MAG-13"
+
+    apply_exchange_rate(draft, 160, sales_candidates=_mag_v1(160.0))
+    mag = _line(draft, "9701-MAG-4K")
+
+    assert mag.manufacturer_price_snapshot.manufacturer_msrp_usd == 35437
+    assert mag.standard_sales_price_candidate_jpy == 6236912
+    assert mag.pricing_multiplier == 1.1
+
+
+def test_v1_fixed_jpy_line_is_unchanged_by_exchange_rate():
+    draft = _v1_mag_draft(_mag_v1())
+    assert _line(draft, "2604").standard_sales_price_candidate_jpy == 360000
+    assert _line(draft, "2604").pricing_policy_type == PricingPolicyType.FIXED_JPY
+
+    apply_exchange_rate(draft, 160, sales_candidates=_mag_v1(160.0))
+    assert _line(draft, "2604").standard_sales_price_candidate_jpy == 360000
+    apply_exchange_rate(draft, 150)
+
+    assert _line(draft, "2604").standard_sales_price_candidate_jpy == 360000
+    assert _line(draft, "2604").pricing_fixed_price_jpy == 360000
+    assert _line(draft, "9701-MAG-4K").standard_sales_price_candidate_jpy is None
+
+
+def test_v1_cross_sheet_sku_uses_only_the_configuration_sheet():
+    sales = _mag_v1(170.0)
+    sales.insert(0, _v1("5608", 1.3, sheet="PHOTON", row=45))
+    draft = _v1_mag_draft(sales)
+    cygnus = _line(draft, "5608")
+
+    assert cygnus.pricing_source_sheet == "MAG"
+    assert cygnus.pricing_multiplier == 1.25
+    assert cygnus.standard_sales_price_candidate_jpy == round(10448 * 170 * 1.25, 4)
+
+
+def test_v1_cross_sheet_sku_without_configuration_sheet_is_not_chosen():
+    sales = [item for item in _mag_v1() if item.manufacturer_sku != "5608"]
+    sales += [_v1("5608", 1.3, sheet="PHOTON", row=45), _v1("5608", 1.3, sheet="PIVOT", row=45)]
+    draft = _v1_mag_draft(sales)
+    cygnus = _line(draft, "5608")
+
+    assert cygnus.standard_sales_price_candidate_jpy is None
+    assert cygnus.standard_sales_price_candidate_id is None
+    assert any(CANDIDATE_NOT_APPLIED_MARKER in item and "ambiguous" in item for item in cygnus.warnings)
+
+
+def test_v1_same_sheet_duplicate_sku_is_not_chosen_even_with_same_multiplier():
+    draft = _v1_mag_draft(_mag_v1(170.0, _v1("9701-MAG-4K", 1.1, row=15)))
+    mag = _line(draft, "9701-MAG-4K")
+
+    assert mag.standard_sales_price_candidate_jpy is None
+    assert mag.pricing_policy_type is None
+    assert any("MAG:13" in item and "MAG:15" in item for item in mag.warnings)
+
+    apply_exchange_rate(draft, 160, sales_candidates=_mag_v1(160.0, _v1("9701-MAG-4K", 1.1, rate=160.0, row=15)))
+    assert _line(draft, "9701-MAG-4K").standard_sales_price_candidate_jpy is None
+
+
+def test_v1_candidate_msrp_must_match_quote_snapshot_msrp():
+    sales = [item for item in _mag_v1() if item.manufacturer_sku != "9701-MAG-4K"]
+    sales.append(_v1("9701-MAG-4K", 1.1, msrp=35000))
+    draft = _v1_mag_draft(sales)
+    mag = _line(draft, "9701-MAG-4K")
+
+    assert mag.standard_sales_price_candidate_jpy is None
+    assert mag.standard_sales_price_candidate_id is None
+    assert mag.final_sales_price_jpy is None
+    assert any(CANDIDATE_NOT_APPLIED_MARKER in item and "35000" in item for item in mag.warnings)
+
+
+def test_v1_manual_review_and_unclassified_candidates_set_no_standard_price():
+    review = _v1("9701-MAG-4K", 1.1).model_copy(
+        update={"pricing_policy_type": PricingPolicyType.MANUAL_REVIEW, "multiplier": None, "raw_sales_price_jpy": None}
+    )
+    legacy = _v1("9735", 1.1).model_copy(update={"pricing_policy_type": None})
+    sales = [item for item in _mag_v1() if item.manufacturer_sku not in {"9701-MAG-4K", "9735"}] + [review, legacy]
+    draft = _v1_mag_draft(sales)
+
+    for sku in ("9701-MAG-4K", "9735"):
+        assert _line(draft, sku).standard_sales_price_candidate_jpy is None
+        assert any(CANDIDATE_NOT_APPLIED_MARKER in item for item in _line(draft, sku).warnings)
+    assert _line(draft, "9701-MAG-4K").pricing_policy_type == PricingPolicyType.MANUAL_REVIEW
+
+
+def test_v1_rate_change_never_changes_final_sales_price():
+    draft = _v1_mag_draft(_mag_v1())
+    line = _line(draft, "9701-MAG-4K")
+    apply_final_price(draft, line.line_id, FinalPriceStatus.USE_STANDARD_CANDIDATE)
+
+    apply_exchange_rate(draft, 160, sales_candidates=_mag_v1(160.0))
+    line = _line(draft, "9701-MAG-4K")
+
+    assert line.standard_sales_price_candidate_jpy == 6236912
+    assert line.final_sales_price_jpy == 6626719
+
+
+def test_v1_legacy_draft_without_policy_fields_still_loads():
+    data = _v1_mag_draft(_mag_v1()).model_dump(mode="json")
+    new_fields = [name for name in data["configuration_lines"][0] if name.startswith("pricing_")]
+    for line in data["configuration_lines"]:
+        for name in new_fields:
+            line.pop(name)
+
+    loaded = QuoteDraft.model_validate(data)
+
+    assert len(new_fields) == 7
+    assert all(line.pricing_policy_type is None for line in loaded.configuration_lines)
+    assert _line(loaded, "9701-MAG-4K").standard_sales_price_candidate_jpy == 6626719

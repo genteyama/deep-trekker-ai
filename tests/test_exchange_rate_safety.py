@@ -24,6 +24,7 @@ from models import (
 from repositories.sqlite_quote_repository import SqliteQuoteRepository
 from tests.test_price_source_safety import _development_photon_draft
 from tests.test_pricing_policy import _load_policy_case
+from tests.test_landed_cost import _sales
 from tests.test_quote_builder import _landed, _photon_sales
 from tests.test_quote_approval import _approve, _ready_photon
 from ui.quote_steps import SESSION_FX_EDITOR, SESSION_NEW_QUOTE_FX, sync_exchange_rate_editor
@@ -274,13 +275,8 @@ def test_rate_160_does_not_promote_development_prices():
 
 
 def _candidate(sku, price, rate):
-    return SalesPriceCandidate(
-        sales_price_candidate_id=f"spc-{sku}-{rate}",
-        spaceone_item_id=f"so-{sku}",
-        manufacturer_sku=sku,
-        raw_sales_price_jpy=price,
-        exchange_rate=rate,
-        source_reference="PHOTON",
+    return _sales(sku, price, rate).model_copy(
+        update={"sales_price_candidate_id": f"spc-{sku}-{rate}", "source_reference": "PHOTON"}
     )
 
 

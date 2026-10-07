@@ -293,13 +293,14 @@ def pricing_policy_master_book() -> BytesIO:
     photon["B4"] = "DTマスター\n価格表より"
     photon["E4"] = "定価"
     photon["F4"] = "卸値"
+    # As in the real master, the JPY row converts the USD row above it with the sheet rate cell F2.
     data = [
-        (5, "9680-BASE", "PHOTON 基本構成", 17391, 10434.6, 6, "=E6*$F$2", "=E6*1.2", 3540000),
-        (8, "DEALER-P", "Dealer基準", 1000, 600, 9, "=F9*$F$2", "=F9*1.1", None),
+        (5, "9680-BASE", "PHOTON 基本構成", 17391, 10434.6, 6, "=E5*$F$2", "=E6*1.2", 3540000),
+        (8, "DEALER-P", "Dealer基準", 1000, 600, 9, "=F8*$F$2", "=F9*1.1", None),
         (11, "FIXED-P", "固定売価", 100, 60, 12, None, 35000, 35000),
-        (14, "SPECIAL-P", "特殊式", 2000, 1200, 15, "=E15*$F$2", "=E15*1.2-M15", None),
-        (17, "ROUND-P", "端数処理", 800, 480, 18, "=E18*$F$2", "=ROUND(E18*1.2,-3)", None),
-        (20, "9680-EXPEET", "誤記", 100, 60, 21, "=E21*$F$2", "=E21*1.2", None),
+        (14, "SPECIAL-P", "特殊式", 2000, 1200, 15, "=E14*$F$2", "=E15*1.2-M15", None),
+        (17, "ROUND-P", "端数処理", 800, 480, 18, "=E17*$F$2", "=ROUND(E18*1.2,-3)", None),
+        (20, "9680-EXPEET", "誤記", 100, 60, 21, "=E20*$F$2", "=E21*1.2", None),
     ]
     for usd_row, sku, name, msrp, dealer, jpy_row, jpy_formula, sales_formula, sales_value in data:
         photon.cell(usd_row, 2, sku)

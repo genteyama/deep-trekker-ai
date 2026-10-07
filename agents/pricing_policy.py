@@ -11,6 +11,7 @@ from models import (
     PriceBasis,
     PricingFormulaType,
     PricingPatternSummary,
+    PricingPolicyType,
     PricingPolicyStatus,
     PricingScopeType,
     RoundingMethod,
@@ -34,6 +35,8 @@ ROUND_RE = re.compile(
     re.IGNORECASE,
 )
 COMPARISON_TOLERANCE_JPY = 0.5
+# The JPY row of a SpaceOne master item converts the USD MSRP row with the sheet rate cell (F2).
+JPY_MSRP_ROW_RE = re.compile(r"^=E(?P<row>\d+)\*\$F\$2$", re.IGNORECASE)
 
 
 def extract_pricing_policies(
@@ -41,7 +44,8 @@ def extract_pricing_policies(
 ) -> list[SpaceOnePricingPolicyCandidate]:
     policies = []
     for item in items:
-        if item.is_legacy_shipping:
+        # Date-converted or empty Part Numbers are not quote items, so they never become a policy.
+        if item.is_legacy_shipping or item.part_number_invalid or not item.normalized_sku:
             continue
         policy = _policy_from_item(item)
         if policy is not None:
@@ -277,6 +281,24 @@ def apply_rounding(
     return value
 
 
+def standard_sales_price_jpy(
+    policy_type: Optional[PricingPolicyType],
+    *,
+    msrp_usd: Optional[float],
+    exchange_rate: Optional[float],
+    multiplier: Optional[float],
+    fixed_price_jpy: Optional[float],
+) -> Optional[float]:
+    """Pricing Policy v1 standard sales price. Used for both candidates and quote lines."""
+    if policy_type == PricingPolicyType.FIXED_JPY:
+        return fixed_price_jpy
+    if policy_type != PricingPolicyType.MSRP_MULTIPLIER:
+        return None
+    if msrp_usd is None or exchange_rate is None or multiplier is None:
+        return None
+    return round(msrp_usd * exchange_rate * multiplier, 4)
+
+
 def _policy_from_item(item: SpaceOneMasterItem) -> Optional[SpaceOnePricingPolicyCandidate]:
     raw = (item.sales_price_formula or "").strip()
     if not raw:
@@ -312,16 +334,23 @@ def _policy_from_item(item: SpaceOneMasterItem) -> Optional[SpaceOnePricingPolic
         policy.formula_type = PricingFormulaType.FIXED
         policy.fixed_price_jpy = float(inner)
         policy.notes = "Fixed SpaceOne sales price. Manufacturer price changes do not auto-update this."
+        if rounding_method == RoundingMethod.NONE:
+            policy.policy_type = PricingPolicyType.FIXED_JPY
+        else:
+            _manual_review(policy, "Fixed price wrapped in a rounding formula is not a v1 policy.")
         return policy
     match = MULTIPLIER_RE.fullmatch(inner)
     if match:
         _apply_multiplier(policy, match)
+        _classify_multiplier(policy, item, match, rounding_method)
         return policy
     match = PASSTHROUGH_RE.fullmatch(inner)
     if match:
         _apply_multiplier(policy, match, multiplier=1.0)
         policy.notes = "Sales price copies JPY manufacturer price. Source formula was kept."
+        _classify_multiplier(policy, item, match, rounding_method)
         return policy
+    _manual_review(policy, "Special formula is not a v1 policy. It needs a human decision.")
     policy.price_basis = PriceBasis.SPECIAL_FORMULA
     policy.formula_type = PricingFormulaType.SPECIAL
     policy.status = PricingPolicyStatus.REVIEW_REQUIRED
@@ -335,6 +364,40 @@ def _apply_multiplier(policy: SpaceOnePricingPolicyCandidate, match, multiplier:
     policy.price_basis = PriceBasis.MANUFACTURER_MSRP if column == "E" else PriceBasis.MANUFACTURER_DEALER
     policy.formula_type = PricingFormulaType.MULTIPLIER
     policy.multiplier = float(match.group("mult")) if multiplier is None else multiplier
+
+
+def _classify_multiplier(policy, item: SpaceOneMasterItem, match, rounding_method: RoundingMethod) -> None:
+    if policy.price_basis != PriceBasis.MANUFACTURER_MSRP:
+        _manual_review(policy, "Dealer-based formula is not an automatic policy in v1.")
+    elif rounding_method != RoundingMethod.NONE:
+        _manual_review(policy, "Rounding formula is not an automatic policy in v1.")
+    elif not _references_jpy_msrp_row(item, int(match.group("row"))):
+        _manual_review(policy, "Formula does not reference the known USD MSRP x sheet rate (F2) row.")
+    else:
+        policy.policy_type = PricingPolicyType.MSRP_MULTIPLIER
+
+
+def _references_jpy_msrp_row(item: SpaceOneMasterItem, row: int) -> bool:
+    # Matching "=E{row}*mult" is not enough: the referenced row must be this item's JPY row, which is
+    # exactly "=E{USD row}*$F$2", and the sheet must have a numeric rate in F2.
+    if row != item.sales_price_formula_row or row == item.source_row:
+        return False
+    jpy = JPY_MSRP_ROW_RE.fullmatch((item.jpy_msrp_formula or "").replace(" ", ""))
+    if jpy is None or int(jpy.group("row")) != item.source_row:
+        return False
+    rate = item.detected_exchange_rate
+    return (
+        rate is not None
+        and math.isfinite(rate)
+        and rate > 0
+        and (item.exchange_rate_source_cell or "").upper().endswith("!F2")
+    )
+
+
+def _manual_review(policy: SpaceOnePricingPolicyCandidate, reason: str) -> None:
+    policy.policy_type = PricingPolicyType.MANUAL_REVIEW
+    policy.status = PricingPolicyStatus.REVIEW_REQUIRED
+    policy.review_reason = reason
 
 
 def _rounding_from_excel(match) -> tuple[RoundingMethod, Optional[float]]:
@@ -365,6 +428,10 @@ def _sales_candidate(
         source_formula=policy.source_formula if policy else None,
         price_basis=policy.price_basis if policy else None,
         source_reference=policy.source_sheet if policy else None,
+        pricing_policy_type=policy.policy_type if policy else None,
+        multiplier=policy.multiplier if policy and policy.policy_type == PricingPolicyType.MSRP_MULTIPLIER else None,
+        fixed_price_jpy=policy.fixed_price_jpy if policy and policy.policy_type == PricingPolicyType.FIXED_JPY else None,
+        source_row=policy.source_row if policy else None,
     )
     if preview_item.link.link_status not in {LinkStatus.AUTO_LINKED, LinkStatus.MANUALLY_LINKED}:
         candidate.status = PricingPolicyStatus.REVIEW_REQUIRED
@@ -388,11 +455,21 @@ def _sales_candidate(
         candidate.status = PricingPolicyStatus.REVIEW_REQUIRED
         candidate.warnings.append("Special formula cannot be simulated as a simple multiplier.")
         return candidate
+    if policy.policy_type == PricingPolicyType.MANUAL_REVIEW:
+        candidate.status = PricingPolicyStatus.REVIEW_REQUIRED
+        candidate.warnings.append(policy.review_reason or "Pricing policy requires manual review.")
+        return candidate
     if exchange.rate is None:
         candidate.status = PricingPolicyStatus.REVIEW_REQUIRED
         candidate.warnings.append("Exchange Rate is required for simulation and is not taken from Pricing Policy.")
         return candidate
-    raw = _raw_sales_price(policy, current.msrp_usd, current.dealer_price_usd, exchange.rate)
+    raw = standard_sales_price_jpy(
+        policy.policy_type,
+        msrp_usd=current.msrp_usd,
+        exchange_rate=exchange.rate,
+        multiplier=policy.multiplier,
+        fixed_price_jpy=policy.fixed_price_jpy,
+    )
     if raw is None:
         candidate.status = PricingPolicyStatus.REVIEW_REQUIRED
         candidate.warnings.append("Sales Price Candidate could not be calculated from Current Manufacturer Value.")
@@ -409,19 +486,6 @@ def _sales_candidate(
         candidate.reference_gross_margin_rate = round((raw - reference_cost) / raw, 4)
         candidate.warnings.append("参考粗利率（輸入諸経費除く）。Insurance / Tax / Shipping は含みません。")
     return candidate
-
-
-def _raw_sales_price(policy, msrp_usd, dealer_usd, rate) -> Optional[float]:
-    if policy.formula_type == PricingFormulaType.FIXED:
-        return policy.fixed_price_jpy
-    usd = None
-    if policy.price_basis == PriceBasis.MANUFACTURER_MSRP:
-        usd = msrp_usd
-    elif policy.price_basis == PriceBasis.MANUFACTURER_DEALER:
-        usd = dealer_usd
-    if usd is None or policy.multiplier is None:
-        return None
-    return round(usd * rate * policy.multiplier, 4)
 
 
 def _pattern_key(policy: SpaceOnePricingPolicyCandidate) -> tuple:
