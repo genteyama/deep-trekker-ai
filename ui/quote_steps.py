@@ -149,21 +149,30 @@ def new_quote_exchange_rate_source(session) -> ExchangeRateSource:
     return ExchangeRateSource.STANDARD_DEFAULT
 
 
+def exchange_rate_editor_values(draft) -> dict:
+    # Saved draft values as editor text; None stays an empty field.
+    values = {SESSION_FX_EDITOR: display_number(draft.exchange_rate, "")}
+    context = draft.pricing_context
+    for field, key in FX_METADATA_KEYS.items():
+        value = getattr(context, field, None)
+        if field == "exchange_rate_reason_code":
+            values[key] = getattr(value, "value", value) or ""
+        elif isinstance(value, (int, float)):
+            values[key] = display_number(value, "")
+        else:
+            values[key] = value or ""
+    return values
+
+
 def sync_exchange_rate_editor(session, draft) -> None:
     # The saved draft is the source of truth; the editor is reset whenever another draft/version/rate is shown.
+    # Otherwise only keys Streamlit dropped (e.g. after visiting another step) are refilled, so unsaved input survives reruns.
     token = f"{draft.quote_draft_id}:{draft.quote_version}:{draft.exchange_rate}"
-    if session.get(SESSION_FX_EDITOR_TOKEN) != token:
-        session[SESSION_FX_EDITOR] = display_number(draft.exchange_rate, "")
-        context = draft.pricing_context
-        for field, key in FX_METADATA_KEYS.items():
-            value = getattr(context, field, None)
-            if field == "exchange_rate_reason_code":
-                session[key] = getattr(value, "value", value) or ""
-            elif isinstance(value, (int, float)):
-                session[key] = display_number(value, "")
-            else:
-                session[key] = value or ""
-        session[SESSION_FX_EDITOR_TOKEN] = token
+    reset = session.get(SESSION_FX_EDITOR_TOKEN) != token
+    for key, value in exchange_rate_editor_values(draft).items():
+        if reset or key not in session:
+            session[key] = value
+    session[SESSION_FX_EDITOR_TOKEN] = token
 
 
 def exchange_rate_summary(workspace: dict, source) -> tuple[str, str]:
