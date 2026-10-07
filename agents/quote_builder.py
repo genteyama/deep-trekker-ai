@@ -11,9 +11,11 @@ from agents.sku_link import price_source_type_of
 from models import (
     CustomerPresentationMode,
     CustomerQuoteLineDraft,
+    ExchangeRateReason,
     ExchangeRateSource,
     FinalPriceStatus,
     LandedCostScenario,
+    PriceAdjustmentReason,
     PriceSourceType,
     QuoteAdjustment,
     QuoteAdjustmentType,
@@ -194,12 +196,38 @@ def apply_exchange_rate(
     *,
     sales_candidates: Optional[Sequence[SalesPriceCandidate]] = None,
     presentation: Optional[dict] = None,
+    reason_code: Optional[ExchangeRateReason] = None,
+    reason_note: Optional[str] = None,
+    set_by: Optional[str] = None,
+    set_at: Optional[datetime] = None,
+    market_reference_rate=None,
+    market_reference_date: Optional[str] = None,
+    market_reference_source: Optional[str] = None,
+    exchange_rate_buffer=None,
 ) -> QuoteDraft:
     # A human changed the rate. sales_candidates must be recalculated at the new rate; without them the
     # previous standard sales candidates are cleared as stale. Final sales prices are never changed here.
     ensure_draft_editable(draft)
     rate = parse_exchange_rate(exchange_rate)
+    reason = ExchangeRateReason(reason_code) if reason_code is not None else None
+    market_rate = parse_exchange_rate(market_reference_rate) if market_reference_rate is not None else None
+    buffer = _finite_number(exchange_rate_buffer, "Exchange rate buffer") if exchange_rate_buffer is not None else None
+    market = {
+        "market_reference_rate": market_rate,
+        "market_reference_date": market_reference_date,
+        "market_reference_source": market_reference_source,
+        "exchange_rate_buffer": buffer,
+    }
+    decision = {
+        "exchange_rate_reason_code": reason,
+        "exchange_rate_reason_note": reason_note,
+        "exchange_rate_set_by": set_by,
+        "exchange_rate_set_at": set_at,
+    }
     if rate == draft.exchange_rate:
+        # Metadata-only update: costs, final prices and exchange_rate_source stay as they are, and only
+        # the fields supplied by the caller are written.
+        _set_supplied(draft.pricing_context, {**market, **decision})
         return draft
     policy = draft.pricing_context.landed_cost_policy_snapshot
     if policy is None:
@@ -233,7 +261,9 @@ def apply_exchange_rate(
         line.import_tax_jpy = product.import_tax_jpy
         line.insurance_jpy = product.insurance_jpy
         line.landed_cost_jpy = product.landed_cost_jpy
-        line.warnings = [item for item in line.warnings if STALE_CANDIDATE_MARKER not in item]
+        line.warnings = _without_rate_change_warnings(
+            line.warnings, STALE_CANDIDATE_MARKER, FINAL_PRICE_KEPT_MARKER, STANDARD_DIVERGED_MARKER
+        )
         candidate = fresh.get(line.manufacturer_sku or "")
         if candidate is not None:
             line.standard_sales_price_candidate_jpy = candidate.raw_sales_price_jpy
@@ -242,6 +272,7 @@ def apply_exchange_rate(
             line.standard_sales_price_candidate_jpy = None
             line.standard_sales_price_candidate_id = None
             line.warnings.append(_stale_candidate_warning(line.manufacturer_sku, previous_rate, rate))
+        line.warnings.extend(_final_price_kept_warnings(line, previous_rate, rate))
     draft.shipping_lines = [
         reprice_shipping_line(line, exchange_rate=rate, policy=policy) for line in draft.shipping_lines
     ]
@@ -251,6 +282,11 @@ def apply_exchange_rate(
     draft.exchange_rate = rate
     draft.pricing_context.exchange_rate = rate
     draft.pricing_context.exchange_rate_source = ExchangeRateSource.MANUAL_OVERRIDE
+    # The reason belongs to this rate decision, so a later change without a reason does not inherit it.
+    for key, value in decision.items():
+        setattr(draft.pricing_context, key, value)
+    # Market reference metadata is information only and is replaced only when explicitly supplied.
+    _set_supplied(draft.pricing_context, market)
     return refresh_quote_draft(draft, presentation=presentation)
 
 
@@ -289,11 +325,14 @@ def apply_final_price(
     *,
     amount_jpy: Optional[float] = None,
     reason: Optional[str] = None,
+    reason_code: Optional[PriceAdjustmentReason] = None,
+    reason_note: Optional[str] = None,
     entered_by: Optional[str] = None,
     presentation: Optional[dict] = None,
 ) -> QuoteDraft:
     ensure_draft_editable(draft)
     line = _config_line(draft, line_id)
+    line.warnings = _without_rate_change_warnings(line.warnings, FINAL_PRICE_KEPT_MARKER, STANDARD_DIVERGED_MARKER)
     if status == FinalPriceStatus.USE_STANDARD_CANDIDATE:
         if line.standard_sales_price_candidate_jpy is None:
             line.warnings.append("Standard Sales Price Candidate is missing. Final price was not set.")
@@ -305,9 +344,11 @@ def apply_final_price(
     elif status == FinalPriceStatus.MANUAL_OVERRIDE:
         if amount_jpy is None:
             raise ValueError("Manual override requires an explicit amount.")
-        original = line.final_sales_price_jpy
-        if original is None:
-            original = line.standard_sales_price_candidate_jpy
+        code = PriceAdjustmentReason(reason_code) if reason_code is not None else None
+        # The standard candidate is the base for every adjustment, so repeated overrides stay comparable.
+        standard = line.standard_sales_price_candidate_jpy
+        original = standard if standard is not None else line.final_sales_price_jpy
+        adjustment_rate = round((amount_jpy - standard) / standard, 6) if standard else None
         line.final_price_status = FinalPriceStatus.MANUAL_OVERRIDE
         line.final_sales_price_jpy = amount_jpy
         draft.adjustments.append(
@@ -318,7 +359,10 @@ def apply_final_price(
                 original_price_jpy=original,
                 final_price_jpy=amount_jpy,
                 amount_jpy=None if original is None else round(amount_jpy - original, 4),
+                adjustment_rate=adjustment_rate,
                 reason=reason,
+                reason_code=code,
+                reason_note=reason_note,
                 entered_by=entered_by,
                 entered_at=datetime.now(timezone.utc),
                 source_reference="human-final-price",
@@ -708,6 +752,8 @@ def customer_line_landed_cost(draft: QuoteDraft, customer_line: CustomerQuoteLin
 
 
 STALE_CANDIDATE_MARKER = "Standard sales price candidate does not match the quote exchange rate"
+FINAL_PRICE_KEPT_MARKER = "Final sales price was kept after the quote exchange rate changed"
+STANDARD_DIVERGED_MARKER = "Standard sales price candidate changed but the final sales price keeps the previous value"
 
 
 def _candidate_matches_rate(candidate: SalesPriceCandidate, rate: Optional[float]) -> bool:
@@ -717,6 +763,45 @@ def _candidate_matches_rate(candidate: SalesPriceCandidate, rate: Optional[float
     if rate is None or not isinstance(candidate_rate, (int, float)) or isinstance(candidate_rate, bool):
         return False
     return math.isfinite(candidate_rate) and candidate_rate > 0 and candidate_rate == rate
+
+
+def _without_rate_change_warnings(warnings: Sequence[str], *markers: str) -> list[str]:
+    return [item for item in warnings if not any(marker in item for marker in markers)]
+
+
+def _final_price_kept_warnings(line: QuoteConfigurationLine, previous_rate, rate: float) -> list[str]:
+    if line.final_sales_price_jpy is None:
+        return []
+    sku = line.manufacturer_sku or line.line_id
+    warnings = [
+        f"{sku}: {FINAL_PRICE_KEPT_MARKER} ({previous_rate} -> {rate} JPY/USD). "
+        "Costs and gross margin were recalculated. The final sales price was not changed."
+    ]
+    if (
+        line.final_price_status == FinalPriceStatus.USE_STANDARD_CANDIDATE
+        and line.standard_sales_price_candidate_jpy != line.final_sales_price_jpy
+    ):
+        warnings.append(
+            f"{sku}: {STANDARD_DIVERGED_MARKER} (standard {line.standard_sales_price_candidate_jpy}, "
+            f"final {line.final_sales_price_jpy}). Re-apply the standard candidate or set the price manually."
+        )
+    return warnings
+
+
+def _set_supplied(context: QuoteDraftPricingContext, values: dict) -> None:
+    for key, value in values.items():
+        if value is not None:
+            setattr(context, key, value)
+
+
+def _finite_number(value, label: str) -> float:
+    try:
+        number = float(str(value).strip().replace(",", ""))
+    except (TypeError, ValueError):
+        raise ValueError(f"{label} must be a number.") from None
+    if not math.isfinite(number):
+        raise ValueError(f"{label} must be a finite number.")
+    return number
 
 
 def _stale_candidate_warning(sku: Optional[str], candidate_rate: Optional[float], quote_rate: Optional[float]) -> str:

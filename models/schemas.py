@@ -14,6 +14,7 @@ from models.enums import (
     CostBasis,
     CustomerPresentationMode,
     DomesticShippingMode,
+    ExchangeRateReason,
     ExchangeRateSource,
     FinalPriceStatus,
     PriceMasterImportStatus,
@@ -23,6 +24,7 @@ from models.enums import (
     PriceSourceType,
     HistoricalComparisonStatus,
     InsuranceMode,
+    PriceAdjustmentReason,
     QuoteAdjustmentType,
     QuoteDraftStatus,
     QuoteWarningSeverity,
@@ -991,7 +993,12 @@ class QuoteAdjustment(BaseModel):
     original_price_jpy: Optional[float] = None
     final_price_jpy: Optional[float] = None
     amount_jpy: Optional[float] = None
+    # Signed decimal against the standard sales price candidate. None when no standard price exists.
+    adjustment_rate: Optional[float] = None
+    # Legacy free-text reason. Kept so existing drafts and snapshots still read.
     reason: Optional[str] = None
+    reason_code: Optional[PriceAdjustmentReason] = None
+    reason_note: Optional[str] = None
     entered_by: Optional[str] = None
     entered_at: Optional[datetime] = None
     source_reference: Optional[str] = None
@@ -1122,6 +1129,15 @@ class CustomerQuoteLineDraft(BaseModel):
 class QuoteDraftPricingContext(BaseModel):
     exchange_rate: Optional[float] = None
     exchange_rate_source: Optional[ExchangeRateSource] = None
+    # Market reference is information only. Costs always use QuoteDraft.exchange_rate.
+    market_reference_rate: Optional[float] = None
+    market_reference_date: Optional[str] = None
+    market_reference_source: Optional[str] = None
+    exchange_rate_buffer: Optional[float] = None
+    exchange_rate_reason_code: Optional[ExchangeRateReason] = None
+    exchange_rate_reason_note: Optional[str] = None
+    exchange_rate_set_by: Optional[str] = None
+    exchange_rate_set_at: Optional[datetime] = None
     tax_rate: Optional[float] = None
     minimum_margin_reference: Optional[float] = None
     landed_cost_policy_candidate_id: Optional[str] = None
@@ -1281,6 +1297,15 @@ class ApprovedQuoteSnapshot(BaseModel):
     landed_cost_policy_snapshot: Optional[LandedCostPolicyCandidate] = None
     exchange_rate: Optional[float] = None
     exchange_rate_source: Optional[ExchangeRateSource] = None
+    market_reference_rate: Optional[float] = None
+    market_reference_date: Optional[str] = None
+    market_reference_source: Optional[str] = None
+    exchange_rate_buffer: Optional[float] = None
+    exchange_rate_reason_code: Optional[ExchangeRateReason] = None
+    exchange_rate_reason_note: Optional[str] = None
+    exchange_rate_set_by: Optional[str] = None
+    exchange_rate_set_at: Optional[datetime] = None
+    adjustments_snapshot: list[QuoteAdjustment] = Field(default_factory=list)
     subtotal_ex_tax_jpy: Optional[float] = None
     tax_rate: Optional[float] = None
     tax_jpy: Optional[float] = None
