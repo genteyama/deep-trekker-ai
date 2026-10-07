@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Optional, Sequence
 import json
 
+from agents.issuer import IssuerConfigError, load_issuer_snapshot
 from agents.quote_builder import (
     apply_final_price,
     apply_issue_date,
@@ -286,6 +287,7 @@ def approve_quote(
         raise QuoteApprovalError(validation.blocking_reason or "Quote is not ready for approval.")
     if draft.economics_result is None or draft.economics_result.gross_margin_rate is None:
         raise QuoteApprovalError("Gross Margin unavailable. Approval is blocked.")
+    issuer = _resolve_issuer_snapshot(draft)
     approval = QuoteApproval(
         quote_approval_id=f"qa-{draft.quote_draft_id}-v{draft.quote_version}",
         quote_draft_id=draft.quote_draft_id,
@@ -307,6 +309,7 @@ def approve_quote(
         approved_by=approved_by,
         approved_at=captured,
         quote_number_candidate=quote_number_candidate,
+        issuer=issuer,
     )
     draft.status = QuoteDraftStatus.APPROVED
     draft.updated_at = captured
@@ -356,9 +359,9 @@ def create_revision_draft(
             parse_quote_date(snapshot.issue_date),
             parse_quote_date(snapshot.valid_until),
         ),
-        issuer_snapshot=(
-            snapshot.issuer_snapshot.model_copy(deep=True) if snapshot.issuer_snapshot else None
-        ),
+        # The approved issuer is a historical record of v{n}; a revision is a new
+        # issuance, so it resolves the current issuer config at its own approval.
+        issuer_snapshot=None,
         source_references=list(snapshot.source_references) + [f"Revised from {snapshot.approved_quote_snapshot_id}"],
     )
     refresh_quote_draft(draft)
@@ -600,12 +603,24 @@ def all_confirmations() -> dict[str, bool]:
     return {key: True for key in REQUIRED_CONFIRMATIONS}
 
 
+def _resolve_issuer_snapshot(draft: QuoteDraft) -> IssuerSnapshot:
+    # A draft-level issuer (e.g. a historical golden snapshot) wins; otherwise the
+    # official issuer config is frozen into the snapshot at approval time.
+    if draft.issuer_snapshot is not None:
+        return draft.issuer_snapshot.model_copy(deep=True)
+    try:
+        return load_issuer_snapshot()
+    except IssuerConfigError as exc:
+        raise QuoteApprovalError(f"Issuer snapshot unavailable. Approval is blocked: {exc}") from exc
+
+
 def _build_approved_snapshot(
     draft: QuoteDraft,
     *,
     approved_by: str,
     approved_at: datetime,
     quote_number_candidate: Optional[str],
+    issuer: IssuerSnapshot,
 ) -> ApprovedQuoteSnapshot:
     economics = draft.economics_result
     remarks = [
@@ -659,9 +674,7 @@ def _build_approved_snapshot(
         lead_time_text=draft.lead_time_text,
         issue_date=draft.issue_date,
         valid_until=draft.valid_until,
-        issuer_snapshot=(
-            draft.issuer_snapshot.model_copy(deep=True) if draft.issuer_snapshot else None
-        ),
+        issuer_snapshot=issuer.model_copy(deep=True),
         quote_number_candidate=candidate,
         official_quote_number=None,
         source_references=list(draft.source_references) + ["ApprovedQuoteSnapshot"],
