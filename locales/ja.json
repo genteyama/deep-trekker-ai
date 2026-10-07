@@ -510,6 +510,7 @@
       "apply_manual_price_button": "手動売価を反映",
       "shipping_price_label": "国際輸送費 売価",
       "apply_shipping_price_button": "輸送費売価を反映",
+      "shipping_price_not_thousand": "輸送費売価は1,000円単位で入力してください。",
       "load_historical_preview": "Historical Previewを表示",
       "no_quote_draft": "まだ見積ドラフトはありません。",
       "draft_statuses": {
@@ -784,6 +785,7 @@
         },
         "adjustment_errors": {
           "amount_invalid": "案件売価は0以上の数値で入力してください。",
+          "amount_not_thousand": "案件売価は1,000円単位で入力してください。",
           "reason_required": "標準売価と異なるため、価格調整理由を選んでください。",
           "note_required": "「その他」を選んだ場合は補足を入力してください。"
         },

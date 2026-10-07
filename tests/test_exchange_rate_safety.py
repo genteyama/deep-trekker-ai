@@ -7,6 +7,7 @@ from agents.pricing_policy import (
     DEFAULT_QUOTE_EXCHANGE_RATE,
     build_exchange_rate_scenario,
     parse_exchange_rate,
+    round_customer_price_jpy,
     simulate_sales_price_candidates,
 )
 from agents.quote_approval import create_revision_draft, validate_for_approval
@@ -312,7 +313,9 @@ def test_quote_at_160_uses_standard_candidates_calculated_at_160(tmp_path, monke
     assert not at.exception
     draft = at.session_state["quote_draft"]
     assert draft.exchange_rate == 160.0
-    assert _line(draft).standard_sales_price_candidate_jpy == _expected_candidate(160.0) == 3339072.0
+    # The candidate keeps the raw policy value; the quote standard is the customer price in thousands.
+    assert _expected_candidate(160.0) == 3339072.0
+    assert _line(draft).standard_sales_price_candidate_jpy == 3339000.0
 
 
 def test_rate_change_in_ui_recalculates_standard_candidates_at_the_new_rate(tmp_path, monkeypatch):
@@ -329,7 +332,7 @@ def test_rate_change_in_ui_recalculates_standard_candidates_at_the_new_rate(tmp_
     assert not at.exception
     draft = at.session_state["quote_draft"]
     _assert_costs_use_rate(draft, 165.0)
-    assert _line(draft).standard_sales_price_candidate_jpy == _expected_candidate(165.0)
+    assert _line(draft).standard_sales_price_candidate_jpy == round_customer_price_jpy(_expected_candidate(165.0))
     assert not any(STALE in item for item in _line(draft).warnings)
 
 
@@ -355,7 +358,7 @@ def test_candidates_at_another_rate_cannot_enter_a_quote():
 
     assert _line(draft).standard_sales_price_candidate_jpy is None
     assert any(STALE in item for item in _line(draft).warnings)
-    assert _line(draft, "8459").standard_sales_price_candidate_jpy == 160548.0
+    assert _line(draft, "8459").standard_sales_price_candidate_jpy == 161000.0
 
     draft.exchange_rate = 165.0
     stale = [_candidate("9680-BASE", 3339072.0, 160.0)]
@@ -369,11 +372,11 @@ def test_final_prices_are_not_changed_by_a_rate_change():
     customer = [(line.unit_price_jpy, line.amount_jpy) for line in draft.customer_lines]
 
     apply_exchange_rate(draft, 165)
-    apply_exchange_rate(draft, 160, sales_candidates=[_candidate("9680-BASE", 1.0, 160.0)])
+    apply_exchange_rate(draft, 160, sales_candidates=[_candidate("9680-BASE", 1000.0, 160.0)])
 
     assert [(line.final_sales_price_jpy, line.final_price_status) for line in draft.configuration_lines] == finals
     assert [(line.unit_price_jpy, line.amount_jpy) for line in draft.customer_lines] == customer
-    assert _line(draft).standard_sales_price_candidate_jpy == 1.0
+    assert _line(draft).standard_sales_price_candidate_jpy == 1000.0
 
 
 def test_provenance_follows_the_operation_not_the_value(tmp_path, monkeypatch):
@@ -467,11 +470,11 @@ def test_candidate_with_the_quote_rate_is_adopted():
     sales = [_candidate("9680-BASE", 3339072.0, 160.0)]
     draft = build_ihi_quote_draft("PHOTON", _photon_scenario(160.0, sales), sales)
 
-    assert _line(draft).standard_sales_price_candidate_jpy == 3339072.0
+    assert _line(draft).standard_sales_price_candidate_jpy == 3339000.0
     assert not any(STALE in item for item in _line(draft).warnings)
 
     apply_exchange_rate(draft, 165, sales_candidates=[_candidate("9680-BASE", 3443418.0, 165.0)])
-    assert _line(draft).standard_sales_price_candidate_jpy == 3443418.0
+    assert _line(draft).standard_sales_price_candidate_jpy == 3443000.0
 
 
 def test_scenario_display_keeps_rate_less_candidates_but_quotes_do_not(tmp_path, monkeypatch):

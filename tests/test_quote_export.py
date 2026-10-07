@@ -219,11 +219,11 @@ def test_internal_excel_uses_snapshot_standard_and_shipping_summary(tmp_path):
     ]
     aggregate = next(row for row in shipping_rows if row[0] == "INTERNATIONAL_SHIPPING")
 
-    assert original_standards["9680-BASE"] == 3547764
-    assert calc_rows["9680-BASE"][10] == 3547764
-    assert calc_rows["8459"][10] == 160548
-    assert calc_rows["5608"][10] == 2309008
-    assert calc_rows["7851-PHOTON"][10] == 371025
+    assert original_standards["9680-BASE"] == 3548000
+    assert calc_rows["9680-BASE"][10] == 3548000
+    assert calc_rows["8459"][10] == 161000
+    assert calc_rows["5608"][10] == 2309000
+    assert calc_rows["7851-PHOTON"][10] == 371000
     assert calc_rows["9680-BASE"][11] == 3540000
     assert {row[0] for row in shipping_rows} >= {"LARGE_BOX", "SMALL_BOX", "INTERNATIONAL_SHIPPING"}
     assert all(value is None for value in component_finals)

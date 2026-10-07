@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Optional, Sequence
 import json
 
+from agents.pricing_policy import round_customer_price_jpy
 from agents.sku_link import create_quote_price_snapshot
 from models import (
     CostBasis,
@@ -90,7 +91,8 @@ def build_shipping_line(
 ) -> LandedCostShippingLine:
     cost_jpy = _round_money(quantity * rate_usd * exchange_rate)
     markup = policy.shipping_markup_multiplier
-    sales = _round_money(cost_jpy * markup) if markup is not None else None
+    # The customer shipping price is quoted in thousands; cost_jpy keeps full precision.
+    sales = round_customer_price_jpy(_round_money(cost_jpy * markup)) if markup is not None else None
     return LandedCostShippingLine(
         shipping_type=shipping_type,
         quantity=quantity,

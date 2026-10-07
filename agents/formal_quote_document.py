@@ -63,6 +63,7 @@ def build_formal_quote_document(
         source_approved_snapshot_id=snapshot.approved_quote_snapshot_id,
     )
     _assert_totals_match_snapshot(document, snapshot)
+    _assert_displayed_amounts_add_up(document)
     return document
 
 
@@ -113,6 +114,25 @@ def _assert_totals_match_snapshot(document: FormalQuoteDocument, snapshot: Appro
         raise FormalQuoteDocumentError("FormalQuoteDocument line count does not match Approved customer lines.")
     if document.remarks != _remark_texts(snapshot):
         raise FormalQuoteDocumentError("FormalQuoteDocument remarks must be the Approved Snapshot final remarks only.")
+
+
+def _assert_displayed_amounts_add_up(document: FormalQuoteDocument) -> None:
+    # The customer reads the printed yen values, so they must add up as printed. A snapshot whose
+    # amounts only add up before display rounding (e.g. legacy fractional prices) is refused, not adjusted.
+    def shown(value: Optional[float]) -> int:
+        return int(format_document_amount(value).replace(",", "") or 0)
+
+    lines = sum(shown(line.amount) for line in document.customer_lines)
+    if lines != shown(document.subtotal):
+        raise FormalQuoteDocumentError(
+            f"Displayed line amounts ({lines:,}) do not add up to the displayed subtotal "
+            f"({shown(document.subtotal):,}). Revise the quote prices before issuing the document."
+        )
+    if document.total is not None and shown(document.subtotal) + shown(document.tax_amount) != shown(document.total):
+        raise FormalQuoteDocumentError(
+            f"Displayed subtotal and tax ({shown(document.subtotal):,} + {shown(document.tax_amount):,}) do not add up "
+            f"to the displayed total ({shown(document.total):,}). Revise the quote prices before issuing the document."
+        )
 
 
 def _remark_texts(snapshot: ApprovedQuoteSnapshot) -> list[str]:

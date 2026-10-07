@@ -10,7 +10,7 @@ from agents.quote_approval import (
     generate_quote_outputs,
     validate_for_approval,
 )
-from agents.pricing_policy import DEFAULT_QUOTE_EXCHANGE_RATE, parse_exchange_rate
+from agents.pricing_policy import DEFAULT_QUOTE_EXCHANGE_RATE, is_customer_price_unit, parse_exchange_rate
 from agents.quote_builder import (
     apply_exchange_rate,
     apply_final_price,
@@ -464,12 +464,17 @@ def _render_step_costing(page: dict, helpers, draft) -> None:
     shipping_text = st.text_input(page["shipping_price_label"], key="input_draft_shipping_price")
     if shipping_text and st.button(page["apply_shipping_price_button"], key="apply_draft_shipping"):
         try:
-            apply_shipping_final_price(draft, float(shipping_text))
-            clear_pending_shipping(st.session_state)
-            st.session_state["quote_draft"] = draft
-            st.rerun()
+            amount = float(shipping_text)
         except (TypeError, ValueError):
             st.warning(page["exchange_rate_invalid"])
+        else:
+            if not is_customer_price_unit(amount):
+                st.warning(page["shipping_price_not_thousand"])
+            else:
+                apply_shipping_final_price(draft, amount)
+                clear_pending_shipping(st.session_state)
+                st.session_state["quote_draft"] = draft
+                st.rerun()
     with st.expander(page["workspace"]["see_details"], expanded=False):
         st.table(
             [

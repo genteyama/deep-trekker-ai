@@ -149,7 +149,7 @@ def test_active_so_master_supplies_standard_sales_candidates():
 
     _, draft = _create_ihi_photon_draft()
 
-    assert _line(draft).standard_sales_price_candidate_jpy == 3339072.0
+    assert _line(draft).standard_sales_price_candidate_jpy == 3339000.0
     assert not any(SALES_MASTER_MISSING_WARNING in item for line in draft.configuration_lines for item in line.warnings)
     assert any("SO_MASTER" in item for item in draft.source_references)
 

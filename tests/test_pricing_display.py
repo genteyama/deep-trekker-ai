@@ -109,7 +109,7 @@ def test_rate_change_saves_metadata_and_recalculates():
     assert draft.exchange_rate == 160
     assert draft.pricing_context.exchange_rate_reason_code == ExchangeRateReason.CUSTOMER_CONDITION
     assert draft.pricing_context.exchange_rate_reason_note == "顧客指定"
-    assert _line(draft, "9701-MAG-4K").standard_sales_price_candidate_jpy == 6236912
+    assert _line(draft, "9701-MAG-4K").standard_sales_price_candidate_jpy == 6237000
 
 
 def test_standard_price_basis_for_msrp_fixed_and_review():
@@ -195,7 +195,7 @@ def test_rate_change_warnings_are_available_once_for_the_screen():
     kinds = dict(summarize_draft_warnings(draft)["lines"])
 
     assert notice["kept"] == ["9701-MAG-4K"]
-    assert _line(draft, "9701-MAG-4K").final_sales_price_jpy == 6626719
+    assert _line(draft, "9701-MAG-4K").final_sales_price_jpy == 6627000
     assert kinds.get("fx_final_kept") == 1
     assert "fx_final_kept" in WORKSPACE["warning_kinds"]
 

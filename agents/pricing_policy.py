@@ -1,6 +1,7 @@
 import math
 import re
 from collections import defaultdict
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Optional, Sequence
 
 from models import (
@@ -35,6 +36,8 @@ ROUND_RE = re.compile(
     re.IGNORECASE,
 )
 COMPARISON_TOLERANCE_JPY = 0.5
+# Customer-facing JPY sales prices are quoted in whole thousands (ROUND_HALF_UP). Costs keep full precision.
+CUSTOMER_PRICE_QUANTUM_JPY = Decimal("1000")
 # The JPY row of a SpaceOne master item converts the USD MSRP row with the sheet rate cell (F2).
 JPY_MSRP_ROW_RE = re.compile(r"^=E(?P<row>\d+)\*\$F\$2$", re.IGNORECASE)
 
@@ -279,6 +282,18 @@ def apply_rounding(
     if method == RoundingMethod.ROUND_DOWN:
         return math.floor(value / step) * step
     return value
+
+
+def round_customer_price_jpy(value: Optional[float]) -> Optional[float]:
+    """Round a customer-facing JPY price to the nearest 1,000 JPY, half up. Python round() is not used."""
+    if value is None:
+        return None
+    units = (Decimal(str(value)) / CUSTOMER_PRICE_QUANTUM_JPY).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    return float(units * CUSTOMER_PRICE_QUANTUM_JPY)
+
+
+def is_customer_price_unit(value: Optional[float]) -> bool:
+    return value is not None and Decimal(str(value)) % CUSTOMER_PRICE_QUANTUM_JPY == 0
 
 
 def standard_sales_price_jpy(

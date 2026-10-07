@@ -510,6 +510,7 @@
       "apply_manual_price_button": "Apply manual price",
       "shipping_price_label": "International shipping sales price",
       "apply_shipping_price_button": "Apply shipping sales price",
+      "shipping_price_not_thousand": "Enter the shipping sales price in units of 1,000 JPY.",
       "load_historical_preview": "Show historical preview",
       "no_quote_draft": "No quote draft yet.",
       "draft_statuses": {
@@ -784,6 +785,7 @@
         },
         "adjustment_errors": {
           "amount_invalid": "Enter the case sales price as a number of 0 or more.",
+          "amount_not_thousand": "Enter the case sales price in units of 1,000 JPY.",
           "reason_required": "Select an adjustment reason because the price differs from the standard price.",
           "note_required": "Enter a note when Other is selected."
         },

@@ -242,7 +242,8 @@ def test_shipping_is_separate_and_supports_multiple_lines():
     assert product.landed_cost_jpy == round(10434.6 * 170 * 1.13, 4)
     assert product.landed_cost_jpy != product.dealer_cost_jpy + lines[0].cost_jpy
     assert economics.shipping_cost_total_jpy == round((2922.15 + 1356.0) * 170, 4)
-    assert economics.shipping_sales_total_jpy == round((2922.15 + 1356.0) * 170 * 1.2, 4)
+    # Each customer shipping price is quoted in thousands: 596,118.6 -> 596,000 and 276,624 -> 277,000.
+    assert economics.shipping_sales_total_jpy == 596000 + 277000
     assert september_dealer_update_shipping_rate(ShippingType.LARGE_BOX) == 2922.15
     assert supplier_quote_shipping_rate(ShippingType.LARGE_BOX) == 2922.0
     assert september_dealer_update_shipping_rate(ShippingType.LARGE_BOX) != supplier_quote_shipping_rate(

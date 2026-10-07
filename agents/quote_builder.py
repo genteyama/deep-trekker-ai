@@ -6,7 +6,12 @@ import math
 
 from agents.quote_dates import default_issue_date, default_valid_until, to_iso_date
 from agents.landed_cost import _round_money, reprice_product_cost_line, reprice_shipping_line
-from agents.pricing_policy import parse_exchange_rate, standard_sales_price_jpy
+from agents.pricing_policy import (
+    is_customer_price_unit,
+    parse_exchange_rate,
+    round_customer_price_jpy,
+    standard_sales_price_jpy,
+)
 from agents.sku_link import price_source_type_of
 from models import (
     CustomerPresentationMode,
@@ -871,6 +876,14 @@ def _apply_standard_candidate(
     sku = line.manufacturer_sku or line.line_id
     if policy_type == PricingPolicyType.FIXED_JPY:
         line.pricing_fixed_price_jpy = candidate.fixed_price_jpy
+        if candidate.fixed_price_jpy is not None and not is_customer_price_unit(candidate.fixed_price_jpy):
+            # A master fixed price is never rounded into a different price; it goes to human review instead.
+            line.standard_sales_price_candidate_id = None
+            line.warnings.append(
+                f"{sku}: {CANDIDATE_NOT_APPLIED_MARKER}: fixed price {candidate.fixed_price_jpy} JPY "
+                "is not in 1,000 JPY units and needs manual review."
+            )
+            return
     elif policy_type == PricingPolicyType.MSRP_MULTIPLIER:
         line.pricing_multiplier = candidate.multiplier
         snapshot_msrp = line.manufacturer_price_snapshot.manufacturer_msrp_usd if line.manufacturer_price_snapshot else None
@@ -903,6 +916,9 @@ def _apply_standard_candidate(
         line.standard_sales_price_candidate_id = None
         line.warnings.append(f"{sku}: {CANDIDATE_NOT_APPLIED_MARKER}: standard sales price could not be calculated.")
         return
+    if policy_type == PricingPolicyType.MSRP_MULTIPLIER:
+        # The customer standard price is quoted in thousands. A FIXED_JPY master price is kept as defined.
+        standard = round_customer_price_jpy(standard)
     line.standard_sales_price_candidate_jpy = standard
 
 

@@ -162,14 +162,14 @@ def test_standard_and_final_prices_are_separated_and_override_is_tracked():
     )
     updated = next(line for line in draft.configuration_lines if line.manufacturer_sku == "9680-BASE")
 
-    assert base.standard_sales_price_candidate_jpy == 3547764
+    assert base.standard_sales_price_candidate_jpy == 3548000
     assert updated.final_sales_price_jpy == 3540000
     assert updated.final_price_status == FinalPriceStatus.MANUAL_OVERRIDE
-    assert updated.standard_sales_price_candidate_jpy == 3547764
+    assert updated.standard_sales_price_candidate_jpy == 3548000
     assert len(draft.adjustments) == len(before_adjustments) + 1
-    assert draft.adjustments[-1].original_price_jpy == 3547764
+    assert draft.adjustments[-1].original_price_jpy == 3548000
     assert draft.adjustments[-1].final_price_jpy == 3540000
-    assert draft.adjustments[-1].amount_jpy == -7764
+    assert draft.adjustments[-1].amount_jpy == -8000
 
 
 def test_historical_difference_does_not_create_adjustments_or_set_finals():
@@ -237,9 +237,9 @@ def test_complete_draft_uses_final_prices_for_margin_and_margin_warning_does_not
 
     assert draft.status == QuoteDraftStatus.READY_FOR_APPROVAL
     assert draft.economics_result.gross_margin_rate == round((sales - landed) / sales, 6)
-    assert draft.economics_result.product_sales_total_jpy == 3547764 + 160548 + 2309008 + 371025
+    assert draft.economics_result.product_sales_total_jpy == 3548000 + 161000 + 2309000 + 371000
     assert "below the entered reference" in " ".join(draft.warnings)
-    assert base.final_sales_price_jpy == 3547764
+    assert base.final_sales_price_jpy == 3548000
 
 
 def test_ihi_photon_and_mag_drafts_follow_golden_rules():
@@ -316,7 +316,7 @@ def test_v1_msrp_multiplier_line_uses_snapshot_msrp_quote_rate_and_keeps_provena
     draft = _v1_mag_draft(_mag_v1())
     mag = _line(draft, "9701-MAG-4K")
 
-    assert mag.standard_sales_price_candidate_jpy == 6626719
+    assert mag.standard_sales_price_candidate_jpy == 6627000
     assert mag.pricing_policy_type == PricingPolicyType.MSRP_MULTIPLIER
     assert mag.pricing_multiplier == 1.1
     assert mag.pricing_fixed_price_jpy is None
@@ -329,7 +329,7 @@ def test_v1_msrp_multiplier_line_uses_snapshot_msrp_quote_rate_and_keeps_provena
     mag = _line(draft, "9701-MAG-4K")
 
     assert mag.manufacturer_price_snapshot.manufacturer_msrp_usd == 35437
-    assert mag.standard_sales_price_candidate_jpy == 6236912
+    assert mag.standard_sales_price_candidate_jpy == 6237000
     assert mag.pricing_multiplier == 1.1
 
 
@@ -355,7 +355,7 @@ def test_v1_cross_sheet_sku_uses_only_the_configuration_sheet():
 
     assert cygnus.pricing_source_sheet == "MAG"
     assert cygnus.pricing_multiplier == 1.25
-    assert cygnus.standard_sales_price_candidate_jpy == round(10448 * 170 * 1.25, 4)
+    assert cygnus.standard_sales_price_candidate_jpy == 2220000  # 10448 * 170 * 1.25 = 2,220,200 -> thousands
 
 
 def test_v1_cross_sheet_sku_without_configuration_sheet_is_not_chosen():
@@ -415,8 +415,8 @@ def test_v1_rate_change_never_changes_final_sales_price():
     apply_exchange_rate(draft, 160, sales_candidates=_mag_v1(160.0))
     line = _line(draft, "9701-MAG-4K")
 
-    assert line.standard_sales_price_candidate_jpy == 6236912
-    assert line.final_sales_price_jpy == 6626719
+    assert line.standard_sales_price_candidate_jpy == 6237000
+    assert line.final_sales_price_jpy == 6627000
 
 
 def test_v1_legacy_draft_without_policy_fields_still_loads():
@@ -430,4 +430,4 @@ def test_v1_legacy_draft_without_policy_fields_still_loads():
 
     assert len(new_fields) == 7
     assert all(line.pricing_policy_type is None for line in loaded.configuration_lines)
-    assert _line(loaded, "9701-MAG-4K").standard_sales_price_candidate_jpy == 6626719
+    assert _line(loaded, "9701-MAG-4K").standard_sales_price_candidate_jpy == 6627000

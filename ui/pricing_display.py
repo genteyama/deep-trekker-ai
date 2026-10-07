@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from agents.pricing_policy import parse_exchange_rate
+from agents.pricing_policy import is_customer_price_unit, parse_exchange_rate
 from agents.quote_builder import (
     CANDIDATE_NOT_APPLIED_MARKER,
     FINAL_PRICE_KEPT_MARKER,
@@ -153,6 +153,9 @@ def validate_final_price_input(line, amount_text, reason_code, reason_note) -> d
         amount = parse_amount(amount_text)
     except ValueError:
         return {"amount": None, "reason_code": None, "reason_note": None, "error": "amount_invalid"}
+    if not is_customer_price_unit(amount):
+        # Customer prices are quoted in thousands; the entry is refused rather than silently rounded.
+        return {"amount": amount, "reason_code": None, "reason_note": None, "error": "amount_not_thousand"}
     code = PriceAdjustmentReason(reason_code) if reason_code else None
     note = optional_text(reason_note)
     standard = getattr(line, "standard_sales_price_candidate_jpy", None)
