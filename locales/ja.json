@@ -759,6 +759,7 @@
           "not_calculable": "標準売価を計算できません",
           "special_formula": "特殊な価格式のため確認が必要です",
           "policy_unclassified": "価格Policyを判定できません",
+          "sales_policy_missing": "SpaceOne標準売価の設定がありません",
           "no_policy": "メーカーSKUを特定できません"
         },
         "standard_unset_note": "標準価格未確定です。案件売価は手入力で設定してください。",

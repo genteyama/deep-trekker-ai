@@ -759,6 +759,7 @@
           "not_calculable": "Standard sales price cannot be calculated",
           "special_formula": "Special price formula needs review",
           "policy_unclassified": "Pricing policy cannot be determined",
+          "sales_policy_missing": "No SpaceOne standard sales price is set",
           "no_policy": "Manufacturer SKU cannot be identified"
         },
         "standard_unset_note": "Standard price is not decided. Enter the case sales price manually.",

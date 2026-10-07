@@ -136,7 +136,43 @@ def test_manual_review_lines_show_review_with_japanese_reason():
     assert all(item["status"] == "REVIEW" and item["text"] == "要確認" for item in results.values())
     assert results["9701-MAG-4K"]["reason"] == "特殊な価格式のため確認が必要です"
     assert results["9735"]["reason"] == "同じSKUの価格候補が複数あります"
-    assert results["5608"]["reason"] == "メーカーSKUを特定できません"
+    # 5608 resolves to the manufacturer price book; only its SpaceOne policy was removed.
+    assert results["5608"]["reason"] == "SpaceOne標準売価の設定がありません"
+
+
+def test_review_reason_separates_missing_spaceone_policy_from_unresolved_manufacturer_sku():
+    draft = _v1_mag_draft(_mag_v1())
+    brush = _line(draft, "2601")
+    unresolved = brush.model_copy(update={"manufacturer_sku": "9680-EXPEET", "manufacturer_price_snapshot": None})
+    special = _line(draft, "9701-MAG-4K").model_copy(
+        update={
+            "manufacturer_sku": "10800PRO",
+            "pricing_policy_type": PricingPolicyType.MANUAL_REVIEW,
+            "standard_sales_price_candidate_jpy": None,
+        }
+    )
+    warnings_before = summarize_draft_warnings(draft)
+
+    results = {
+        line.manufacturer_sku: standard_price_basis(WORKSPACE, line)
+        for line in (brush, unresolved, special, _line(draft, "9701-MAG-4K"), _line(draft, "2604"))
+    }
+
+    # 2601: manufacturer SKU is known, no SpaceOne policy. Still REVIEW and no standard price is invented.
+    assert brush.manufacturer_price_snapshot is not None
+    assert brush.standard_sales_price_candidate_jpy is None
+    assert (results["2601"]["status"], results["2601"]["reason"]) == ("REVIEW", "SpaceOne標準売価の設定がありません")
+    assert (results["9680-EXPEET"]["status"], results["9680-EXPEET"]["reason"]) == (
+        "REVIEW",
+        "メーカーSKUを特定できません",
+    )
+    assert (results["10800PRO"]["status"], results["10800PRO"]["reason"]) == (
+        "REVIEW",
+        "特殊な価格式のため確認が必要です",
+    )
+    assert (results["9701-MAG-4K"]["status"], results["9701-MAG-4K"]["reason"]) == ("OK", None)
+    assert (results["2604"]["status"], results["2604"]["reason"]) == ("OK", None)
+    assert summarize_draft_warnings(draft) == warnings_before
 
 
 def test_standard_to_final_difference_and_rate_display():

@@ -8,6 +8,7 @@ from __future__ import annotations
 from typing import Optional
 
 from agents.pricing_policy import is_customer_price_unit, parse_exchange_rate
+from agents.sku_link import price_source_type_of
 from agents.quote_builder import (
     CANDIDATE_NOT_APPLIED_MARKER,
     FINAL_PRICE_KEPT_MARKER,
@@ -16,7 +17,7 @@ from agents.quote_builder import (
     apply_exchange_rate,
     apply_final_price,
 )
-from models import ExchangeRateReason, FinalPriceStatus, PriceAdjustmentReason, PricingPolicyType
+from models import ExchangeRateReason, FinalPriceStatus, PriceAdjustmentReason, PriceSourceType, PricingPolicyType
 
 SALES_MASTER_MISSING_MARKER = "SpaceOne price master (SO_MASTER) is not set"
 
@@ -104,6 +105,10 @@ def standard_review_reason(workspace: dict, line) -> str:
         return reasons.get("special_formula", "special_formula")
     if any(CANDIDATE_NOT_APPLIED_MARKER in item for item in warnings):
         return reasons.get("policy_unclassified", "policy_unclassified")
+    snapshot = getattr(line, "manufacturer_price_snapshot", None)
+    if snapshot is not None and price_source_type_of(snapshot) == PriceSourceType.OFFICIAL_PRICE_BOOK:
+        # The manufacturer SKU resolved to the official price book; only the SpaceOne policy is missing.
+        return reasons.get("sales_policy_missing", "sales_policy_missing")
     return reasons.get("no_policy", "no_policy")
 
 
