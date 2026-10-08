@@ -137,7 +137,11 @@ def render_recent_draft_list(
 
 
 def resume_draft_into_session(quote_draft_id: str, version: int, *, init_dates=None) -> bool:
-    loaded = get_quote_repository().get_draft(quote_draft_id, version)
+    repo = get_quote_repository()
+    if hasattr(repo, "forget_row_version"):
+        # Opening a draft makes the version loaded now the base for the next save.
+        repo.forget_row_version(quote_draft_id, version)
+    loaded = repo.get_draft(quote_draft_id, version)
     if loaded is None:
         return False
     apply_ui_state(

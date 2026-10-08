@@ -13,7 +13,7 @@ from agents.technical_case_persistence import (
 )
 from models import TechnicalCaseRecord, TechnicalCaseStatus
 from repositories.sqlite_technical_case_repository import SqliteTechnicalCaseRepository
-from repositories.technical_case_repository import TechnicalCaseRepositoryError
+from repositories.technical_case_repository import TechnicalCaseConflictError, TechnicalCaseRepositoryError
 from ui.technical_case_flow import (
     SESSION_ANALYSIS,
     SESSION_APPROVAL_BOARD,
@@ -108,6 +108,12 @@ def persist_technical_case(
         session[SESSION_SAVE_ERROR] = None
         _record_case_activity(repo, existing, saved, response_received=append_response_revision, completed=completed)
         return saved
+    except TechnicalCaseConflictError as error:
+        # Never overwrite another user's update; the conflict banner offers a reload.
+        session[SESSION_SAVE_STATUS] = "error"
+        session[SESSION_SAVE_ERROR] = str(error)
+        session["edit_conflict"] = {"kind": "technical_case", "key": error.key, "version": None}
+        return None
     except TechnicalCaseRepositoryError as error:
         session[SESSION_SAVE_STATUS] = "error"
         session[SESSION_SAVE_ERROR] = str(error)
@@ -115,6 +121,10 @@ def persist_technical_case(
 
 
 def resume_case_into_session(record: TechnicalCaseRecord, session) -> TechnicalCaseRun:
+    repo = session_get(session, SESSION_REPO)
+    if hasattr(repo, "mark_loaded"):
+        # Opening a case makes the version loaded now the base for the next save.
+        repo.mark_loaded(record.case_id)
     run = run_from_record(record)
     response_run = response_run_from_record(record)
     board = approval_board_from_dict(record.approval_board, response_run)

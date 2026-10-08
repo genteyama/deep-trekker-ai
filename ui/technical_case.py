@@ -2,6 +2,8 @@ from typing import Optional
 
 import streamlit as st
 
+from repositories.technical_case_repository import TechnicalCaseConflictError
+
 from agents.approval import (
     ERROR_ALREADY_APPLIED,
     ApprovalBoard,
@@ -441,7 +443,11 @@ def _render_case_lifecycle(texts: dict, page: dict) -> None:
     if action and record is not None:
         relation = st.session_state.pop("case_derive_relation", None)
         updated = apply_case_lifecycle(record, repo, action, relation_type=relation)
-        repo.save_case(updated)
+        try:
+            repo.save_case(updated)
+        except TechnicalCaseConflictError as error:
+            st.session_state["edit_conflict"] = {"kind": "technical_case", "key": error.key, "version": None}
+            st.rerun()
         from agents.activity_log import record_case_lifecycle
         from repositories.sqlite_activity_repository import SqliteActivityRepository
 

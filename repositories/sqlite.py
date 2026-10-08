@@ -41,6 +41,8 @@ def table_columns(connection: sqlite3.Connection, table: str) -> set[str]:
 
 
 def ensure_columns(connection: sqlite3.Connection, table: str, columns: dict[str, str]) -> None:
+    if getattr(connection, "is_postgres", False):
+        return
     existing = table_columns(connection, table)
     for name, definition in columns.items():
         if name in existing:
@@ -66,6 +68,15 @@ def lifecycle_where(view: str, *, completed_statuses: tuple[str, ...] = ("COMPLE
 
 
 def connect_sqlite(path: Optional[Path] = None) -> sqlite3.Connection:
+    # DATABASE_URL present -> central PostgreSQL for the default database; otherwise local SQLite (v1).
+    # An explicit non-default path (tests, tools) always stays SQLite.
+    from repositories.settings import database_url
+
+    url = database_url()
+    if url and (path is None or Path(path).resolve() == default_sqlite_path().resolve()):
+        from repositories.postgres import PostgresConnection
+
+        return PostgresConnection(url)
     resolved = Path(path) if path else default_sqlite_path()
     resolved.parent.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(resolved, check_same_thread=False)

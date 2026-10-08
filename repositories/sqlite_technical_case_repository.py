@@ -5,6 +5,8 @@ import sqlite3
 from typing import Optional
 
 from models import ManufacturerResponseRevision, TechnicalCaseRecord, TechnicalCaseStatus
+from repositories.actor import current_actor
+from repositories.postgres import is_postgres
 from repositories.quote_repository import SaveResult
 from repositories.sqlite import (
     connect_sqlite,
@@ -18,6 +20,7 @@ from repositories.sqlite import (
 )
 from repositories.technical_case_repository import (
     SCHEMA_VERSION,
+    TechnicalCaseConflictError,
     TechnicalCaseListItem,
     TechnicalCaseRepositoryError,
 )
@@ -48,12 +51,15 @@ class SqliteTechnicalCaseRepository:
         self.path = Path(path) if path else default_sqlite_path()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._connection = connect_sqlite(self.path)
+        self._row_versions: dict[str, int] = {}
         self._initialize()
 
     def close(self) -> None:
         self._connection.close()
 
     def _initialize(self) -> None:
+        if is_postgres(self._connection):
+            return
         self._connection.executescript(
             """
             CREATE TABLE IF NOT EXISTS technical_cases (
@@ -96,14 +102,18 @@ class SqliteTechnicalCaseRepository:
                 "deleted_at": "TEXT",
                 "parent_case_id": "TEXT",
                 "relation_type": "TEXT",
+                "created_by": "TEXT",
+                "updated_by": "TEXT",
+                "row_version": "INTEGER NOT NULL DEFAULT 1",
             },
         )
         self._connection.commit()
 
-    def save_case(self, record: TechnicalCaseRecord) -> SaveResult:
+    def save_case(self, record: TechnicalCaseRecord, *, expected_row_version: Optional[int] = None) -> SaveResult:
         now = now_iso()
+        actor = current_actor()
         existing = self._connection.execute(
-            "SELECT created_at FROM technical_cases WHERE case_id = ?",
+            "SELECT created_at, row_version FROM technical_cases WHERE case_id = ?",
             (record.case_id,),
         ).fetchone()
         created = existing["created_at"] if existing is not None else (record.created_at or now)
@@ -112,56 +122,86 @@ class SqliteTechnicalCaseRepository:
         payload["created_at"] = created
         payload["updated_at"] = updated
         payload["schema_version"] = SCHEMA_VERSION
+        columns = (
+            record.customer_name,
+            record.case_title,
+            record.status,
+            record.provider,
+            record.model,
+            dumps_json(payload),
+            updated,
+            record.archived_at,
+            record.deleted_at,
+            record.parent_case_id,
+            record.relation_type,
+        )
         try:
-            self._connection.execute(
-                """
-                INSERT INTO technical_cases (
-                    case_id, customer_name, case_title, status, provider, model,
-                    payload_json, created_at, updated_at, schema_version,
-                    archived_at, deleted_at, parent_case_id, relation_type
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(case_id) DO UPDATE SET
-                    customer_name = excluded.customer_name,
-                    case_title = excluded.case_title,
-                    status = excluded.status,
-                    provider = excluded.provider,
-                    model = excluded.model,
-                    payload_json = excluded.payload_json,
-                    updated_at = excluded.updated_at,
-                    archived_at = excluded.archived_at,
-                    deleted_at = excluded.deleted_at,
-                    parent_case_id = excluded.parent_case_id,
-                    relation_type = excluded.relation_type
-                """,
-                (
-                    record.case_id,
-                    record.customer_name,
-                    record.case_title,
-                    record.status,
-                    record.provider,
-                    record.model,
-                    dumps_json(payload),
-                    created,
-                    updated,
-                    SCHEMA_VERSION,
-                    record.archived_at,
-                    record.deleted_at,
-                    record.parent_case_id,
-                    record.relation_type,
-                ),
-            )
+            if existing is None:
+                self._connection.execute(
+                    """
+                    INSERT INTO technical_cases (
+                        customer_name, case_title, status, provider, model,
+                        payload_json, updated_at, archived_at, deleted_at, parent_case_id, relation_type,
+                        case_id, created_at, schema_version, created_by, updated_by, row_version
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+                    """,
+                    (*columns, record.case_id, created, SCHEMA_VERSION, actor, actor),
+                )
+                row_version = 1
+            else:
+                expected = expected_row_version
+                if expected is None:
+                    expected = self._row_versions.get(record.case_id, existing["row_version"])
+                # Optimistic lock: only the version this session loaded may be replaced.
+                cursor = self._connection.execute(
+                    """
+                    UPDATE technical_cases SET
+                        customer_name = ?, case_title = ?, status = ?, provider = ?, model = ?,
+                        payload_json = ?, updated_at = ?, archived_at = ?, deleted_at = ?,
+                        parent_case_id = ?, relation_type = ?,
+                        updated_by = ?, row_version = row_version + 1
+                    WHERE case_id = ? AND row_version = ?
+                    """,
+                    (*columns, actor, record.case_id, expected),
+                )
+                if cursor.rowcount != 1:
+                    self._connection.rollback()
+                    raise TechnicalCaseConflictError(record.case_id, expected)
+                row_version = expected + 1
             self._connection.commit()
+        except sqlite3.IntegrityError as error:
+            # Another session inserted the same case first.
+            self._connection.rollback()
+            raise TechnicalCaseConflictError(record.case_id, None) from error
         except sqlite3.Error as error:
             raise TechnicalCaseRepositoryError(f"Failed to save technical case: {error}") from error
-        return SaveResult(saved=True, skipped=False, updated_at=updated)
+        self._row_versions[record.case_id] = row_version
+        return SaveResult(saved=True, skipped=False, updated_at=updated, row_version=row_version)
+
+    def forget_row_version(self, case_id: str) -> None:
+        """Drop the loaded version so the next get_case becomes the editing base (reload)."""
+        self._row_versions.pop(case_id, None)
+
+    def mark_loaded(self, case_id: str) -> None:
+        current = self.get_row_version(case_id)
+        if current is not None:
+            self._row_versions[case_id] = current
+
+    def get_row_version(self, case_id: str) -> Optional[int]:
+        row = self._connection.execute(
+            "SELECT row_version FROM technical_cases WHERE case_id = ?", (case_id,)
+        ).fetchone()
+        return row["row_version"] if row is not None else None
 
     def get_case(self, case_id: str) -> Optional[TechnicalCaseRecord]:
         row = self._connection.execute(
-            "SELECT payload_json FROM technical_cases WHERE case_id = ?",
+            "SELECT payload_json, row_version FROM technical_cases WHERE case_id = ?",
             (case_id,),
         ).fetchone()
         if row is None:
             return None
+        # The first load in this session is the base version for optimistic locking.
+        self._row_versions.setdefault(case_id, row["row_version"])
         payload = loads_json(row["payload_json"])
         record = TechnicalCaseRecord.model_validate(payload)
         revisions = self._load_revisions(case_id)

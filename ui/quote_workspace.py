@@ -26,7 +26,7 @@ from agents.quote_builder import (
 from agents.quote_dates import date_widget_keys, format_quote_date
 from data.golden_cases.loader import IHI_QUOTE_001, load_quote_golden_case
 from models import CustomerPresentationMode, FinalPriceStatus, QuoteDraftStatus
-from repositories.quote_repository import QuoteRepositoryError
+from repositories.quote_repository import CONFLICT_MESSAGE, ConcurrentUpdateError, QuoteRepositoryError
 from ui.components.portal import (
     render_portal_section_title,
     render_product_choice_card,
@@ -904,6 +904,12 @@ def _save_draft(page: dict, draft, *, manual: bool, from_widgets: bool = True) -
             save_draft_now(get_quote_repository(), draft, st.session_state, from_widgets=from_widgets)
         else:
             maybe_autosave(get_quote_repository(), draft, st.session_state, from_widgets=from_widgets)
+    except ConcurrentUpdateError:
+        from ui.conflict import flag_conflict
+
+        st.session_state[SESSION_SAVE_ERROR] = CONFLICT_MESSAGE
+        flag_conflict("quote", draft.quote_draft_id, draft.quote_version)
+        st.error(CONFLICT_MESSAGE)
     except QuoteRepositoryError as error:
         st.session_state[SESSION_SAVE_ERROR] = str(error)
         st.error(workspace.get("save_failed", str(error)))

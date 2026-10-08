@@ -5,6 +5,7 @@ from typing import Optional
 from uuid import uuid4
 
 from models import CustomerRecord
+from repositories.postgres import is_postgres
 from repositories.sqlite import connect_sqlite, default_sqlite_path, now_iso
 
 
@@ -23,6 +24,8 @@ class SqliteCustomerRepository:
         self._connection.close()
 
     def _initialize(self) -> None:
+        if is_postgres(self._connection):
+            return
         self._connection.execute(
             """
             CREATE TABLE IF NOT EXISTS customers (

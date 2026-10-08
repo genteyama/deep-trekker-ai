@@ -5,7 +5,9 @@ from typing import Optional
 from uuid import uuid4
 
 from models import ActivityEvent
-from repositories.sqlite import connect_sqlite, default_sqlite_path, dumps_json, loads_json, now_iso
+from repositories.actor import current_actor
+from repositories.postgres import is_postgres
+from repositories.sqlite import connect_sqlite, default_sqlite_path, dumps_json, ensure_columns, loads_json, now_iso
 
 
 class SqliteActivityRepository:
@@ -19,6 +21,8 @@ class SqliteActivityRepository:
         self._connection.close()
 
     def _initialize(self) -> None:
+        if is_postgres(self._connection):
+            return
         self._connection.execute(
             """
             CREATE TABLE IF NOT EXISTS activity_events (
@@ -39,6 +43,7 @@ class SqliteActivityRepository:
         self._connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_activity_events_entity ON activity_events(entity_kind, entity_id, occurred_at DESC)"
         )
+        ensure_columns(self._connection, "activity_events", {"actor_email": "TEXT"})
         self._connection.commit()
 
     def append(self, event: ActivityEvent) -> ActivityEvent:
@@ -51,8 +56,8 @@ class SqliteActivityRepository:
             """
             INSERT INTO activity_events (
                 event_id, event_type, occurred_at, entity_kind, entity_id,
-                entity_version, customer_name, title, payload_json, schema_version
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                entity_version, customer_name, title, payload_json, schema_version, actor_email
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 stored.event_id,
@@ -65,6 +70,7 @@ class SqliteActivityRepository:
                 stored.title,
                 dumps_json(stored.payload),
                 stored.schema_version,
+                current_actor(),
             ),
         )
         self._connection.commit()

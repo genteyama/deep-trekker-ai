@@ -8,8 +8,20 @@ from models import ApprovedQuoteSnapshot, QuoteDraft
 SCHEMA_VERSION = 1
 
 
+CONFLICT_MESSAGE = "他のユーザーがこの案件を更新しました。最新状態を再読み込みしてから編集してください。"
+
+
 class QuoteRepositoryError(RuntimeError):
     pass
+
+
+class ConcurrentUpdateError(QuoteRepositoryError):
+    """Optimistic lock failure: the row changed after it was loaded. Nothing was written."""
+
+    def __init__(self, key: str, expected_row_version: Optional[int]):
+        super().__init__(CONFLICT_MESSAGE)
+        self.key = key
+        self.expected_row_version = expected_row_version
 
 
 @dataclass(frozen=True)
@@ -18,6 +30,7 @@ class SaveResult:
     skipped: bool
     updated_at: Optional[str] = None
     content_hash: Optional[str] = None
+    row_version: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -42,6 +55,7 @@ class LoadedDraft:
     ui_state: dict = field(default_factory=dict)
     updated_at: Optional[str] = None
     content_hash: Optional[str] = None
+    row_version: Optional[int] = None
 
 
 class QuoteRepository(Protocol):

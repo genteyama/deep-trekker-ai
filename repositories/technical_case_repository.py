@@ -4,13 +4,22 @@ from dataclasses import dataclass
 from typing import Optional, Protocol
 
 from models import ManufacturerResponseRevision, TechnicalCaseRecord
-from repositories.quote_repository import SaveResult
+from repositories.quote_repository import CONFLICT_MESSAGE, SaveResult
 
 SCHEMA_VERSION = 1
 
 
 class TechnicalCaseRepositoryError(RuntimeError):
     pass
+
+
+class TechnicalCaseConflictError(TechnicalCaseRepositoryError):
+    """Optimistic lock failure: the case changed after it was loaded. Nothing was written."""
+
+    def __init__(self, case_id: str, expected_row_version: Optional[int]):
+        super().__init__(CONFLICT_MESSAGE)
+        self.key = case_id
+        self.expected_row_version = expected_row_version
 
 
 @dataclass(frozen=True)

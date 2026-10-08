@@ -82,7 +82,7 @@ def import_price_master(
 
     sha256 = hashlib.sha256(data).hexdigest()
     existing = repo.find_by_sha(master_type, sha256)
-    if existing is not None and resolve_stored_path(repo, existing).is_file():
+    if existing is not None and materialize_stored_file(repo, existing).is_file():
         if existing.active:
             return PriceMasterImportOutcome(
                 status=PriceMasterImportStatus.ALREADY_ACTIVE, master_type=master_type, record=existing
@@ -219,7 +219,7 @@ def get_active_master(
     record = repo.get_active(PriceMasterType(master_type))
     if record is None:
         return None
-    path = resolve_stored_path(repo, record)
+    path = materialize_stored_file(repo, record)
     if not path.is_file():
         logger.error("price_master_file_missing type=%s import_id=%s", record.master_type.value, record.import_id)
         return None
@@ -312,6 +312,25 @@ def resolve_stored_path(repository: SqlitePriceMasterRepository, record: PriceMa
     if relative.is_absolute() or ".." in relative.parts:
         raise ValueError(f"Invalid stored price master path: {record.stored_path}")
     return repository.storage_root.joinpath(*relative.parts)
+
+
+def materialize_stored_file(repository: SqlitePriceMasterRepository, record: PriceMasterImport) -> Path:
+    """Local path for parsing. With central storage the PostgreSQL bytes are written to a local cache
+    after SHA-256 verification; the database row stays the Source of Truth."""
+    path = resolve_stored_path(repository, record)
+    if path.is_file() or not getattr(repository, "is_central", False):
+        return path
+    data = repository.get_file_bytes(record.import_id)
+    if data is None:
+        return path
+    if hashlib.sha256(data).hexdigest() != record.sha256:
+        logger.error("price_master_sha_mismatch type=%s import_id=%s", record.master_type.value, record.import_id)
+        return path
+    path.parent.mkdir(parents=True, exist_ok=True)
+    partial = path.with_name(f"{path.name}.{uuid4().hex}.part")
+    partial.write_bytes(data)
+    os.replace(partial, path)
+    return path
 
 
 def safe_display_filename(original_filename: Optional[str]) -> str:

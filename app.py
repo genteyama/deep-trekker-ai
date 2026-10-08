@@ -6,6 +6,8 @@ from dotenv import load_dotenv
 import streamlit as st
 
 from ui.activity_ledger import render_activity_ledger
+from ui.auth import render_identity, require_login
+from ui.conflict import render_conflict_banner
 from ui.home import render_home
 from ui.navigation import PAGE_ACTIVITY_LEDGER, PAGE_QUOTE_CONTROL, PAGE_TECHNICAL_CASE, get_current_page, init_navigation
 from ui.quote_control import render_quote_control
@@ -38,8 +40,12 @@ def main() -> None:
         layout="wide",
     )
     apply_light_theme()
+    if not require_login():
+        return
+    render_identity()
     render_brand_header()
     init_navigation()
+    render_conflict_banner()
 
     current_page = get_current_page()
     if current_page == PAGE_TECHNICAL_CASE:
