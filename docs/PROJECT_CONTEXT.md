@@ -2,7 +2,7 @@
 
 引き継ぎ用の要約。Source of Truth は Git / 現在コード（→ 2章）。
 
-Last updated: 2026-10-08（HEAD `1387fc7`）
+Last updated: 2026-10-08（HEAD `9ad88db`）
 
 ## 1. Project Purpose
 
@@ -31,7 +31,7 @@ PROJECT_CONTEXT とコードが矛盾した場合は、原則コード / Git を
 ## 3. Current Status
 
 - 現在 Phase: **Pricing Policy v1 / 見積・価格管理 Phase — Business Acceptance COMPLETE**
-- Price Master Data Quality: **DQ-3 COMPLETE**（2026-10-08、Production Price Master Registry 初回 Bootstrap 済み → 12章）。次は DQ-4
+- Price Master Data Quality: **DQ-4 COMPLETE**（2026-10-08、Production SO_MASTER 更新済み。AUTO 116 / REVIEW 2 / EXCLUDED 1 → 12章）。次は DQ-5（SO Master Price Reference Repair）
 - HEAD: `1387fc7 Document Pricing Policy v1 completion`（main = origin/main）
 - full pytest: 676 passed
 - working tree: clean
@@ -178,9 +178,11 @@ total    11,900,900
 
 ## 12. Price Master Data Quality / Production Registry
 
-判定: **DQ-3 COMPLETE**（2026-10-08）。DQ-1 COMPLETE / DQ-2 PASS / DQ-3A PASS / DQ-3B PASS。
+判定: **DQ-4 COMPLETE**（2026-10-08）。DQ-1 / DQ-2 / DQ-3 COMPLETE、DQ-4A / DQ-4B / DQ-4C PASS。
 
-### SO Master の修正（正式 Google Sheet で修正済み）
+現在の SO Master 分類（Production Registry の active master から）: **AUTO 116 / REVIEW 2 / EXCLUDED 1 / TOTAL 119**
+
+### DQ-3: SO Master の修正（正式 Google Sheet で修正済み）
 
 | Sheet | Cell | 修正前 | 修正後 |
 | --- | --- | --- | --- |
@@ -195,6 +197,19 @@ SO Master 121 行の分類（parse → reconcile → auto-link → `extract_pric
 | --- | --- | --- | --- | --- |
 | 修正前 | 103 | 17 | 1 | 121 |
 | 修正後 | 108 | 12 | 1 | 121 |
+
+### DQ-4: SO Master の修正（正式 Google Sheet で修正済み）
+
+残存 REVIEW を 12 → 2 に削減（AUTO 108 → 116、TOTAL 121 → 119）。FX 165 の標準売価:
+
+| 内容 | SKU | 結果 |
+| --- | --- | --- |
+| PHOTON DPK の merged SKU を修正 | `8560+9686+8808+8486-100+8552` | AUTO 4,331,000 円 |
+| PIVOT DPK 100M（フルキットとして確定） | `8560+8835+8808+8486-100` | AUTO 5,016,000 円 |
+| PIVOT DPK 300M（フルキットとして確定） | `8560+8835+8487+8486-300+5278` | AUTO 5,577,000 円 |
+| 日付化 SKU を Text SKU に正常化（PHOTON / PIVOT / REVOLUTION） | `9757-2` ×3 | AUTO 649,000 / 649,000 / 677,000 円 |
+| 8459 の重複を整理（PHOTON Row 18 側を正式採用、重複側を削除） | `8459` | AUTO 156,000 円 |
+| 2105-M3000D の重複を正式 1 行に整理 | `2105-M3000D` | AUTO 8,825,000 円 |
 
 ### Production Price Master Registry
 
@@ -212,9 +227,13 @@ Active Price Masters:
 | DT40 | `DT40-20261008T034155Z-60b1958a` | `f230c85c4ccb49c838abdb8cb11892fbd378d361ff1c926c6ef249e489ceedfe` |
 | PT30 | `PT30-20261008T034155Z-4663ccbd` | `34c0516e73675dd0daca8c6bda292078faacd01448b3627997c3efd51fc423f2` |
 | QUOTE_CALC | `QUOTE_CALC-20261008T034205Z-2fd41ea2` | `915fdf8cca8ace4ca9833cfbcd518f98d3d1b0b7f747f959646f347b54392412` |
-| SO_MASTER | `SO_MASTER-20261008T034206Z-32d7a8b0` | `0f603d4a434bbae7176513ca886c1738020ffb8b6a012b8e86209fbdce0a0f59` |
+| SO_MASTER | `SO_MASTER-20261008T051104Z-4f6c4b00` | `a7a3bfd87c6b5bd04c6786e2ff88e1e32c23300dace7f82009b6569e36e7bd06` |
 
-Production Registry の active master から確認した価格（FX 165）:
+- SO_MASTER は DQ-4C で更新。Validation VALID（118 items / 118 policies）、stored path `SO_MASTER/SO_MASTER-20261008T051104Z-4f6c4b00.xlsx`。source の absolute path には依存しない。
+- 旧 SO_MASTER `SO_MASTER-20261008T034206Z-32d7a8b0`（SHA-256 `0f603d4a434bbae7176513ca886c1738020ffb8b6a012b8e86209fbdce0a0f59`）は history と stored file を保持したまま inactive。
+- DQ-4C の前後で DT40 / PT30 / QUOTE_CALC、既存業務 6 table、コードは不変。
+
+Regression として維持を確認した価格（FX 165、Production Registry の active master から）:
 
 | SKU | 標準売価 |
 | --- | --- |
@@ -235,7 +254,13 @@ Production Registry の active master から確認した価格（FX 165）:
 
 ### Rollback
 
-- 初回 Bootstrap のため、旧 Master version への rollback は存在しない（Registry に deactivate API もない）。
+SO Master の rollback（通常はこちらを優先）:
+
+- 旧 version `SO_MASTER-20261008T034206Z-32d7a8b0` を正式な activate 経路で再 activate する（同じ bytes を `import_price_master` に渡すと REACTIVATED になる）。DB の直接編集はしない。
+
+pre-bootstrap 状態への復旧（DQ-3B 以前に戻す場合のみ）:
+
+- Registry に deactivate API はないため、Registry 自体を無かった状態に戻すには DB backup を使う。
 - pre-bootstrap backup（repo 外・read-only）: `/Users/user/AI_Work/deep-trekker-ai-backups/20261008_price_master_pre_bootstrap/deep_trekker_before_price_master_bootstrap.sqlite3`
   - SHA-256: `524ac59fd93c1c0fb86d0a87e6183c5ddf2e2ebe481b385594243b5287cc3f14`
 - pre-bootstrap 状態へ戻す手順:
@@ -246,16 +271,23 @@ Production Registry の active master から確認した価格（FX 165）:
   5. Registry が存在しないことを確認する
 - 通常運用ではこの rollback は実行しない。
 
-### 残存 REVIEW（12 件）
+### 残存 REVIEW（2 件）
 
-- 10800PRO（intentional MANUAL_REVIEW。現時点では修正対象外）
-- 8459 ×2
-- PHOTON DPK merged SKU
-- 2105-M3000D ×2
-- 9685
-- 9263-100
-- 9263-300
-- blank / unusable SKU ×3
+1. 10800PRO: intentional MANUAL_REVIEW。修正対象外。
+2. 9685: SKU_NOT_FOUND。Manufacturer の確認待ち。類似 SKU から推測して修正しない。
+
+### Known Data Quality Issue: SO Master の価格参照
+
+- SO Master の Manufacturer 価格参照式（`IMPORTRANGE`）に大規模なずれがある。DQ-4A の監査では、79 references のうち 49 references が別 SKU の row を参照している可能性が高い。既知の PRICE_MISMATCH は 34 行。
+- Production の見積価格は Manufacturer Master の official MSRP を使うため、現在の見積候補は正常。
+- ただし人が SO Master を直接見たときに、誤った価格を見るリスクがある。DQ-5 で扱う（→ 15章）。
+
+### Workbook Format Note
+
+- DQ-4 修正後の export では、SKU 列 B が Text format になり、約 1,000 行まで empty formatted cells がある。
+- parser の結果には影響せず、不要な行から item は生成されない。
+- Text 化は SKU の日付誤変換を防ぐ点で安全。
+- empty formatting の cleanup は必要なら別途行う。DQ-5 の価格参照修正と混ぜて、不用意に範囲を広げない。
 
 ## 13. Test Baseline
 
@@ -287,20 +319,14 @@ v1 完了を止めないもの:
 - `exchange_rate_set_at`: UI の `submit_exchange_rate` が設定日時を渡しておらず、Approved Snapshot では None。採用為替をいつ決めたかの監査情報として追加を検討する。
 - `PriceAdjustment.entered_by`: UI から入力者を渡しておらず None。誰が案件価格を設定したかの監査情報として追加を検討する。
 
-### Price Master Data Quality DQ-4
+### Price Master Data Quality DQ-5: SO Master Price Reference Repair
 
-残存 REVIEW（→ 12章）のうち、intentional MANUAL（10800PRO）以外を原因別に解消する。
+目的: SO Master 上の Manufacturer 価格参照を正しい SKU / Manufacturer row に直し、人が Google Sheet 上で見ても誤った MSRP / Dealer / 試算価格を参照しない状態にする（→ 12章 Known Data Quality Issue）。
 
-優先:
-
-1. 8459 / 2105-M3000D の重複
-2. PHOTON DPK merged SKU
-3. 9263-100 / 9263-300
-4. 9685
-5. blank / unusable SKU ×3
-
-- 推測で修正しない。
-- fuzzy match で自動解決しない。正式 Master の修正を優先する。
+- Pricing engine のロジック変更ではない。Production の見積は現在正常。
+- まず audit する。いきなり 49 箇所を変更しない。
+- 推測で修正しない。fuzzy match で自動解決しない。
+- 9685 は Manufacturer の確認が取れ次第、別途扱う。
 
 ### Performance
 
@@ -313,7 +339,7 @@ Pricing Policy v1 には追加せず、別 Phase として扱う。
 
 優先候補:
 
-1. Price Master Data Quality DQ-4（DQ-3 まで COMPLETE）
+1. Price Master Data Quality DQ-5: SO Master Price Reference Repair（DQ-4 まで COMPLETE）
 2. Performance
 3. v1.1 Audit Trail
 
