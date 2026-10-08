@@ -2,7 +2,7 @@
 
 引き継ぎ用の要約。Source of Truth は Git / 現在コード（→ 2章）。
 
-Last updated: 2026-10-08（HEAD `9ad88db`）
+Last updated: 2026-10-08（HEAD `e746ca9`）
 
 ## 1. Project Purpose
 
@@ -30,11 +30,34 @@ PROJECT_CONTEXT とコードが矛盾した場合は、原則コード / Git を
 
 ## 3. Current Status
 
-- 現在 Phase: **Pricing Policy v1 / 見積・価格管理 Phase — Business Acceptance COMPLETE**
-- Price Master Data Quality: **DQ-4 COMPLETE**（2026-10-08、Production SO_MASTER 更新済み。AUTO 116 / REVIEW 2 / EXCLUDED 1 → 12章）。次は DQ-5（SO Master Price Reference Repair）
-- HEAD: `1387fc7 Document Pricing Policy v1 completion`（main = origin/main）
+- 現在 Phase: **v1 FIRST LAUNCH READY**（2026-10-08）
+- Launch commit: `e746ca9 Ignore SO Master helper sheets in parser`（main = origin/main）
 - full pytest: 678 passed
 - working tree: clean
+- Price Master Data Quality: **DQ-4 COMPLETE**（Production SO_MASTER 更新済み。AUTO 116 / REVIEW 2 / EXCLUDED 1 → 12章）。次は DQ-5（SO Master Price Reference Repair）
+
+### v1 First Launch Readiness（2026-10-08）
+
+判定: **PASS**。Production DB / price_masters の scratch コピー上で Streamlit AppTest により実施（Production DB・price_masters・outputs は前後で SHA-256 不変、外部通信 0）。
+
+- 起動: `streamlit run app.py` で起動エラーなし（health ok / HTTP 200）。
+- Quote: 9701-MAG-4K、FX 165 → 標準売価 6,432,000 円 → 顧客向け見積 → Review → Approval → 正式 PDF / Excel（合計 11,900,900 円）。再出力後も Approved Snapshot 不変。
+- 正式帳票は Approved Snapshot のみ（QuoteDraft からの出力は拒否）。PDF / Excel に Dealer / 原価 / MSRP / policy 等の内部情報なし。
+- 10800PRO: MANUAL_REVIEW（自動価格なし）。9685: SKU_NOT_FOUND → REVIEW（推測価格なし）。
+- Regression（FX 165）: 9701-MAX-4K 10,243,000 / 9680-EXPERT 5,262,000 / 7511-DC-NAV 19,314,000 / 2500-1 4,764,000 円。
+- Technical Case: 受付 → 要件整理 → 技術情報確認 → メーカー確認 → 回答整理（反映）→ 顧客回答 → 完了、保存。Activity Ledger の Word / PDF 出力。外部メール送信なし。
+- Production Registry: active 4 本（DT40 / PT30 / QUOTE_CALC / SO_MASTER `SO_MASTER-20261008T051104Z-4f6c4b00`）、すべて VALID（→ 12章）。
+
+Known limitations:
+
+- SO Google Sheet Manufacturer row references contain known mismatches. Until DQ-5 completion, quote price Source of Truth is application / Manufacturer Master, not SO displayed reference price.
+- 10800PRO: intentional MANUAL_REVIEW。
+- 9685: Manufacturer 確認待ち（REVIEW 維持）。
+
+Next:
+
+- 2026-10-09 から実業務を兼ねた v1 pilot operation。
+- DQ-5 hardening は運用を止めず別 Step で実施。
 
 ## 4. Current Main Capabilities
 
