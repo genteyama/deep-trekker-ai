@@ -2,7 +2,7 @@
 
 引き継ぎ用の要約。Source of Truth は Git / 現在コード（→ 2章）。
 
-Last updated: 2026-10-07（HEAD `c634c82`）
+Last updated: 2026-10-08（HEAD `1387fc7`）
 
 ## 1. Project Purpose
 
@@ -26,12 +26,13 @@ Last updated: 2026-10-07（HEAD `c634c82`）
 4. 過去チャット
 
 PROJECT_CONTEXT とコードが矛盾した場合は、原則コード / Git を優先する。
-ただし業務上の安全要件・禁止事項（→ 13章）は別途確認する。
+ただし業務上の安全要件・禁止事項（→ 14章）は別途確認する。
 
 ## 3. Current Status
 
 - 現在 Phase: **Pricing Policy v1 / 見積・価格管理 Phase — Business Acceptance COMPLETE**
-- HEAD: `c634c82 Clarify pricing review reasons`（main = origin/main）
+- Price Master Data Quality: **DQ-3 COMPLETE**（2026-10-08、Production Price Master Registry 初回 Bootstrap 済み → 12章）。次は DQ-4
+- HEAD: `1387fc7 Document Pricing Policy v1 completion`（main = origin/main）
 - full pytest: 676 passed
 - working tree: clean
 
@@ -139,6 +140,8 @@ Manufacturer MSRP × 採用為替 × SpaceOne multiplier
 
 REVIEW_REQUIRED のときは価格を推測しない（fail closed）。
 
+※ 9680-EXPEET は DQ-3 で正式 Master を 9680-EXPERT に修正済み（→ 12章）。表示文言の例として残している。
+
 ## 11. Final Business Acceptance
 
 判定: **PASS**（2026-10-07）
@@ -173,7 +176,88 @@ total    11,900,900
 - Step 2 → 3 → 2 を 2 往復して FX metadata の復元を確認。原価・標準売価・案件売価に意図しない変更はなかった。
 - 帳票を再出力しても Approved Snapshot は不変だった。
 
-## 12. Test Baseline
+## 12. Price Master Data Quality / Production Registry
+
+判定: **DQ-3 COMPLETE**（2026-10-08）。DQ-1 COMPLETE / DQ-2 PASS / DQ-3A PASS / DQ-3B PASS。
+
+### SO Master の修正（正式 Google Sheet で修正済み）
+
+| Sheet | Cell | 修正前 | 修正後 |
+| --- | --- | --- | --- |
+| MAG | B16 | 9701-VAC-4K | 9701-MAX-4K |
+| PHOTON | B14 | 9680-EXPEET | 9680-EXPERT |
+| REVOLUTION | B14 | 7511-DC-NA7511-DC-NAV | 7511-DC-NAV |
+| REVOLUTION | B42 | 日付化された値 | Text の SKU `2500-1` |
+
+SO Master 121 行の分類（parse → reconcile → auto-link → `extract_pricing_policies` → `simulate_sales_price_candidates` → quote-time policy resolution）:
+
+| | AUTO | REVIEW | EXCLUDED | TOTAL |
+| --- | --- | --- | --- | --- |
+| 修正前 | 103 | 17 | 1 | 121 |
+| 修正後 | 108 | 12 | 1 | 121 |
+
+### Production Price Master Registry
+
+DQ-3B で初回 Bootstrap 済み（それ以前の Acceptance / DQ はすべて scratch DB で実施）。
+
+- Production DB: `runtime/deep_trekker.sqlite3`
+- Production storage: `runtime/price_masters/`
+- Bootstrap で追加されたもの: `price_master_imports` table、`idx_price_master_imports_active`、`idx_price_master_imports_sha`、`runtime/price_masters/{DT40,PT30,QUOTE_CALC,SO_MASTER}/`
+- 既存業務 6 table（quote_drafts / approved_quote_snapshots / technical_cases / technical_case_response_revisions / activity_events / customers）の schema / content は不変（row count と canonical hash で確認）。
+
+Active Price Masters:
+
+| Type | import_id | SHA-256 |
+| --- | --- | --- |
+| DT40 | `DT40-20261008T034155Z-60b1958a` | `f230c85c4ccb49c838abdb8cb11892fbd378d361ff1c926c6ef249e489ceedfe` |
+| PT30 | `PT30-20261008T034155Z-4663ccbd` | `34c0516e73675dd0daca8c6bda292078faacd01448b3627997c3efd51fc423f2` |
+| QUOTE_CALC | `QUOTE_CALC-20261008T034205Z-2fd41ea2` | `915fdf8cca8ace4ca9833cfbcd518f98d3d1b0b7f747f959646f347b54392412` |
+| SO_MASTER | `SO_MASTER-20261008T034206Z-32d7a8b0` | `0f603d4a434bbae7176513ca886c1738020ffb8b6a012b8e86209fbdce0a0f59` |
+
+Production Registry の active master から確認した価格（FX 165）:
+
+| SKU | 標準売価 |
+| --- | --- |
+| 9701-MAX-4K | 10,243,000 円 |
+| 9680-EXPERT | 5,262,000 円 |
+| 7511-DC-NAV | 19,314,000 円 |
+| 2500-1 | 4,764,000 円 |
+| 9701-MAG-4K | 6,432,000 円 |
+
+- 10800PRO: MANUAL_REVIEW を維持。
+- 2601: Manufacturer Master には存在するが、SO row / SO Policy なしを維持。
+
+### Source File Independence
+
+- Downloads などの import 元ファイルは一時的な入力にすぎない。
+- import 後は Registry が管理する `runtime/price_masters/<TYPE>/<import_id>.xlsx` を使う。stored path は相対パスで、source の absolute path は保存しない。
+- 元ファイルを削除しても active master は利用できる（scratch Registry で元ファイルを rename して確認済み）。
+
+### Rollback
+
+- 初回 Bootstrap のため、旧 Master version への rollback は存在しない（Registry に deactivate API もない）。
+- pre-bootstrap backup（repo 外・read-only）: `/Users/user/AI_Work/deep-trekker-ai-backups/20261008_price_master_pre_bootstrap/deep_trekker_before_price_master_bootstrap.sqlite3`
+  - SHA-256: `524ac59fd93c1c0fb86d0a87e6183c5ddf2e2ebe481b385594243b5287cc3f14`
+- pre-bootstrap 状態へ戻す手順:
+  1. app を停止する
+  2. production DB を backup から復元する
+  3. `runtime/price_masters/` を退避する
+  4. app を再起動する
+  5. Registry が存在しないことを確認する
+- 通常運用ではこの rollback は実行しない。
+
+### 残存 REVIEW（12 件）
+
+- 10800PRO（intentional MANUAL_REVIEW。現時点では修正対象外）
+- 8459 ×2
+- PHOTON DPK merged SKU
+- 2105-M3000D ×2
+- 9685
+- 9263-100
+- 9263-300
+- blank / unusable SKU ×3
+
+## 13. Test Baseline
 
 - full pytest: 676 passed（`pytest -q`）
 - `git diff --check`: PASS
@@ -182,7 +266,7 @@ total    11,900,900
 
 テストは `tests/conftest.py` が test ごとに SQLite を tmp に分離し、LLM provider を mock 化する。
 
-## 13. Important Safety Rules
+## 14. Important Safety Rules
 
 - AI が価格・SKU・仕様を推測して確定しない。
 - 不明なときは REVIEW_REQUIRED / fail closed にする。
@@ -194,7 +278,7 @@ total    11,900,900
 - `git add .` は禁止。commit 前に対象ファイルを明示的に確認する。
 - 不可逆な処理・外部処理（送信・外部 API など）は Human in the Loop。
 
-## 14. Known Backlog
+## 15. Known Backlog
 
 v1 完了を止めないもの:
 
@@ -203,9 +287,19 @@ v1 完了を止めないもの:
 - `exchange_rate_set_at`: UI の `submit_exchange_rate` が設定日時を渡しておらず、Approved Snapshot では None。採用為替をいつ決めたかの監査情報として追加を検討する。
 - `PriceAdjustment.entered_by`: UI から入力者を渡しておらず None。誰が案件価格を設定したかの監査情報として追加を検討する。
 
-### Price Master Data Quality
+### Price Master Data Quality DQ-4
 
-- REVIEW_REQUIRED になる typo / merged SKU / exact-match できないデータを整理する。
+残存 REVIEW（→ 12章）のうち、intentional MANUAL（10800PRO）以外を原因別に解消する。
+
+優先:
+
+1. 8459 / 2105-M3000D の重複
+2. PHOTON DPK merged SKU
+3. 9263-100 / 9263-300
+4. 9685
+5. blank / unusable SKU ×3
+
+- 推測で修正しない。
 - fuzzy match で自動解決しない。正式 Master の修正を優先する。
 
 ### Performance
@@ -213,19 +307,19 @@ v1 完了を止めないもの:
 - 初回の Quote 作成に約 11 秒かかる。
 - 約 3MB の Workbook の再読込が主因の候補。import_id / SHA 単位の parsed master cache などを検討する。
 
-## 15. Next Phase Candidates
+## 16. Next Phase Candidates
 
 Pricing Policy v1 には追加せず、別 Phase として扱う。
 
 優先候補:
 
-1. Price Master Data Quality
+1. Price Master Data Quality DQ-4（DQ-3 まで COMPLETE）
 2. Performance
 3. v1.1 Audit Trail
 
 次 Phase を始める前に、業務上の優先順位を確認する。
 
-## 16. Development Rules
+## 17. Development Rules
 
 - repo 全体を毎回読まない。`rg` で探し、必要なファイルだけ読む。
 - targeted test を回し、Phase 終了時に full test を回す。
