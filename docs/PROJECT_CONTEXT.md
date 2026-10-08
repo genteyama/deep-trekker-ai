@@ -33,7 +33,7 @@ PROJECT_CONTEXT とコードが矛盾した場合は、原則コード / Git を
 - 現在 Phase: **Pricing Policy v1 / 見積・価格管理 Phase — Business Acceptance COMPLETE**
 - Price Master Data Quality: **DQ-4 COMPLETE**（2026-10-08、Production SO_MASTER 更新済み。AUTO 116 / REVIEW 2 / EXCLUDED 1 → 12章）。次は DQ-5（SO Master Price Reference Repair）
 - HEAD: `1387fc7 Document Pricing Policy v1 completion`（main = origin/main）
-- full pytest: 676 passed
+- full pytest: 678 passed
 - working tree: clean
 
 ## 4. Current Main Capabilities
@@ -289,9 +289,14 @@ pre-bootstrap 状態への復旧（DQ-3B 以前に戻す場合のみ）:
 - Text 化は SKU の日付誤変換を防ぐ点で安全。
 - empty formatting の cleanup は必要なら別途行う。DQ-5 の価格参照修正と混ぜて、不用意に範囲を広げない。
 
+### Helper sheet namespace（`_SRC_`）
+
+- sheet 名が `_SRC_` で始まる sheet は SO Master の helper sheet（Manufacturer data の参照用ミラー）。
+- parser（`parsers/spaceone_master_parser.py` `HELPER_SHEET_PREFIX`）は `_SRC_` sheet を price item source として parse しない。hidden / visible は判定に使わない。
+
 ## 13. Test Baseline
 
-- full pytest: 676 passed（`pytest -q`）
+- full pytest: 678 passed（`pytest -q`）
 - `git diff --check`: PASS
 - runtime / outputs / 元 Price Master: Acceptance の前後で変更なし（SHA-256 で確認）
 - API calls: 0

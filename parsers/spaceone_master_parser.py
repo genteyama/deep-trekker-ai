@@ -22,6 +22,8 @@ SHIPPING_MARKERS = (
     "輸送費",
 )
 HEADERISH_SKU = ("part number", "dtマスター", "価格表より")
+# Sheets named "_SRC_..." mirror manufacturer data for lookups inside the SO Master. They are never item sources.
+HELPER_SHEET_PREFIX = "_SRC_"
 IMPORT_RE = re.compile(
     r'IMPORTRANGE\(\s*"+(?P<url>[^"]+)"+\s*,\s*"+(?P<range>[^"]+)"+',
     re.IGNORECASE,
@@ -49,6 +51,8 @@ def parse_spaceone_master(
     counter = 0
     try:
         for formula_sheet, value_sheet in zip(formula_wb.worksheets, value_wb.worksheets):
+            if value_sheet.title.startswith(HELPER_SHEET_PREFIX):
+                continue
             header_row = _find_header_row(value_sheet)
             if header_row is None:
                 continue

@@ -1,6 +1,10 @@
 from datetime import datetime
+from io import BytesIO
+
+from openpyxl import load_workbook
 
 from agents.master_reconciliation import get_manufacturer_price_by_sku, reconcile_spaceone_master
+from agents.pricing_policy import extract_pricing_policies
 from agents.quote_control_agent import import_price_book
 from models import MatchStatus, SpaceOneValues
 from parsers.spaceone_master_parser import classify_spaceone_sku, parse_cell_reference, parse_spaceone_master
@@ -153,3 +157,45 @@ def test_cell_reference_parser_reads_importrange():
     assert ref.workbook == "PT30"
     assert ref.sheet == "A-200"
     assert ref.cell == "D54"
+
+
+def _with_mirror_sheet(title: str, *, hidden: bool = False) -> BytesIO:
+    # A manufacturer mirror laid out like DT40, header in row 1 and real SKUs, placed before the item sheets.
+    workbook = load_workbook(spaceone_master_book())
+    mirror = workbook.create_sheet(title, 0)
+    mirror.append([None, "Part Number", "Description", "MSRP", "Dealer"])
+    for sku, name, msrp, dealer in [
+        ("9680-BASE", "PHOTON BASE PACKAGE", 17391, 10434.6),
+        ("8459", "POWER PACK ASY, PHOTON", 787, 472.2),
+        ("9757-2", "BRIDGE BOX, ROV", 3280, 1968),
+        ("8560+9686+8808+8486-100+8552", "PHOTON DIRECT POWER KIT, 100M, WITH CASE", 20999, 12599.4),
+        ("2500-1", "BRIDGE CONSOLE ONLY, NO DPK", 26250, 15750),
+    ]:
+        mirror.append([None, sku, name, msrp, dealer])
+    if hidden:
+        mirror.sheet_state = "hidden"
+    buffer = BytesIO()
+    workbook.save(buffer)
+    buffer.seek(0)
+    return buffer
+
+
+def test_helper_sheets_are_not_parsed_as_items():
+    baseline = parse_spaceone_master(spaceone_master_book(), source_name="SO_MASTER")
+    for hidden in (False, True):
+        mirrored = parse_spaceone_master(_with_mirror_sheet("_SRC_DT40_PHOTON", hidden=hidden), source_name="SO_MASTER")
+
+        assert [item.model_dump() for item in mirrored.items] == [item.model_dump() for item in baseline.items]
+        assert {item.source_sheet for item in mirrored.items} == {"PHOTON"}
+        assert [policy.model_dump() for policy in extract_pricing_policies(mirrored.items)] == [
+            policy.model_dump() for policy in extract_pricing_policies(baseline.items)
+        ]
+
+
+def test_only_the_src_prefix_marks_a_helper_sheet():
+    baseline = parse_spaceone_master(spaceone_master_book(), source_name="SO_MASTER")
+    regular = parse_spaceone_master(_with_mirror_sheet("MAG"), source_name="SO_MASTER")
+    mag_skus = [item.normalized_sku for item in regular.items if item.source_sheet == "MAG"]
+
+    assert mag_skus == ["9680-BASE", "8459", "9757-2", "8560+9686+8808+8486-100+8552", "2500-1"]
+    assert len(regular.items) == len(baseline.items) + len(mag_skus)
