@@ -2,7 +2,7 @@
 
 引き継ぎ用の要約。Source of Truth は Git / 現在コード（→ 2章）。
 
-Last updated: 2026-10-09（v1.1.0 baseline `1512f22`。Phase A の commit は Git を正とする）
+Last updated: 2026-10-09（v1.1.0 baseline `1512f22`。Phase A / A.1 の commit は Git を正とする）
 
 ## 1. Project Purpose
 
@@ -30,10 +30,10 @@ PROJECT_CONTEXT とコードが矛盾した場合は、原則コード / Git を
 
 ## 3. Current Status
 
-- 現在 Phase: **v1.2 Phase A — Manufacturer Online Price Master Sync**（この変更。main へは未 push）
+- 現在 Phase: **v1.2 Phase A.1 — Manufacturer Price Source Registry / Admin UX**（main へは未 push）
 - v1.1.0 Online Multi-device MVP: **完成済み**。main baseline `1512f22112deff7f6d4b2512c273e5a2dac24ff9`（tag `v1.1.0`）
 - 旧記載の HEAD `e746ca9` はそれ以前の checkpoint。この文書とコードが矛盾する場合は Git / current code を優先
-- full pytest: 710 passed（`pytest -q`）
+- full pytest: 726 passed（`pytest -q`）
 - Price Master Data Quality: **DQ-4 COMPLETE**（Production SO_MASTER 更新済み。AUTO 116 / REVIEW 2 / EXCLUDED 1 → 12章）。次は DQ-5（SO Master Price Reference Repair）。DQ-5 は今回の Phase A に含めていない
 
 ### v1.2 Phase A: Manufacturer Online Price Master Sync
@@ -46,9 +46,14 @@ PROJECT_CONTEXT とコードが矛盾した場合は、原則コード / Git を
 - 比較は normalized SKU の完全一致と正式な価格列（Dealer Price / MSRP）。行番号・行順は価格変更にしない。SKU と価格が同じなら新しい Snapshot は作らない。
 - 同一 SKU で MSRP または Dealer Price が食い違う場合は reject し、既存 Active Master を維持する。シートをまたいで同一価格の SKU は、既存 parser どおり 1 SKU にまとめる。
 - 取得失敗、空、xlsx でない、parser 不能、必須列不足、想定外のブック構造、validation error では自動 activate しない。
-- 新しい設定（実 Source URL はコードにもこの文書にも無い。人が入れる）:
-  - `config/manufacturer_price_sources.json` の `DT40.url` / `PT30.url`（空なら未設定）
-  - 環境変数または Streamlit Secrets がファイルより優先: `DT40_ONLINE_PRICE_SOURCE_URL`、`PT30_ONLINE_PRICE_SOURCE_URL`
+- 通常運用の Source of Truth は PostgreSQL `manufacturer_price_sources`（ローカルは SQLite）。価格マスター管理の「オンライン価格表設定」から URL を保存する。URL 保存だけでは Snapshot / Active Master / Quote 価格は変わらない。
+- DB にまだ行がない初期移行時だけ、環境変数 / Streamlit Secrets → `config/manufacturer_price_sources.json` の順で bootstrap 値を読む。通常運用で複数箇所を編集しない。
+- Source は DT40 / PT30（正式利用）と SPECTRA_GOLD（`FUTURE`）。SPECTRA_GOLD は URL 保存と xlsx 接続確認だけで、`PriceMasterType`、Quote pricing、Pricing Policy には入れない。
+- Source Registry は URL、有効状態、parser profile、lifecycle、最終確認結果、updated_at / updated_by、row_version を保持し、古い画面からの更新を reject する。
+- PostgreSQL migration は更新後の `deploy/postgres_schema.sql` を既存 DB に再実行する（`CREATE TABLE IF NOT EXISTS` の追加のみ。既存テーブルは削除・変更しない）。
+- bootstrap 設定:
+  - 環境変数または Streamlit Secrets: `DT40_ONLINE_PRICE_SOURCE_URL`、`PT30_ONLINE_PRICE_SOURCE_URL`、`SPECTRA_GOLD_ONLINE_PRICE_SOURCE_URL`
+  - `config/manufacturer_price_sources.json` の各 `url`（空なら未設定）
   - export URL が非公開のときだけ任意: `DT40_ONLINE_PRICE_SOURCE_AUTHORIZATION`、`PT30_ONLINE_PRICE_SOURCE_AUTHORIZATION`
   - Google Spreadsheet の URL は、その spreadsheet の xlsx export に変換して取得する。Google API クライアントは使わない。
 - 新しい Snapshot の出所は、既存の import_id / sha256 / filename / validation に加え、`validation_summary.online_source`（source_id、source_url、fetched_at、filename、sha256）。ApprovedQuoteSnapshot の provenance は変更していない。
@@ -85,6 +90,7 @@ Next:
 | Quote / Pricing workflow | Step 1〜5（構成 → 原価・売価 → 顧客表示 → 承認 → 出力） | `ui/quote_workspace.py`, `agents/quote_builder.py` |
 | Activity Ledger | 作業履歴の記録・出力 | `agents/activity_log.py`, `ui/activity_ledger.py` |
 | Price Master Registry | DT40 / PT30 / SO_MASTER / QUOTE_CALC の検証・SHA 管理・有効化。DT40 / PT30 はオンライン価格表を確認し、人間の承認後にだけ新しい Snapshot を有効化する | `agents/price_master.py`, `agents/online_price_master.py` |
+| Manufacturer Price Source Registry | PostgreSQL / SQLite で DT40 / PT30 / SPECTRA_GOLD の URL・状態・監査情報・row_version を共有管理 | `repositories/manufacturer_price_source_repository.py`, `ui/price_master.py` |
 | Pricing Policy | SpaceOne 標準売価の解決 | `agents/pricing_policy.py` |
 | Exchange Rate provenance | 採用為替と市場参考為替・理由・設定者の保持 | `agents/quote_builder.py`, `ui/pricing_display.py` |
 | Customer Price Rounding | 顧客向け価格の 1,000 円単位丸め | `agents/pricing_policy.py` |
@@ -337,7 +343,7 @@ pre-bootstrap 状態への復旧（DQ-3B 以前に戻す場合のみ）:
 
 ## 13. Test Baseline
 
-- full pytest: 710 passed（`pytest -q`、2026-10-09 Phase A）
+- full pytest: 726 passed（`pytest -q`、2026-10-09 Phase A.1）
 - `git diff --check`: PASS
 - runtime / outputs / 元 Price Master: Acceptance の前後で変更なし（SHA-256 で確認）
 - API calls: 0

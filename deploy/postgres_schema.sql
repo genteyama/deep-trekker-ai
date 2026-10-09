@@ -126,6 +126,23 @@ CREATE TABLE IF NOT EXISTS price_master_imports (
 CREATE INDEX IF NOT EXISTS idx_price_master_imports_active ON price_master_imports(master_type, active);
 CREATE INDEX IF NOT EXISTS idx_price_master_imports_sha ON price_master_imports(master_type, sha256);
 
+CREATE TABLE IF NOT EXISTS manufacturer_price_sources (
+    id BIGSERIAL PRIMARY KEY,
+    source_key TEXT NOT NULL UNIQUE,
+    display_name TEXT NOT NULL,
+    source_url TEXT NOT NULL DEFAULT '',
+    enabled INTEGER NOT NULL DEFAULT 0,
+    parser_profile TEXT NOT NULL,
+    lifecycle_status TEXT NOT NULL,
+    last_checked_at TEXT,
+    last_check_status TEXT,
+    last_error TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    updated_by TEXT,
+    row_version INTEGER NOT NULL DEFAULT 1
+);
+
 -- Audit / locking columns for databases created before v1.1.
 ALTER TABLE technical_cases ADD COLUMN IF NOT EXISTS created_by TEXT;
 ALTER TABLE technical_cases ADD COLUMN IF NOT EXISTS updated_by TEXT;
@@ -140,4 +157,5 @@ ALTER TABLE price_master_imports ADD COLUMN IF NOT EXISTS file_bytes BYTEA;
 -- The app connects server-side with DATABASE_URL. Block the public Supabase REST API (anon key)
 -- from these tables without adding row-level policies.
 REVOKE ALL ON customers, technical_cases, technical_case_response_revisions, quote_drafts,
-    approved_quote_snapshots, activity_events, price_master_imports FROM anon, authenticated;
+    approved_quote_snapshots, activity_events, price_master_imports, manufacturer_price_sources
+    FROM anon, authenticated;

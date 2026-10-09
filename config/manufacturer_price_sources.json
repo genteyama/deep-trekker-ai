@@ -6,5 +6,9 @@
   "PT30": {
     "source_id": "PT30",
     "url": ""
+  },
+  "SPECTRA_GOLD": {
+    "source_id": "SPECTRA_GOLD",
+    "url": ""
   }
 }

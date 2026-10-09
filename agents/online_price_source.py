@@ -17,6 +17,12 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from models import PriceMasterType
+from repositories.manufacturer_price_source_repository import (
+    ManufacturerPriceSourceRepository,
+    SOURCE_DT40,
+    SOURCE_PT30,
+    SOURCE_SPECTRA_GOLD,
+)
 from repositories.settings import get_setting
 
 logger = logging.getLogger(__name__)
@@ -26,12 +32,14 @@ FETCH_TIMEOUT_SECONDS = 30
 MAX_BYTES = 25 * 1024 * 1024
 _SPREADSHEET_ID = re.compile(r"https://docs\.google\.com/spreadsheets/d/([a-zA-Z0-9-_]+)")
 _URL_ENV = {
-    PriceMasterType.DT40: "DT40_ONLINE_PRICE_SOURCE_URL",
-    PriceMasterType.PT30: "PT30_ONLINE_PRICE_SOURCE_URL",
+    SOURCE_DT40: "DT40_ONLINE_PRICE_SOURCE_URL",
+    SOURCE_PT30: "PT30_ONLINE_PRICE_SOURCE_URL",
+    SOURCE_SPECTRA_GOLD: "SPECTRA_GOLD_ONLINE_PRICE_SOURCE_URL",
 }
 _AUTH_ENV = {
-    PriceMasterType.DT40: "DT40_ONLINE_PRICE_SOURCE_AUTHORIZATION",
-    PriceMasterType.PT30: "PT30_ONLINE_PRICE_SOURCE_AUTHORIZATION",
+    SOURCE_DT40: "DT40_ONLINE_PRICE_SOURCE_AUTHORIZATION",
+    SOURCE_PT30: "PT30_ONLINE_PRICE_SOURCE_AUTHORIZATION",
+    SOURCE_SPECTRA_GOLD: "SPECTRA_GOLD_ONLINE_PRICE_SOURCE_AUTHORIZATION",
 }
 
 
@@ -41,15 +49,16 @@ class OnlinePriceFetchError(RuntimeError):
 
 @dataclass(frozen=True)
 class OnlinePriceSource:
-    master_type: PriceMasterType
+    master_type: Optional[PriceMasterType]
     source_id: str
     url: str
+    enabled: bool = True
     authorization: Optional[str] = None
     config_error: Optional[str] = None
 
     @property
     def configured(self) -> bool:
-        return not self.config_error and self.url.lower().startswith("https://")
+        return self.enabled and not self.config_error and self.url.lower().startswith("https://")
 
     @property
     def fetch_url(self) -> str:
@@ -78,18 +87,51 @@ def resolve_online_price_source(
     master_type: PriceMasterType,
     *,
     config_path: Optional[Path] = None,
+    source_repository: Optional[ManufacturerPriceSourceRepository] = None,
 ) -> OnlinePriceSource:
     master_type = PriceMasterType(master_type)
-    file_entry, config_error = _file_entry(master_type, config_path or CONFIG_PATH)
-    source_id = str(file_entry.get("source_id") or master_type.value)
-    configured_url = (get_setting(_URL_ENV.get(master_type, "")) or "").strip()
+    return resolve_registered_price_source(
+        master_type.value,
+        master_type=master_type,
+        config_path=config_path,
+        source_repository=source_repository,
+    )
+
+
+def resolve_registered_price_source(
+    source_key: str,
+    *,
+    master_type: Optional[PriceMasterType] = None,
+    config_path: Optional[Path] = None,
+    source_repository: Optional[ManufacturerPriceSourceRepository] = None,
+) -> OnlinePriceSource:
+    """DB is authoritative. Environment/secrets and JSON are bootstrap-only fallbacks."""
+    repository = source_repository or ManufacturerPriceSourceRepository()
+    try:
+        registered = repository.get(source_key)
+    except Exception as error:
+        logger.warning("online_price_source_registry_unavailable type=%s error=%s", source_key, type(error).__name__)
+        registered = None
+    if registered is not None:
+        return OnlinePriceSource(
+            master_type=master_type,
+            source_id=registered.source_key,
+            url=registered.source_url,
+            enabled=registered.enabled,
+            authorization=(get_setting(_AUTH_ENV.get(source_key, "")) or "").strip() or None,
+        )
+
+    file_entry, config_error = _file_entry(source_key, config_path or CONFIG_PATH)
+    source_id = str(file_entry.get("source_id") or source_key)
+    configured_url = (get_setting(_URL_ENV.get(source_key, "")) or "").strip()
     if not configured_url:
         configured_url = str(file_entry.get("url") or "").strip()
-    authorization = (get_setting(_AUTH_ENV.get(master_type, "")) or "").strip() or None
+    authorization = (get_setting(_AUTH_ENV.get(source_key, "")) or "").strip() or None
     return OnlinePriceSource(
         master_type=master_type,
         source_id=source_id,
         url=configured_url,
+        enabled=bool(configured_url),
         authorization=authorization,
         config_error=config_error,
     )
@@ -112,15 +154,15 @@ def fetch_workbook(source: OnlinePriceSource) -> FetchedWorkbook:
     return FetchedWorkbook(data=data, filename=filename, fetch_url=source.fetch_url)
 
 
-def _file_entry(master_type: PriceMasterType, path: Path) -> tuple[dict, Optional[str]]:
+def _file_entry(source_key: str, path: Path) -> tuple[dict, Optional[str]]:
     if not path.is_file():
         return {}, None
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        logger.warning("online_price_source_config_unreadable type=%s", master_type.value)
+        logger.warning("online_price_source_config_unreadable type=%s", source_key)
         return {}, "CONFIG_UNREADABLE"
-    entry = payload.get(master_type.value) if isinstance(payload, dict) else None
+    entry = payload.get(source_key) if isinstance(payload, dict) else None
     if not isinstance(entry, dict):
         return {}, None
     return entry, None

@@ -914,6 +914,22 @@ class PriceMasterImportOutcome(BaseModel):
     reason_code: Optional[str] = None
 
 
+class ManufacturerPriceSource(BaseModel):
+    source_key: str
+    display_name: str
+    source_url: str = ""
+    enabled: bool = False
+    parser_profile: str
+    lifecycle_status: str
+    last_checked_at: Optional[str] = None
+    last_check_status: Optional[str] = None
+    last_error: Optional[str] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+    updated_by: Optional[str] = None
+    row_version: int = 0
+
+
 class SkuLinkPreviewItem(BaseModel):
     spaceone_item_id: str
     spaceone_sku: Optional[str] = None

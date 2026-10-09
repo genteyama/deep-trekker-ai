@@ -5,6 +5,13 @@ from typing import Optional
 
 import streamlit as st
 
+from agents.manufacturer_price_source import (
+    CHECK_OK,
+    ManufacturerPriceSourceValidationError,
+    check_source_connection,
+    list_effective_sources,
+    save_source_setting,
+)
 from agents.online_price_master import (
     OnlinePriceReview,
     OnlinePriceReviewStatus,
@@ -15,6 +22,11 @@ from agents.online_price_source import resolve_online_price_source
 from agents.price_master import MANUFACTURER_MASTERS, get_active_master, import_price_master
 from agents.quote_dates import TOKYO
 from models import PriceMasterImport, PriceMasterImportOutcome, PriceMasterImportStatus, PriceMasterType
+from repositories.manufacturer_price_source_repository import (
+    ManufacturerPriceSourceConflictError,
+    ManufacturerPriceSourceRepositoryError,
+    ManufacturerPriceSourceRepository,
+)
 from repositories.sqlite_price_master_repository import SqlitePriceMasterRepository
 
 SESSION_PRICE_MASTER_FLASH = "price_master_flash"
@@ -44,8 +56,91 @@ def render_price_master_management(page: dict) -> None:
             level, text = flash
             (st.success if level == "success" else st.info if level == "info" else st.error)(text)
         repository = SqlitePriceMasterRepository()
+        source_repository = ManufacturerPriceSourceRepository()
+        _render_source_registry(labels, source_repository, repository)
         for master_type in PriceMasterType:
             _render_master_section(labels, master_type, repository)
+
+
+def _render_source_registry(labels: dict, source_repository, price_master_repository) -> None:
+    online = labels["online"]
+    st.markdown(f"### {online['settings_title']}")
+    st.caption(online["settings_safety"])
+    for source in list_effective_sources(source_repository):
+        version_key = f"manufacturer_source_version_{source.source_key}"
+        if version_key not in st.session_state:
+            st.session_state[version_key] = source.row_version
+        with st.container(border=True):
+            heading = source.display_name
+            if source.lifecycle_status == "FUTURE":
+                heading += f" — {online['future_status']}"
+            st.markdown(f"**{heading}**")
+            if source.lifecycle_status == "FUTURE":
+                st.caption(online["future_notice"])
+            state = online["enabled"] if source.enabled else online["disabled"]
+            st.write(f"{online['state_label']}：{state}")
+            st.write(
+                f"{online['checked_at_label']}：{format_imported_at(source.last_checked_at)} ／ "
+                f"{online['check_status_label']}：{source.last_check_status or online['not_checked']}"
+            )
+            url = st.text_input(
+                online["url_label"],
+                value=source.source_url,
+                key=f"manufacturer_source_url_{source.source_key}",
+            )
+            enabled = st.checkbox(
+                online["enabled_label"],
+                value=source.enabled,
+                key=f"manufacturer_source_enabled_{source.source_key}",
+            )
+            save_column, check_column = st.columns(2)
+            if save_column.button(online["save_url_button"], key=f"manufacturer_source_save_{source.source_key}"):
+                try:
+                    save_source_setting(
+                        source.source_key,
+                        url,
+                        enabled,
+                        expected_row_version=st.session_state[version_key],
+                        repository=source_repository,
+                    )
+                except ManufacturerPriceSourceValidationError:
+                    st.session_state[SESSION_PRICE_MASTER_FLASH] = ("error", online["invalid_url"])
+                except ManufacturerPriceSourceConflictError:
+                    st.session_state.pop(version_key, None)
+                    st.session_state[SESSION_PRICE_MASTER_FLASH] = ("error", online["conflict"])
+                except ManufacturerPriceSourceRepositoryError:
+                    st.session_state[SESSION_PRICE_MASTER_FLASH] = ("error", online["registry_unavailable"])
+                else:
+                    st.session_state.pop(version_key, None)
+                    st.session_state.pop(_review_key_for_source(source.source_key), None)
+                    st.session_state[SESSION_PRICE_MASTER_FLASH] = ("success", online["saved"])
+                st.rerun()
+            if check_column.button(online["connection_button"], key=f"manufacturer_source_check_{source.source_key}"):
+                try:
+                    updated, review = check_source_connection(
+                        source.model_copy(update={"row_version": st.session_state[version_key]}),
+                        source_repository=source_repository,
+                        price_master_repository=price_master_repository,
+                    )
+                except ManufacturerPriceSourceValidationError:
+                    st.session_state[SESSION_PRICE_MASTER_FLASH] = ("error", online["save_before_check"])
+                except ManufacturerPriceSourceConflictError:
+                    st.session_state.pop(version_key, None)
+                    st.session_state[SESSION_PRICE_MASTER_FLASH] = ("error", online["conflict"])
+                except ManufacturerPriceSourceRepositoryError:
+                    st.session_state[SESSION_PRICE_MASTER_FLASH] = ("error", online["registry_unavailable"])
+                else:
+                    st.session_state.pop(version_key, None)
+                    if review is not None:
+                        st.session_state[_review_key_for_source(source.source_key)] = review
+                    message = online["connection_ok"] if updated.last_check_status in CHECK_OK else online["connection_failed"]
+                    level = "success" if updated.last_check_status in CHECK_OK else "error"
+                    st.session_state[SESSION_PRICE_MASTER_FLASH] = (level, message)
+                st.rerun()
+
+
+def _review_key_for_source(source_key: str) -> str:
+    return f"online_price_review_{source_key}"
 
 
 def _render_master_section(labels: dict, master_type: PriceMasterType, repository: SqlitePriceMasterRepository) -> None:
@@ -91,7 +186,7 @@ def _render_master_section(labels: dict, master_type: PriceMasterType, repositor
 
 
 def _review_key(master_type: PriceMasterType) -> str:
-    return f"online_price_review_{master_type.value}"
+    return _review_key_for_source(master_type.value)
 
 
 def _render_online_review(labels: dict, master_type: PriceMasterType, repository, active: Optional[PriceMasterImport]) -> None:
