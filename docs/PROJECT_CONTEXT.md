@@ -30,10 +30,10 @@ PROJECT_CONTEXT とコードが矛盾した場合は、原則コード / Git を
 
 ## 3. Current Status
 
-- 現在 Phase: **v1.2 Phase A.1 — Manufacturer Price Source Registry / Admin UX**（main へは未 push）
+- 現在 Phase: **v1.2 Phase A.2 — Online Price Review stale activation protection**
 - v1.1.0 Online Multi-device MVP: **完成済み**。main baseline `1512f22112deff7f6d4b2512c273e5a2dac24ff9`（tag `v1.1.0`）
 - 旧記載の HEAD `e746ca9` はそれ以前の checkpoint。この文書とコードが矛盾する場合は Git / current code を優先
-- full pytest: 726 passed（`pytest -q`）
+- full pytest: 735 passed（`pytest -q`）
 - Price Master Data Quality: **DQ-4 COMPLETE**（Production SO_MASTER 更新済み。AUTO 116 / REVIEW 2 / EXCLUDED 1 → 12章）。次は DQ-5（SO Master Price Reference Repair）。DQ-5 は今回の Phase A に含めていない
 
 ### v1.2 Phase A: Manufacturer Online Price Master Sync
@@ -50,6 +50,7 @@ PROJECT_CONTEXT とコードが矛盾した場合は、原則コード / Git を
 - DB にまだ行がない初期移行時だけ、環境変数 / Streamlit Secrets → `config/manufacturer_price_sources.json` の順で bootstrap 値を読む。通常運用で複数箇所を編集しない。
 - Source は DT40 / PT30（正式利用）と SPECTRA_GOLD（`FUTURE`）。SPECTRA_GOLD は URL 保存と xlsx 接続確認だけで、`PriceMasterType`、Quote pricing、Pricing Policy には入れない。
 - Source Registry は URL、有効状態、parser profile、lifecycle、最終確認結果、updated_at / updated_by、row_version を保持し、古い画面からの更新を reject する。
+- Online review は確認時点の Active Master import_id と Source key / URL / enabled / row_version を固定する。承認時にいずれかが変わっていれば `ONLINE_REVIEW_STALE` で reject し、最新版の再確認を要求する。
 - PostgreSQL migration は更新後の `deploy/postgres_schema.sql` を既存 DB に再実行する（`CREATE TABLE IF NOT EXISTS` の追加のみ。既存テーブルは削除・変更しない）。
 - bootstrap 設定:
   - 環境変数または Streamlit Secrets: `DT40_ONLINE_PRICE_SOURCE_URL`、`PT30_ONLINE_PRICE_SOURCE_URL`、`SPECTRA_GOLD_ONLINE_PRICE_SOURCE_URL`
@@ -343,7 +344,7 @@ pre-bootstrap 状態への復旧（DQ-3B 以前に戻す場合のみ）:
 
 ## 13. Test Baseline
 
-- full pytest: 726 passed（`pytest -q`、2026-10-09 Phase A.1）
+- full pytest: 735 passed（`pytest -q`、2026-10-09 Phase A.2）
 - `git diff --check`: PASS
 - runtime / outputs / 元 Price Master: Acceptance の前後で変更なし（SHA-256 で確認）
 - API calls: 0

@@ -59,7 +59,7 @@ def render_price_master_management(page: dict) -> None:
         source_repository = ManufacturerPriceSourceRepository()
         _render_source_registry(labels, source_repository, repository)
         for master_type in PriceMasterType:
-            _render_master_section(labels, master_type, repository)
+            _render_master_section(labels, master_type, repository, source_repository)
 
 
 def _render_source_registry(labels: dict, source_repository, price_master_repository) -> None:
@@ -143,7 +143,12 @@ def _review_key_for_source(source_key: str) -> str:
     return f"online_price_review_{source_key}"
 
 
-def _render_master_section(labels: dict, master_type: PriceMasterType, repository: SqlitePriceMasterRepository) -> None:
+def _render_master_section(
+    labels: dict,
+    master_type: PriceMasterType,
+    repository: SqlitePriceMasterRepository,
+    source_repository: ManufacturerPriceSourceRepository,
+) -> None:
     st.markdown(f"#### {labels['labels'][master_type.value]}")
     active = repository.get_active(master_type)
     if active is None:
@@ -157,7 +162,7 @@ def _render_master_section(labels: dict, master_type: PriceMasterType, repositor
         )
         st.caption(f"{labels['validation_label']}：{format_validation(labels, active)}")
     if master_type in MANUFACTURER_MASTERS:
-        _render_online_review(labels, master_type, repository, active)
+        _render_online_review(labels, master_type, repository, source_repository, active)
     uploaded = st.file_uploader(labels["upload_label"], type=["xlsx"], key=f"price_master_upload_{master_type.value}")
     if st.button(labels["import_button"], key=f"price_master_import_{master_type.value}"):
         if uploaded is None:
@@ -189,9 +194,15 @@ def _review_key(master_type: PriceMasterType) -> str:
     return _review_key_for_source(master_type.value)
 
 
-def _render_online_review(labels: dict, master_type: PriceMasterType, repository, active: Optional[PriceMasterImport]) -> None:
+def _render_online_review(
+    labels: dict,
+    master_type: PriceMasterType,
+    repository,
+    source_repository,
+    active: Optional[PriceMasterImport],
+) -> None:
     online = labels["online"]
-    source = resolve_online_price_source(master_type)
+    source = resolve_online_price_source(master_type, source_repository=source_repository)
     configured = online["configured"] if source.configured else online["not_configured"]
     st.write(f"{online['source_label']}：{configured}")
     active_id = active.import_id if active is not None else online["unset"]
@@ -200,7 +211,11 @@ def _render_online_review(labels: dict, master_type: PriceMasterType, repository
     checked = format_imported_at(review.fetched_at) if isinstance(review, OnlinePriceReview) and review.fetched_at else online["not_checked"]
     st.write(f"{online['checked_at_label']}：{checked}")
     if st.button(online["check_button"], key=f"online_price_check_{master_type.value}"):
-        st.session_state[_review_key(master_type)] = review_manufacturer_online_price(master_type, repository=repository)
+        st.session_state[_review_key(master_type)] = review_manufacturer_online_price(
+            master_type,
+            repository=repository,
+            source=source,
+        )
         st.rerun()
     if not isinstance(review, OnlinePriceReview):
         return
@@ -232,8 +247,14 @@ def _render_online_review(labels: dict, master_type: PriceMasterType, repository
                 ]
             )
     if st.button(online["activate_button"], key=f"online_price_activate_{master_type.value}"):
-        outcome = activate_reviewed_online_price(review, repository=repository)
+        outcome = activate_reviewed_online_price(
+            review,
+            repository=repository,
+            source_repository=source_repository,
+        )
         if outcome.status == PriceMasterImportStatus.REJECTED:
+            if outcome.reason_code == "ONLINE_REVIEW_STALE":
+                st.session_state.pop(_review_key(master_type), None)
             st.session_state[SESSION_PRICE_MASTER_FLASH] = outcome_message(labels, outcome)
         else:
             st.session_state.pop(_review_key(master_type), None)

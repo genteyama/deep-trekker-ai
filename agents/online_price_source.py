@@ -53,6 +53,8 @@ class OnlinePriceSource:
     source_id: str
     url: str
     enabled: bool = True
+    source_key: Optional[str] = None
+    registry_row_version: Optional[int] = None
     authorization: Optional[str] = None
     config_error: Optional[str] = None
 
@@ -118,6 +120,8 @@ def resolve_registered_price_source(
             source_id=registered.source_key,
             url=registered.source_url,
             enabled=registered.enabled,
+            source_key=registered.source_key,
+            registry_row_version=registered.row_version,
             authorization=(get_setting(_AUTH_ENV.get(source_key, "")) or "").strip() or None,
         )
 
@@ -132,6 +136,8 @@ def resolve_registered_price_source(
         source_id=source_id,
         url=configured_url,
         enabled=bool(configured_url),
+        source_key=source_key,
+        registry_row_version=0,
         authorization=authorization,
         config_error=config_error,
     )

@@ -94,6 +94,8 @@ def check_source_connection(
         source_id=source.source_key,
         url=source.source_url,
         enabled=source.enabled,
+        source_key=source.source_key,
+        registry_row_version=source.row_version,
         authorization=resolved.authorization,
     )
     if source.source_key in {SOURCE_DT40, SOURCE_PT30}:
@@ -119,6 +121,12 @@ def check_source_connection(
         error=error,
         expected_row_version=source.row_version,
     )
+    if review is not None:
+        # record_check is itself a Registry update; the approved review must bind to its new version.
+        review.source_key = updated.source_key
+        review.source_url = online.fetch_url
+        review.source_enabled = updated.enabled
+        review.source_row_version = updated.row_version
     return updated, review
 
 

@@ -19,6 +19,7 @@ from agents.online_price_source import (
     OnlinePriceSource,
     fetch_workbook,
     resolve_online_price_source,
+    resolve_registered_price_source,
 )
 from agents.price_master import (
     MANUFACTURER_MASTERS,
@@ -33,6 +34,7 @@ from agents.price_master import (
 from models import PriceMasterImportOutcome, PriceMasterSourceType, PriceMasterType, SkuDuplicateClass
 from parsers.price_book_parser import CODE_MISSING_COLUMNS, normalize_sku
 from repositories.sqlite import now_iso
+from repositories.manufacturer_price_source_repository import ManufacturerPriceSourceRepository
 from repositories.sqlite_price_master_repository import SqlitePriceMasterRepository
 
 logger = logging.getLogger(__name__)
@@ -81,7 +83,10 @@ class OnlinePriceReview:
     status: OnlinePriceReviewStatus
     active_import_id: Optional[str] = None
     source_id: Optional[str] = None
+    source_key: Optional[str] = None
     source_url: Optional[str] = None
+    source_enabled: Optional[bool] = None
+    source_row_version: Optional[int] = None
     fetched_at: Optional[str] = None
     sha256: Optional[str] = None
     filename: Optional[str] = None
@@ -135,6 +140,10 @@ def review_manufacturer_online_price(
             OnlinePriceReviewStatus.NOT_CONFIGURED,
             active_id,
             source_id=source.source_id,
+            source_key=source.source_key or master_type.value,
+            source_url=source.fetch_url if source.url else None,
+            source_enabled=source.enabled,
+            source_row_version=source.registry_row_version,
             reason_code=source.config_error,
             fetched_at=now_iso(),
         )
@@ -152,7 +161,10 @@ def review_manufacturer_online_price(
             OnlinePriceReviewStatus.FETCH_FAILED,
             active_id,
             source_id=source.source_id,
+            source_key=source.source_key or master_type.value,
             source_url=source.fetch_url,
+            source_enabled=source.enabled,
+            source_row_version=source.registry_row_version,
             reason_code="FETCH_FAILED",
             fetched_at=now_iso(),
         )
@@ -180,14 +192,20 @@ def inspect_online_workbook(
     repo = repository or SqlitePriceMasterRepository()
     active_id = _active_import_id(master_type, repo)
     source_id = source.source_id if source else master_type.value
+    source_key = (source.source_key or master_type.value) if source else master_type.value
     source_url = source.fetch_url if source and source.configured else None
+    source_enabled = source.enabled if source else None
+    source_row_version = source.registry_row_version if source else None
     display_name = _online_filename(filename, master_type)
     fetched_at = fetched_at or now_iso()
     base = dict(
         master_type=master_type,
         active_import_id=active_id,
         source_id=source_id,
+        source_key=source_key,
         source_url=source_url,
+        source_enabled=source_enabled,
+        source_row_version=source_row_version,
         fetched_at=fetched_at,
         filename=display_name,
     )
@@ -246,15 +264,28 @@ def activate_reviewed_online_price(
     review: OnlinePriceReview,
     *,
     repository: Optional[SqlitePriceMasterRepository] = None,
+    source_repository: Optional[ManufacturerPriceSourceRepository] = None,
 ) -> PriceMasterImportOutcome:
     """Register the reviewed bytes only when the review found valid differences."""
     from agents.price_master import _rejected
 
     if review.status != OnlinePriceReviewStatus.CHANGES_PENDING or not review.data:
         return _rejected(review.master_type, "ONLINE_REVIEW_REQUIRED")
+    repo = repository or SqlitePriceMasterRepository()
+    try:
+        active_import_id = _active_import_id(review.master_type, repo)
+    except Exception:
+        logger.exception("online_price_active_stale_check_failed type=%s", review.master_type.value)
+        return _rejected(review.master_type, "ONLINE_REVIEW_STALE")
+    if active_import_id != review.active_import_id:
+        return _rejected(review.master_type, "ONLINE_REVIEW_STALE")
+    if not _source_is_current(review, source_repository):
+        return _rejected(review.master_type, "ONLINE_REVIEW_STALE")
     provenance = {
         "source_id": review.source_id,
+        "source_key": review.source_key,
         "source_url": review.source_url,
+        "source_row_version": review.source_row_version,
         "fetched_at": review.fetched_at,
         "filename": review.filename,
         "sha256": review.sha256,
@@ -263,9 +294,37 @@ def activate_reviewed_online_price(
         review.master_type,
         review.filename,
         review.data,
-        repository=repository,
+        repository=repo,
         source_type=PriceMasterSourceType.MANUFACTURER_ONLINE,
         provenance=provenance,
+    )
+
+
+def _source_is_current(
+    review: OnlinePriceReview,
+    source_repository: Optional[ManufacturerPriceSourceRepository],
+) -> bool:
+    # A review without Registry identity cannot prove that its source is still current.
+    if review.source_row_version is None:
+        return False
+    source_key = review.source_key or review.master_type.value
+    repository = source_repository or ManufacturerPriceSourceRepository()
+    try:
+        # Probe the Registry directly so an unavailable DB cannot silently fall back to bootstrap config.
+        repository.get(source_key)
+        current = resolve_registered_price_source(
+            source_key,
+            master_type=review.master_type,
+            source_repository=repository,
+        )
+    except Exception:
+        logger.exception("online_price_source_stale_check_failed type=%s", review.master_type.value)
+        return False
+    return (
+        current.source_key == source_key
+        and current.fetch_url == review.source_url
+        and current.enabled == review.source_enabled
+        and current.registry_row_version == review.source_row_version
     )
 
 

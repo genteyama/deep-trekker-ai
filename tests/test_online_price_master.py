@@ -10,11 +10,13 @@ from agents.online_price_master import (
     inspect_online_workbook,
     review_manufacturer_online_price,
 )
+from agents.manufacturer_price_source import save_source_setting
 from agents.online_price_source import OnlinePriceFetchError, OnlinePriceSource, xlsx_export_url
 from agents.price_master import get_active_master, import_price_master
 from agents.quote_builder import apply_exchange_rate
 from models import PriceMasterImportStatus, PriceMasterSourceType, PriceMasterType, PriceMasterValidationStatus
 from repositories.sqlite_price_master_repository import SqlitePriceMasterRepository
+from repositories.manufacturer_price_source_repository import ManufacturerPriceSourceRepository, SOURCE_DT40
 from tests.price_book_fixtures import build_workbook, missing_columns_price_book, official_pt30_style_book
 from tests.test_quote_builder import _line, _mag_v1, _v1_mag_draft
 
@@ -46,8 +48,28 @@ def _activate_base():
     return outcome.record
 
 
-def _review(data: bytes):
-    return inspect_online_workbook(PriceMasterType.DT40, data, filename="DT40-online.xlsx", source=SOURCE)
+def _review(data: bytes, source=SOURCE):
+    return inspect_online_workbook(PriceMasterType.DT40, data, filename="DT40-online.xlsx", source=source)
+
+
+def _registered_source():
+    repository = ManufacturerPriceSourceRepository()
+    record = save_source_setting(
+        SOURCE_DT40,
+        SOURCE.url,
+        True,
+        expected_row_version=0,
+        repository=repository,
+    )
+    source = OnlinePriceSource(
+        master_type=PriceMasterType.DT40,
+        source_id=record.source_key,
+        source_key=record.source_key,
+        url=record.source_url,
+        enabled=record.enabled,
+        registry_row_version=record.row_version,
+    )
+    return repository, source
 
 
 def _fetcher(data: bytes):
@@ -224,9 +246,10 @@ def test_validation_error_leaves_the_active_master_unchanged():
 def test_activation_keeps_the_previous_master_in_history():
     current = _activate_base()
     changed = {"PHOTON": [["9680-BASE", "PHOTON BASE", 100, 70, None], ["2535", "GAME PAD", 10, 10, None]]}
-    review = _review(_dt40(changed))
+    source_repository, source = _registered_source()
+    review = _review(_dt40(changed), source)
 
-    outcome = activate_reviewed_online_price(review)
+    outcome = activate_reviewed_online_price(review, source_repository=source_repository)
 
     assert outcome.status == PriceMasterImportStatus.ACTIVATED
     assert outcome.record.import_id != current.import_id
@@ -242,9 +265,10 @@ def test_activated_snapshot_keeps_sha_and_online_provenance():
     _activate_base()
     changed = {"PHOTON": [["9680-BASE", "PHOTON BASE", 110, 66, None], ["2535", "GAME PAD", 10, 10, None]]}
     data = _dt40(changed)
-    review = _review(data)
+    source_repository, source = _registered_source()
+    review = _review(data, source)
 
-    record = activate_reviewed_online_price(review).record
+    record = activate_reviewed_online_price(review, source_repository=source_repository).record
 
     assert record.sha256 == hashlib.sha256(data).hexdigest()
     assert record.sha256 == review.sha256
@@ -253,7 +277,7 @@ def test_activated_snapshot_keeps_sha_and_online_provenance():
     assert record.validation_status == PriceMasterValidationStatus.VALID
     assert record.validation_summary["sku_count"] == 2
     source = record.validation_summary["online_source"]
-    assert source["source_id"] == "DT40-manufacturer"
+    assert source["source_id"] == SOURCE_DT40
     assert source["source_url"] == SOURCE.fetch_url
     assert source["fetched_at"] == review.fetched_at
     assert source["filename"] == "DT40-online.xlsx"
