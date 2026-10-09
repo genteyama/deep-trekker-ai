@@ -40,6 +40,8 @@ CODE_IDENTITY_UNCONFIRMED = "SPECTRA_IDENTITY_UNCONFIRMED"
 CODE_NO_SKUS = "SPECTRA_NO_SKUS"
 CODE_PRICE_UNAVAILABLE = "SPECTRA_PRICE_UNAVAILABLE"
 CODE_PRICE_INVALID = "SPECTRA_PRICE_INVALID"
+CODE_PRICE_ZERO = "SPECTRA_PRICE_ZERO"
+CODE_PRICE_NEGATIVE = "SPECTRA_PRICE_NEGATIVE"
 CODE_DUPLICATE_CONFLICT = "SPECTRA_DUPLICATE_CONFLICT"
 
 
@@ -133,15 +135,37 @@ def _parse_row(
     notes = _text(_cell(values, columns.get("notes")))
     raw_msrp, msrp_explicit, msrp_invalid = _price(_cell(values, columns["spectra"]))
     raw_dealer, dealer_explicit, dealer_invalid = _price(_cell(values, columns["gold"]))
-    complete = msrp_explicit and dealer_explicit and not msrp_invalid and not dealer_invalid
+    raw_prices = (raw_msrp, raw_dealer)
+    has_negative = any(value is not None and value < 0 for value in raw_prices)
+    has_zero = any(value == 0 for value in raw_prices)
+    complete = (
+        msrp_explicit
+        and dealer_explicit
+        and not msrp_invalid
+        and not dealer_invalid
+        and not has_negative
+        and not has_zero
+    )
     msrp = raw_msrp if complete else None
     dealer = raw_dealer if complete else None
     if not complete:
+        if has_negative:
+            code = CODE_PRICE_NEGATIVE
+            message = "SPECTRA price is negative; manual review is required."
+        elif has_zero:
+            code = CODE_PRICE_ZERO
+            message = "SPECTRA price is explicitly zero; manual review is required."
+        elif msrp_invalid or dealer_invalid:
+            code = CODE_PRICE_INVALID
+            message = "SPECTRA price is invalid; manual review is required."
+        else:
+            code = CODE_PRICE_UNAVAILABLE
+            message = "SPECTRA price is incomplete; manual review is required."
         result.warnings.append(
             PriceBookIssue(
                 severity=ValidationSeverity.WARNING,
-                code=CODE_PRICE_INVALID if msrp_invalid or dealer_invalid else CODE_PRICE_UNAVAILABLE,
-                message="SPECTRA price is incomplete; manual review is required.",
+                code=code,
+                message=message,
                 sku=sku,
                 source_sheet=sheet_name,
                 details=f"row={row_number}",

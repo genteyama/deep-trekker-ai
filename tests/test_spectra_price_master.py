@@ -66,6 +66,31 @@ def _import_spectra(data=None, name="SPECTRA GOLD.xlsx"):
     return outcome.record
 
 
+def _draft_for_sku(sku, candidates):
+    scenario, _ = calculate_landed_cost_scenario(
+        scenario_id=f"spectra-{sku}",
+        case_id="SPECTRA",
+        name="SPECTRA",
+        exchange_rate=160,
+        policy=_policy(),
+        product_inputs=[{"sku": sku, "quantity": 1}],
+        shipping_lines=[],
+        insurance_mode=InsuranceMode.PERCENTAGE,
+        domestic_shipping_jpy=0,
+        price_book_candidates=candidates,
+    )
+    return build_quote_draft(
+        quote_draft_id=f"spectra-{sku}",
+        case_id="SPECTRA",
+        customer="x",
+        title="SPECTRA",
+        configuration_name="SPECTRA",
+        landed_scenario=scenario,
+        sales_candidates=[],
+        presentation={"product_presentations": [{"sku": sku, "presentation_mode": "SEPARATE_LINE"}]},
+    )
+
+
 def test_spectra_gold_is_a_manual_manufacturer_price_master_not_online_sync():
     assert PriceMasterType.SPECTRA_GOLD.value == "SPECTRA_GOLD"
     assert PriceMasterType.SPECTRA_GOLD in MANUFACTURER_MASTERS
@@ -82,11 +107,11 @@ def test_valid_spectra_manual_upload_activates_with_validation_summary():
     assert record.active is True
     assert record.validation_summary == {
         "sku_count": 6,
-        "priced_sku_count": 3,
-        "manual_review_count": 3,
+        "priced_sku_count": 2,
+        "manual_review_count": 4,
         "sheet_count": 1,
         "error_count": 0,
-        "warning_count": 3,
+        "warning_count": 4,
     }
     assert get_active_master(PriceMasterType.SPECTRA_GOLD).record.import_id == record.import_id
 
@@ -165,7 +190,7 @@ def test_exact_sku_lookup_does_not_use_similar_or_unknown_skus():
     assert get_manufacturer_price_by_sku("spectra0001", candidates) is None
 
 
-def test_missing_price_is_not_promoted_to_zero_cost_but_explicit_zero_pair_is_official():
+def test_missing_and_explicit_zero_prices_are_auditable_but_not_official():
     result = parse_spectra_gold(spectra_workbook())
     candidates = result.candidates
     missing = get_manufacturer_price_by_sku("MISSING-MSRP", candidates)
@@ -176,44 +201,39 @@ def test_missing_price_is_not_promoted_to_zero_cost_but_explicit_zero_pair_is_of
     assert missing.dealer_price_usd is None
     assert missing_occurrence.msrp_usd is None
     assert missing_occurrence.dealer_price_usd == 0
-    assert zero.msrp_usd == 0
-    assert zero.dealer_price_usd == 0
+    assert zero.msrp_usd is None
+    assert zero.dealer_price_usd is None
+    assert zero.occurrences[0].msrp_usd == 0
+    assert zero.occurrences[0].dealer_price_usd == 0
+    assert any(issue.code == "SPECTRA_PRICE_ZERO" and issue.sku == "ZERO-BOTH" for issue in result.warnings)
     assert create_quote_price_snapshot(
         "MISSING-MSRP", candidates, snapshot_id="missing"
     ).price_source_type == PriceSourceType.UNKNOWN
     assert create_quote_price_snapshot(
         "ZERO-BOTH", candidates, snapshot_id="zero"
-    ).price_source_type == PriceSourceType.OFFICIAL_PRICE_BOOK
+    ).price_source_type == PriceSourceType.UNKNOWN
+
+
+def test_negative_price_is_auditable_but_not_official():
+    result = parse_spectra_gold(spectra_workbook(first_msrp=-100, first_gold=70))
+    candidate = get_manufacturer_price_by_sku("SPECTRA0001", result.candidates)
+
+    assert candidate.msrp_usd is None
+    assert candidate.dealer_price_usd is None
+    assert candidate.occurrences[0].msrp_usd == -100
+    assert candidate.occurrences[0].dealer_price_usd == 70
+    assert any(
+        issue.code == "SPECTRA_PRICE_NEGATIVE" and issue.sku == "SPECTRA0001"
+        for issue in result.warnings
+    )
+    assert create_quote_price_snapshot(
+        "SPECTRA0001", result.candidates, snapshot_id="negative"
+    ).price_source_type == PriceSourceType.UNKNOWN
 
 
 def test_unpriced_spectra_line_has_no_landed_cost_and_blocks_approval():
     candidates = parse_spectra_gold(spectra_workbook()).candidates
-    scenario, _ = calculate_landed_cost_scenario(
-        scenario_id="spectra-missing",
-        case_id="SPECTRA",
-        name="SPECTRA",
-        exchange_rate=160,
-        policy=_policy(),
-        product_inputs=[{"sku": "MISSING-MSRP", "quantity": 1}],
-        shipping_lines=[],
-        insurance_mode=InsuranceMode.PERCENTAGE,
-        domestic_shipping_jpy=0,
-        price_book_candidates=candidates,
-    )
-    draft = build_quote_draft(
-        quote_draft_id="spectra-missing",
-        case_id="SPECTRA",
-        customer="x",
-        title="SPECTRA",
-        configuration_name="SPECTRA",
-        landed_scenario=scenario,
-        sales_candidates=[],
-        presentation={
-            "product_presentations": [
-                {"sku": "MISSING-MSRP", "presentation_mode": "SEPARATE_LINE"}
-            ]
-        },
-    )
+    draft = _draft_for_sku("MISSING-MSRP", candidates)
 
     line = draft.configuration_lines[0]
     assert line.dealer_price_usd is None
@@ -222,6 +242,26 @@ def test_unpriced_spectra_line_has_no_landed_cost_and_blocks_approval():
     assert line.standard_sales_price_candidate_jpy is None
     assert draft.status == QuoteDraftStatus.REVIEW_REQUIRED
     assert validate_for_approval(draft).can_approve is False
+
+
+def test_zero_and_negative_spectra_prices_block_quote_approval():
+    zero_candidates = parse_spectra_gold(spectra_workbook()).candidates
+    negative_candidates = parse_spectra_gold(
+        spectra_workbook(first_msrp=100, first_gold=-70)
+    ).candidates
+
+    for sku, candidates in (
+        ("ZERO-BOTH", zero_candidates),
+        ("SPECTRA0001", negative_candidates),
+    ):
+        draft = _draft_for_sku(sku, candidates)
+        line = draft.configuration_lines[0]
+
+        assert line.dealer_price_usd is None
+        assert line.dealer_cost_jpy is None
+        assert line.landed_cost_jpy is None
+        assert draft.status == QuoteDraftStatus.REVIEW_REQUIRED
+        assert validate_for_approval(draft).can_approve is False
 
 
 def test_only_spectra_sheet_enters_spectra_master():
