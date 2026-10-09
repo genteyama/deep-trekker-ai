@@ -87,6 +87,7 @@ class OnlinePriceReview:
     source_url: Optional[str] = None
     source_enabled: Optional[bool] = None
     source_row_version: Optional[int] = None
+    auth_mode: Optional[str] = None
     fetched_at: Optional[str] = None
     sha256: Optional[str] = None
     filename: Optional[str] = None
@@ -151,10 +152,11 @@ def review_manufacturer_online_price(
     try:
         fetched = fetch(source)
     except Exception as error:
+        reason_code = error.reason_code if isinstance(error, OnlinePriceFetchError) else "FETCH_FAILED"
         logger.warning(
-            "online_price_fetch_failed type=%s error=%s",
+            "online_price_fetch_failed type=%s reason=%s",
             master_type.value,
-            type(error).__name__ if not isinstance(error, OnlinePriceFetchError) else error,
+            reason_code,
         )
         return _failed(
             master_type,
@@ -165,7 +167,7 @@ def review_manufacturer_online_price(
             source_url=source.fetch_url,
             source_enabled=source.enabled,
             source_row_version=source.registry_row_version,
-            reason_code="FETCH_FAILED",
+            reason_code=reason_code,
             fetched_at=now_iso(),
         )
     return inspect_online_workbook(
@@ -173,6 +175,7 @@ def review_manufacturer_online_price(
         fetched.data,
         filename=fetched.filename,
         source=source,
+        auth_mode=fetched.auth_mode,
         fetched_at=now_iso(),
         repository=repo,
     )
@@ -184,6 +187,7 @@ def inspect_online_workbook(
     *,
     filename: Optional[str] = None,
     source: Optional[OnlinePriceSource] = None,
+    auth_mode: Optional[str] = None,
     fetched_at: Optional[str] = None,
     repository: Optional[SqlitePriceMasterRepository] = None,
 ) -> OnlinePriceReview:
@@ -206,6 +210,7 @@ def inspect_online_workbook(
         source_url=source_url,
         source_enabled=source_enabled,
         source_row_version=source_row_version,
+        auth_mode=auth_mode,
         fetched_at=fetched_at,
         filename=display_name,
     )
@@ -286,6 +291,7 @@ def activate_reviewed_online_price(
         "source_key": review.source_key,
         "source_url": review.source_url,
         "source_row_version": review.source_row_version,
+        "auth_mode": review.auth_mode,
         "fetched_at": review.fetched_at,
         "filename": review.filename,
         "sha256": review.sha256,

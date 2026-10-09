@@ -2,7 +2,7 @@
 
 引き継ぎ用の要約。Source of Truth は Git / 現在コード（→ 2章）。
 
-Last updated: 2026-10-09（v1.1.0 baseline `1512f22`。Phase A / A.1 の commit は Git を正とする）
+Last updated: 2026-10-09（v1.1.0 baseline `1512f22`。Phase A〜A.3 の commit は Git を正とする）
 
 ## 1. Project Purpose
 
@@ -30,10 +30,10 @@ PROJECT_CONTEXT とコードが矛盾した場合は、原則コード / Git を
 
 ## 3. Current Status
 
-- 現在 Phase: **v1.2 Phase A.2 — Online Price Review stale activation protection**
+- 現在 Phase: **v1.2 Phase A.3 — Authenticated Google Manufacturer Price Source**
 - v1.1.0 Online Multi-device MVP: **完成済み**。main baseline `1512f22112deff7f6d4b2512c273e5a2dac24ff9`（tag `v1.1.0`）
 - 旧記載の HEAD `e746ca9` はそれ以前の checkpoint。この文書とコードが矛盾する場合は Git / current code を優先
-- full pytest: 735 passed（`pytest -q`）
+- full pytest: 753 passed（`pytest -q`）
 - Price Master Data Quality: **DQ-4 COMPLETE**（Production SO_MASTER 更新済み。AUTO 116 / REVIEW 2 / EXCLUDED 1 → 12章）。次は DQ-5（SO Master Price Reference Repair）。DQ-5 は今回の Phase A に含めていない
 
 ### v1.2 Phase A: Manufacturer Online Price Master Sync
@@ -55,9 +55,10 @@ PROJECT_CONTEXT とコードが矛盾した場合は、原則コード / Git を
 - bootstrap 設定:
   - 環境変数または Streamlit Secrets: `DT40_ONLINE_PRICE_SOURCE_URL`、`PT30_ONLINE_PRICE_SOURCE_URL`、`SPECTRA_GOLD_ONLINE_PRICE_SOURCE_URL`
   - `config/manufacturer_price_sources.json` の各 `url`（空なら未設定）
-  - export URL が非公開のときだけ任意: `DT40_ONLINE_PRICE_SOURCE_AUTHORIZATION`、`PT30_ONLINE_PRICE_SOURCE_AUTHORIZATION`
-  - Google Spreadsheet の URL は、その spreadsheet の xlsx export に変換して取得する。Google API クライアントは使わない。
-- 新しい Snapshot の出所は、既存の import_id / sha256 / filename / validation に加え、`validation_summary.online_source`（source_id、source_url、fetched_at、filename、sha256）。ApprovedQuoteSnapshot の provenance は変更していない。
+  - 非公開Google SpreadsheetはStreamlit Secretsの `[google_price_source_service_account]` を使用する。scopeはDrive read-only。秘密鍵・tokenはDB、provenance、ログへ保存しない。
+  - Google SpreadsheetはService Account設定時にDrive API v3 `files.export`でxlsx取得する。権限がない場合も、公開Sheetなら従来のpublic xlsx exportへfallbackする。`google-api-python-client`は使用しない。
+- 新しい Snapshot の出所は、既存の import_id / sha256 / filename / validation に加え、`validation_summary.online_source`（source_id、source_key、source_url、source row_version、fetched_at、filename、sha256、auth_mode）。ApprovedQuoteSnapshot のprovenanceは変更していない。
+- SPECTRA_GOLDは認証付きxlsx接続確認まで。引き続き`FUTURE`で、PriceMasterType / Quote pricing / Pricing Policyには追加していない。
 - Quote 価格式、為替、SO_MASTER、QUOTE_CALC、顧客最終価格、正式帳票は変更していない。9701-MAG-4K / FX 165 = 6,432,000 円を維持。
 
 ### v1 First Launch Readiness（2026-10-08）
@@ -344,7 +345,7 @@ pre-bootstrap 状態への復旧（DQ-3B 以前に戻す場合のみ）:
 
 ## 13. Test Baseline
 
-- full pytest: 735 passed（`pytest -q`、2026-10-09 Phase A.2）
+- full pytest: 753 passed（`pytest -q`、2026-10-09 Phase A.3）
 - `git diff --check`: PASS
 - runtime / outputs / 元 Price Master: Acceptance の前後で変更なし（SHA-256 で確認）
 - API calls: 0

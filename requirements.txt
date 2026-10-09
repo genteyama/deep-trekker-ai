@@ -10,3 +10,5 @@ pypdf>=5.0.0
 anthropic>=0.125.0,<1
 supabase>=2,<3
 psycopg[binary]>=3,<4
+google-auth>=2,<3
+requests>=2,<3

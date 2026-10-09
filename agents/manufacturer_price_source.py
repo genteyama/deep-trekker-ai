@@ -8,6 +8,7 @@ from openpyxl import load_workbook
 
 from agents.online_price_master import OnlinePriceReview, OnlinePriceReviewStatus, review_manufacturer_online_price
 from agents.online_price_source import (
+    OnlinePriceFetchError,
     OnlinePriceSource,
     fetch_workbook,
     resolve_registered_price_source,
@@ -135,6 +136,8 @@ def _check_future_workbook(source: OnlinePriceSource, *, fetcher=None) -> tuple[
         return "NOT_CONFIGURED", "NOT_CONFIGURED"
     try:
         fetched = (fetcher or fetch_workbook)(source)
+    except OnlinePriceFetchError as error:
+        return error.reason_code, error.reason_code
     except Exception:
         return "FETCH_FAILED", "FETCH_FAILED"
     if not fetched.data.startswith(XLSX_SIGNATURE):
