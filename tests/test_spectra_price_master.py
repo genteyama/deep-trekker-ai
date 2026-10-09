@@ -26,12 +26,12 @@ from tests.test_price_master_ui import _open_quote_page, _texts
 from tests.test_price_source_safety import _policy
 
 
-def _spectra_rows(*, first_msrp=1000, first_gold=700):
+def _spectra_rows(*, first_msrp=1000, first_gold=700, first_description="Spectra One"):
     return [
         ["Manufacturer’s Suggested Retail Price (USD)"],
         ["SPECTRA Dealer 30% Discount"],
         [None, "Part Number", "Description", "Spectra", "Gold", "Notes:"],
-        [None, "SPECTRA0001", "Spectra One", first_msrp, first_gold, "priced"],
+        [None, "SPECTRA0001", first_description, first_msrp, first_gold, "priced"],
         [None, "SPECTRA001", "Similar but distinct", 900, 630, None],
         [None, "MISSING-MSRP", "Missing MSRP", None, 0, "manual quote"],
         [None, "MISSING-GOLD", "Missing Gold", 500, None, "manual quote"],
@@ -40,10 +40,14 @@ def _spectra_rows(*, first_msrp=1000, first_gold=700):
     ]
 
 
-def spectra_workbook(*, first_msrp=1000, first_gold=700):
+def spectra_workbook(*, first_msrp=1000, first_gold=700, first_description="Spectra One"):
     return build_workbook(
         {
-            "SPECTRA": _spectra_rows(first_msrp=first_msrp, first_gold=first_gold),
+            "SPECTRA": _spectra_rows(
+                first_msrp=first_msrp,
+                first_gold=first_gold,
+                first_description=first_description,
+            ),
             "ONYX": [
                 ["Part Number", "Description", "MSRP", "SP_GOLD"],
                 ["ONYX-1", "Onyx must not enter SPECTRA", 9999, 6999.3],

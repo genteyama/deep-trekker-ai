@@ -1,4 +1,5 @@
 from datetime import datetime
+import logging
 
 import streamlit as st
 
@@ -24,6 +25,7 @@ from agents.quote_builder import (
     refresh_quote_draft,
 )
 from agents.quote_dates import date_widget_keys, format_quote_date
+from agents.spectra_quote_entry import SpectraQuoteEntryError
 from data.golden_cases.loader import IHI_QUOTE_001, load_quote_golden_case
 from models import CustomerPresentationMode, FinalPriceStatus, QuoteDraftStatus
 from repositories.quote_repository import CONFLICT_MESSAGE, ConcurrentUpdateError, QuoteRepositoryError
@@ -92,6 +94,8 @@ from ui.quote_steps import (
     shipping_customer_lines,
     sync_exchange_rate_editor,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def render_quote_workspace(page: dict, helpers: dict) -> None:
@@ -220,6 +224,66 @@ def _render_new_quote_buttons(page: dict, helpers) -> None:
         render_product_choice_card("MAG", page["ihi_mag_draft_button"])
         if st.button(page["ihi_mag_draft_button"], key="ihi_mag_draft", type="primary"):
             _create_draft(page, helpers, case, "MAG")
+    st.divider()
+    _render_spectra_quote_entry(page, helpers)
+
+
+def _render_spectra_quote_entry(page: dict, helpers: dict) -> None:
+    workspace = page["workspace"]
+    with st.container(border=True):
+        st.markdown(f"**{workspace['spectra_entry_title']}**")
+        st.caption(workspace["spectra_entry_caption"])
+        customer = st.text_input(workspace["spectra_customer_label"], key="spectra_quote_customer")
+        title = st.text_input(workspace["spectra_title_label"], key="spectra_quote_title")
+        sku = st.text_input(workspace["spectra_sku_label"], key="spectra_quote_sku")
+        quantity = st.number_input(
+            workspace["spectra_quantity_label"],
+            min_value=1,
+            value=1,
+            step=1,
+            key="spectra_quote_quantity",
+        )
+        left, right = st.columns(2)
+        with left:
+            international = st.text_input(
+                workspace["spectra_international_shipping_label"],
+                key="spectra_quote_international_shipping",
+            )
+        with right:
+            domestic = st.text_input(
+                workspace["spectra_domestic_shipping_label"],
+                key="spectra_quote_domestic_shipping",
+            )
+        if st.button(workspace["spectra_create_button"], key="spectra_quote_create", type="primary"):
+            _create_spectra_draft(
+                page,
+                helpers,
+                customer=customer,
+                title=title,
+                sku=sku,
+                quantity=int(quantity),
+                international_shipping_usd=international,
+                domestic_shipping_jpy=domestic,
+            )
+
+
+def _create_spectra_draft(page: dict, helpers: dict, **inputs) -> None:
+    workspace = page["workspace"]
+    try:
+        draft = helpers["create_spectra_draft"](page, **inputs)
+    except SpectraQuoteEntryError as error:
+        st.error(workspace["spectra_errors"].get(error.code, workspace["spectra_errors"]["UNEXPECTED"]))
+        return
+    except Exception:
+        logger.exception("spectra_quote_entry_failed")
+        st.error(workspace["spectra_errors"]["UNEXPECTED"])
+        return
+    st.session_state["quote_draft"] = draft
+    helpers["init_date_widgets"](draft, overwrite=True)
+    st.session_state[SESSION_QUOTE_STEP] = 1
+    reset_pending_form(st.session_state, 1)
+    _save_draft(page, draft, manual=True, from_widgets=False)
+    st.rerun()
 
 
 def _render_new_quote_exchange_rate(page: dict) -> None:

@@ -46,6 +46,7 @@ from agents.pricing_policy import (
     summarize_pricing_patterns,
 )
 from agents.sku_link import build_sku_link_preview, try_manual_link
+from agents.spectra_quote_entry import SpectraQuoteEntryError, create_spectra_quote_draft
 from agents.price_master import (
     active_price_books,
     attach_price_master_provenance,
@@ -120,6 +121,7 @@ def render_quote_control(texts: dict) -> None:
         page,
         helpers={
             "create_ihi_draft": _build_ihi_draft_from_ui,
+            "create_spectra_draft": _build_spectra_draft_from_ui,
             "init_date_widgets": _init_date_widget_state,
             "render_dates": _render_quote_date_inputs,
             "render_export": _render_file_export,
@@ -1259,6 +1261,54 @@ def _build_ihi_draft_from_ui(page: dict, case: dict, configuration: str):
     if simulated is None:
         mark_sales_master_missing(draft)
     return draft
+
+
+def _build_spectra_draft_from_ui(
+    page: dict,
+    *,
+    customer: str,
+    title: str,
+    sku: str,
+    quantity: int,
+    international_shipping_usd: str,
+    domestic_shipping_jpy: str,
+):
+    ensure_new_quote_exchange_rate(st.session_state)
+    try:
+        rate = parse_exchange_rate(st.session_state[SESSION_NEW_QUOTE_FX])
+    except ValueError as error:
+        raise SpectraQuoteEntryError("EXCHANGE_RATE_INVALID") from error
+    try:
+        international = _optional_spectra_cost(international_shipping_usd)
+    except ValueError as error:
+        raise SpectraQuoteEntryError("INTERNATIONAL_SHIPPING_INVALID") from error
+    try:
+        domestic = _optional_spectra_cost(domestic_shipping_jpy)
+    except ValueError as error:
+        raise SpectraQuoteEntryError("DOMESTIC_SHIPPING_INVALID") from error
+    books = [
+        item.book
+        for item in active_price_books()
+        if item.record.master_type == PriceMasterType.SPECTRA_GOLD
+    ]
+    sales = _sales_candidates_for_rate(rate, books=books)
+    return create_spectra_quote_draft(
+        customer=customer,
+        title=title,
+        sku=sku,
+        quantity=quantity,
+        exchange_rate=rate,
+        international_shipping_usd=international,
+        domestic_shipping_jpy=domestic,
+        sales_candidates=sales,
+        exchange_rate_source=new_quote_exchange_rate_source(st.session_state),
+        tax_rate=_optional_float(st.session_state.get("input_draft_tax_rate")),
+    )
+
+
+def _optional_spectra_cost(value: str):
+    text = str(value or "").strip()
+    return None if not text else float(text)
 
 
 def _sales_candidates_for_rate(rate: float, books=None):
