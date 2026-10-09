@@ -5,7 +5,17 @@ from datetime import datetime, timezone
 from typing import Optional
 from uuid import uuid4
 
-from models import CaseLineageType, QuoteDraft, QuoteDraftStatus, QuoteLineageType, TechnicalCaseRecord, TechnicalCaseStatus
+from models import (
+    CaseCloseReason,
+    CaseLifecycleStatus,
+    CaseLineageType,
+    QuoteDraft,
+    QuoteDraftStatus,
+    QuoteLineageType,
+    TechnicalCaseRecord,
+    TechnicalCaseStatus,
+)
+from repositories.actor import current_actor
 from repositories.sqlite import now_iso
 
 
@@ -15,6 +25,44 @@ def generate_quote_draft_id() -> str:
 
 def generate_derived_case_id() -> str:
     return f"CASE-{uuid4().hex[:12].upper()}"
+
+
+class CaseLifecycleError(ValueError):
+    pass
+
+
+def close_technical_case(
+    record: TechnicalCaseRecord,
+    *,
+    reason: CaseCloseReason,
+    memo: Optional[str] = None,
+    actor: Optional[str] = None,
+    closed_at: Optional[str] = None,
+) -> TechnicalCaseRecord:
+    if record.case_lifecycle_status != CaseLifecycleStatus.ACTIVE:
+        raise CaseLifecycleError("CASE_ALREADY_CLOSED")
+    try:
+        selected = CaseCloseReason(reason)
+    except (TypeError, ValueError) as error:
+        raise CaseLifecycleError("CLOSE_REASON_REQUIRED") from error
+    cleaned_memo = (memo or "").strip() or None
+    if selected == CaseCloseReason.OTHER and not cleaned_memo:
+        raise CaseLifecycleError("OTHER_MEMO_REQUIRED")
+    return record.model_copy(
+        update={
+            "case_lifecycle_status": CaseLifecycleStatus.CLOSED,
+            "close_reason": selected,
+            "closed_at": closed_at or now_iso(),
+            "closed_by": actor or current_actor(),
+            "close_memo": cleaned_memo,
+        }
+    )
+
+
+def reopen_technical_case(record: TechnicalCaseRecord) -> TechnicalCaseRecord:
+    if record.case_lifecycle_status != CaseLifecycleStatus.CLOSED:
+        raise CaseLifecycleError("CASE_NOT_CLOSED")
+    return record.model_copy(update={"case_lifecycle_status": CaseLifecycleStatus.ACTIVE})
 
 
 def archive_record(record: TechnicalCaseRecord) -> TechnicalCaseRecord:
@@ -73,6 +121,11 @@ def duplicate_technical_case(
         relation_type=relation_type,
         inquiry_success=False,
         schema_version=record.schema_version,
+        case_lifecycle_status=CaseLifecycleStatus.ACTIVE,
+        close_reason=None,
+        closed_at=None,
+        closed_by=None,
+        close_memo=None,
     )
 
 

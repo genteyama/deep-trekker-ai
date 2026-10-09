@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional, Protocol
 
-from models import ManufacturerResponseRevision, TechnicalCaseRecord
+from models import CaseCloseReason, CaseLifecycleStatus, ManufacturerResponseRevision, TechnicalCaseRecord
 from repositories.quote_repository import CONFLICT_MESSAGE, SaveResult
 
 SCHEMA_VERSION = 1
@@ -34,6 +34,9 @@ class TechnicalCaseListItem:
     deleted_at: Optional[str] = None
     parent_case_id: Optional[str] = None
     relation_type: Optional[str] = None
+    case_lifecycle_status: CaseLifecycleStatus = CaseLifecycleStatus.ACTIVE
+    close_reason: Optional[CaseCloseReason] = None
+    closed_at: Optional[str] = None
 
 
 class TechnicalCaseRepository(Protocol):

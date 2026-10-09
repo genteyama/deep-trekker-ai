@@ -1,5 +1,8 @@
 import streamlit as st
 
+from agents.activity_catalog import timeline_event_label
+from models import CaseLifecycleStatus
+from repositories.sqlite_activity_repository import SqliteActivityRepository
 from ui.components.portal import (
     render_home_hero,
     render_menu_card,
@@ -104,8 +107,17 @@ def render_home(texts: dict) -> None:
             updated_prefix=quote_page["workspace"].get("updated_at_label", "最終更新"),
         )
         if item["kind"] == KIND_TECHNICAL:
+            quick_key = f"home_quick_technical_{item['id']}"
             if st.button(
-                portal.get("resume_label", "再開"),
+                portal.get("quick_view_button", "ステータスを確認"),
+                key=quick_key,
+                type="secondary",
+            ):
+                st.session_state[f"{quick_key}_open"] = not st.session_state.get(f"{quick_key}_open", False)
+            if st.session_state.get(f"{quick_key}_open"):
+                _render_technical_quick_view(item, portal, texts["pages"]["technical_case"])
+            if st.button(
+                portal.get("open_case_label", "案件を開く"),
                 key=f"home_resume_technical_{item['id']}",
                 type="primary",
             ):
@@ -145,8 +157,11 @@ def _recent_work_items(view: str = "in_progress") -> list[dict]:
                 "process": summary.process_label(),
                 "updated_at": item.updated_at,
                 "summary": summary,
+                "record": record,
             }
         )
+    if view == "closed":
+        return sorted(items, key=lambda row: row["updated_at"] or "", reverse=True)[:8]
     quote_repo = get_quote_repository()
     for item in quote_repo.list_recent_drafts(limit=8, view=view):
         loaded = quote_repo.get_draft(item.quote_draft_id, item.version)
@@ -167,6 +182,50 @@ def _recent_work_items(view: str = "in_progress") -> list[dict]:
         )
     items.sort(key=lambda row: row["updated_at"] or "", reverse=True)
     return items[:8]
+
+
+def _render_technical_quick_view(item: dict, portal: dict, technical_page: dict) -> None:
+    record = item["record"]
+    summary = item["summary"]
+    labels = portal.get("quick_view", {})
+    closed = record.case_lifecycle_status == CaseLifecycleStatus.CLOSED
+    status = record.status or "DRAFT"
+    latest = SqliteActivityRepository(getattr(get_technical_case_repository(), "path", None)).list_events(
+        entity_kind="case",
+        entity_id=record.case_id,
+        limit=1,
+    )
+    latest_label = (
+        timeline_event_label(latest[0].event_type)
+        if latest
+        else labels.get("activity_fallback", "案件情報を更新")
+    )
+    situation = labels.get("closed_situation") if closed else labels.get("situations", {}).get(status)
+    next_action = labels.get("closed_next") if closed else labels.get("next_actions", {}).get(status)
+    phase_labels = technical_page.get("case_status", {})
+    with st.container(border=True):
+        st.markdown(f"**{labels.get('title', 'ステータス Quick View')}**")
+        st.write(f"{labels.get('case_name', '案件名')}：{record.case_title or '-'}")
+        st.write(f"{labels.get('customer', '顧客名')}：{record.customer_name or '-'}")
+        st.write(
+            f"{labels.get('business_status', '業務状態')}："
+            f"{labels.get('closed', '終了') if closed else labels.get('active', '進行中')}"
+        )
+        st.write(f"{labels.get('phase', '現在Phase')}：{phase_labels.get(status, status)}")
+        st.write(f"{labels.get('progress', '進捗')}：{summary.completed} / {summary.total}")
+        st.write(f"{labels.get('review', '要確認')}：{summary.review_required}{labels.get('review_unit', '件')}")
+        st.write(f"{labels.get('situation', '現在の状況')}：{situation or phase_labels.get(status, status)}")
+        st.write(f"{labels.get('updated_at', '最終更新日時')}：{record.updated_at or '-'}")
+        st.write(f"{labels.get('latest_activity', '最新更新内容')}：{latest_label}")
+        st.write(f"{labels.get('next_action', '次にやること')}：{next_action or '-'}")
+        if st.button(
+            labels.get("open_case", "案件を開く"),
+            key=f"quick_open_technical_{record.case_id}",
+            type="primary",
+        ):
+            resume_case_into_session(record, st.session_state)
+            set_current_page(PAGE_TECHNICAL_CASE)
+            st.rerun()
 
 
 def _resume_quote_from_home(page: dict, quote_draft_id: str, version: int) -> None:

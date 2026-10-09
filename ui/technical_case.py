@@ -2,7 +2,10 @@ from typing import Optional
 
 import streamlit as st
 
-from repositories.technical_case_repository import TechnicalCaseConflictError
+from repositories.technical_case_repository import (
+    TechnicalCaseConflictError,
+    TechnicalCaseRepositoryError,
+)
 
 from agents.approval import (
     ERROR_ALREADY_APPLIED,
@@ -45,11 +48,18 @@ from llm.provider import (
     run_provider_connection_test,
 )
 from models import (
+    CaseCloseReason,
+    CaseLifecycleStatus,
     CaseRequirement,
     FactConfidence,
     FactScope,
     SuggestedQuestionStatus,
     TechnicalQuestion,
+)
+from agents.work_lifecycle import (
+    CaseLifecycleError,
+    close_technical_case,
+    reopen_technical_case,
 )
 from ui.navigation import PAGE_HOME, set_current_page
 from ui.technical_case_flow import (
@@ -115,6 +125,12 @@ def render_technical_case(texts: dict) -> None:
     summary = _current_work_summary()
     workflow = build_technical_workflow(summary, workflow_labels)
     _render_case_summary(page, summary, workflow)
+    record = _current_record()
+    _render_business_lifecycle(texts, page, record)
+    if record is not None and record.case_lifecycle_status == CaseLifecycleStatus.CLOSED:
+        _render_case_lifecycle(texts, page)
+        _render_recent_cases(page)
+        return
     _render_case_actions(page)
 
     if get_active_provider_name() == "mock":
@@ -427,6 +443,98 @@ def _render_case_actions(page: dict) -> None:
         st.success(page.get("case_saved", "案件を保存しました"))
     elif st.session_state.get("technical_case_save_error"):
         st.error(page.get("case_save_error", "案件を保存できませんでした"))
+
+
+def _render_business_lifecycle(texts: dict, page: dict, record) -> None:
+    if record is None:
+        return
+    labels = texts.get("lifecycle", {})
+    repo = get_technical_case_repository()
+    if record.case_lifecycle_status == CaseLifecycleStatus.CLOSED:
+        with st.container(border=True):
+            st.markdown(f"**{labels.get('case_closed_heading', '案件終了済み')}**")
+            reasons = labels.get("close_reasons", {})
+            st.write(
+                f"{labels.get('close_reason_label', '終了理由')}："
+                f"{reasons.get(record.close_reason.value if record.close_reason else '', '-')}"
+            )
+            st.write(f"{labels.get('closed_at_label', '終了日時')}：{_display_timestamp(record.closed_at)}")
+            st.write(f"{labels.get('closed_by_label', '終了者')}：{record.closed_by or '-'}")
+            if record.close_memo:
+                st.write(f"{labels.get('close_memo_label', 'メモ')}：{record.close_memo}")
+            st.caption(labels.get("closed_safety_notice", "通常作業を続けるには案件を再開してください。"))
+            if st.button(labels.get("reopen_case", "案件を再開"), key="reopen_technical_case", type="primary"):
+                _save_business_lifecycle_change(
+                    repo,
+                    record,
+                    reopen_technical_case(record),
+                    "reopen",
+                )
+        return
+    if st.button(labels.get("close_case", "案件を終了"), key="start_close_technical_case", type="secondary"):
+        st.session_state["technical_case_close_form"] = True
+    if not st.session_state.get("technical_case_close_form"):
+        return
+    options = [None, *list(CaseCloseReason)]
+    reason_labels = labels.get("close_reasons", {})
+    selected = st.selectbox(
+        labels.get("close_reason_label", "終了理由"),
+        options=options,
+        format_func=lambda item: labels.get("close_reason_placeholder", "選択してください")
+        if item is None
+        else reason_labels.get(item.value, item.value),
+        key="technical_case_close_reason",
+    )
+    memo = st.text_area(labels.get("close_memo_label", "メモ"), key="technical_case_close_memo")
+    st.warning(labels.get("close_confirmation_notice", "終了理由を確認して案件を終了します。"))
+    left, right = st.columns(2)
+    if left.button(labels.get("confirm_close_case", "案件を終了する"), key="confirm_close_technical_case", type="primary"):
+        try:
+            closed = close_technical_case(record, reason=selected, memo=memo)
+        except CaseLifecycleError as error:
+            st.error(labels.get("close_errors", {}).get(str(error), labels.get("close_failed", "案件を終了できませんでした。")))
+        else:
+            st.session_state["technical_case_close_form"] = False
+            _save_business_lifecycle_change(repo, record, closed, "close")
+    if right.button(labels.get("cancel", "キャンセル"), key="cancel_close_technical_case", type="secondary"):
+        st.session_state["technical_case_close_form"] = False
+        st.rerun()
+
+
+def _save_business_lifecycle_change(repo, previous, updated, action: str) -> None:
+    try:
+        repo.save_case(updated)
+    except TechnicalCaseConflictError as error:
+        st.session_state["edit_conflict"] = {"kind": "technical_case", "key": error.key, "version": None}
+        st.session_state["technical_case_save_error"] = str(error)
+        st.rerun()
+    except TechnicalCaseRepositoryError:
+        st.session_state["technical_case_save_error"] = "案件を保存できませんでした。"
+        st.rerun()
+    from agents.activity_log import record_case_business_lifecycle
+    from repositories.sqlite_activity_repository import SqliteActivityRepository
+
+    record_case_business_lifecycle(
+        SqliteActivityRepository(getattr(repo, "path", None)),
+        updated,
+        action,
+        previous=previous,
+    )
+    st.session_state["technical_case_saved_id"] = updated.case_id
+    st.session_state["technical_case_save_status"] = "saved"
+    st.rerun()
+
+
+def _display_timestamp(value: Optional[str]) -> str:
+    if not value:
+        return "-"
+    try:
+        from datetime import datetime
+
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return parsed.astimezone().strftime("%Y/%m/%d %H:%M")
+    except ValueError:
+        return value
 
 
 def _current_record():

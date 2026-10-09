@@ -32,6 +32,11 @@ CREATE TABLE IF NOT EXISTS technical_cases (
     deleted_at TEXT,
     parent_case_id TEXT,
     relation_type TEXT,
+    case_lifecycle_status TEXT NOT NULL DEFAULT 'ACTIVE',
+    close_reason TEXT,
+    closed_at TEXT,
+    closed_by TEXT,
+    close_memo TEXT,
     created_by TEXT,
     updated_by TEXT,
     row_version INTEGER NOT NULL DEFAULT 1
@@ -147,6 +152,11 @@ CREATE TABLE IF NOT EXISTS manufacturer_price_sources (
 ALTER TABLE technical_cases ADD COLUMN IF NOT EXISTS created_by TEXT;
 ALTER TABLE technical_cases ADD COLUMN IF NOT EXISTS updated_by TEXT;
 ALTER TABLE technical_cases ADD COLUMN IF NOT EXISTS row_version INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE technical_cases ADD COLUMN IF NOT EXISTS case_lifecycle_status TEXT NOT NULL DEFAULT 'ACTIVE';
+ALTER TABLE technical_cases ADD COLUMN IF NOT EXISTS close_reason TEXT;
+ALTER TABLE technical_cases ADD COLUMN IF NOT EXISTS closed_at TEXT;
+ALTER TABLE technical_cases ADD COLUMN IF NOT EXISTS closed_by TEXT;
+ALTER TABLE technical_cases ADD COLUMN IF NOT EXISTS close_memo TEXT;
 ALTER TABLE quote_drafts ADD COLUMN IF NOT EXISTS created_by TEXT;
 ALTER TABLE quote_drafts ADD COLUMN IF NOT EXISTS updated_by TEXT;
 ALTER TABLE quote_drafts ADD COLUMN IF NOT EXISTS row_version INTEGER NOT NULL DEFAULT 1;

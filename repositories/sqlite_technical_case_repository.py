@@ -4,7 +4,13 @@ from pathlib import Path
 import sqlite3
 from typing import Optional
 
-from models import ManufacturerResponseRevision, TechnicalCaseRecord, TechnicalCaseStatus
+from models import (
+    CaseCloseReason,
+    CaseLifecycleStatus,
+    ManufacturerResponseRevision,
+    TechnicalCaseRecord,
+    TechnicalCaseStatus,
+)
 from repositories.actor import current_actor
 from repositories.postgres import is_postgres
 from repositories.quote_repository import SaveResult
@@ -13,7 +19,6 @@ from repositories.sqlite import (
     default_sqlite_path,
     dumps_json,
     ensure_columns,
-    lifecycle_where,
     loads_json,
     now_iso,
     strip_secrets,
@@ -35,6 +40,26 @@ _STATUS_ORDER = (
     TechnicalCaseStatus.RESPONSE_REVIEW.value,
     TechnicalCaseStatus.COMPLETED.value,
 )
+
+
+def _case_lifecycle_where(view: str) -> str:
+    deleted_null = "(deleted_at IS NULL OR deleted_at = '')"
+    archived_null = "(archived_at IS NULL OR archived_at = '')"
+    active = "COALESCE(case_lifecycle_status, 'ACTIVE') = 'ACTIVE'"
+    closed = "COALESCE(case_lifecycle_status, 'ACTIVE') = 'CLOSED'"
+    if view == "history":
+        return deleted_null
+    if view == "trash":
+        return "(deleted_at IS NOT NULL AND deleted_at != '')"
+    if view == "archived":
+        return f"{deleted_null} AND archived_at IS NOT NULL AND archived_at != ''"
+    if view == "closed":
+        return f"{deleted_null} AND {archived_null} AND {closed}"
+    if view == "completed":
+        return f"{deleted_null} AND {archived_null} AND {active} AND status = 'COMPLETED'"
+    if view == "in_progress":
+        return f"{deleted_null} AND {archived_null} AND {active} AND COALESCE(status, '') != 'COMPLETED'"
+    return f"{deleted_null} AND {archived_null} AND {active}"
 
 
 def _forward_status(current: Optional[str], proposed: str) -> str:
@@ -59,6 +84,14 @@ class SqliteTechnicalCaseRepository:
 
     def _initialize(self) -> None:
         if is_postgres(self._connection):
+            for statement in (
+                "ALTER TABLE technical_cases ADD COLUMN IF NOT EXISTS case_lifecycle_status TEXT NOT NULL DEFAULT 'ACTIVE'",
+                "ALTER TABLE technical_cases ADD COLUMN IF NOT EXISTS close_reason TEXT",
+                "ALTER TABLE technical_cases ADD COLUMN IF NOT EXISTS closed_at TEXT",
+                "ALTER TABLE technical_cases ADD COLUMN IF NOT EXISTS closed_by TEXT",
+                "ALTER TABLE technical_cases ADD COLUMN IF NOT EXISTS close_memo TEXT",
+            ):
+                self._connection.execute(statement)
             return
         self._connection.executescript(
             """
@@ -77,7 +110,12 @@ class SqliteTechnicalCaseRepository:
                 archived_at TEXT,
                 deleted_at TEXT,
                 parent_case_id TEXT,
-                relation_type TEXT
+                relation_type TEXT,
+                case_lifecycle_status TEXT NOT NULL DEFAULT 'ACTIVE',
+                close_reason TEXT,
+                closed_at TEXT,
+                closed_by TEXT,
+                close_memo TEXT
             );
             CREATE TABLE IF NOT EXISTS technical_case_response_revisions (
                 id INTEGER PRIMARY KEY,
@@ -105,6 +143,11 @@ class SqliteTechnicalCaseRepository:
                 "created_by": "TEXT",
                 "updated_by": "TEXT",
                 "row_version": "INTEGER NOT NULL DEFAULT 1",
+                "case_lifecycle_status": "TEXT NOT NULL DEFAULT 'ACTIVE'",
+                "close_reason": "TEXT",
+                "closed_at": "TEXT",
+                "closed_by": "TEXT",
+                "close_memo": "TEXT",
             },
         )
         self._connection.commit()
@@ -134,6 +177,11 @@ class SqliteTechnicalCaseRepository:
             record.deleted_at,
             record.parent_case_id,
             record.relation_type,
+            record.case_lifecycle_status.value,
+            record.close_reason.value if record.close_reason else None,
+            record.closed_at,
+            record.closed_by,
+            record.close_memo,
         )
         try:
             if existing is None:
@@ -142,8 +190,9 @@ class SqliteTechnicalCaseRepository:
                     INSERT INTO technical_cases (
                         customer_name, case_title, status, provider, model,
                         payload_json, updated_at, archived_at, deleted_at, parent_case_id, relation_type,
+                        case_lifecycle_status, close_reason, closed_at, closed_by, close_memo,
                         case_id, created_at, schema_version, created_by, updated_by, row_version
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
                     """,
                     (*columns, record.case_id, created, SCHEMA_VERSION, actor, actor),
                 )
@@ -159,6 +208,7 @@ class SqliteTechnicalCaseRepository:
                         customer_name = ?, case_title = ?, status = ?, provider = ?, model = ?,
                         payload_json = ?, updated_at = ?, archived_at = ?, deleted_at = ?,
                         parent_case_id = ?, relation_type = ?,
+                        case_lifecycle_status = ?, close_reason = ?, closed_at = ?, closed_by = ?, close_memo = ?,
                         updated_by = ?, row_version = row_version + 1
                     WHERE case_id = ? AND row_version = ?
                     """,
@@ -195,7 +245,11 @@ class SqliteTechnicalCaseRepository:
 
     def get_case(self, case_id: str) -> Optional[TechnicalCaseRecord]:
         row = self._connection.execute(
-            "SELECT payload_json, row_version FROM technical_cases WHERE case_id = ?",
+            """
+            SELECT payload_json, row_version, case_lifecycle_status, close_reason,
+                   closed_at, closed_by, close_memo
+            FROM technical_cases WHERE case_id = ?
+            """,
             (case_id,),
         ).fetchone()
         if row is None:
@@ -203,6 +257,15 @@ class SqliteTechnicalCaseRepository:
         # The first load in this session is the base version for optimistic locking.
         self._row_versions.setdefault(case_id, row["row_version"])
         payload = loads_json(row["payload_json"])
+        payload.update(
+            {
+                "case_lifecycle_status": row["case_lifecycle_status"] or payload.get("case_lifecycle_status", "ACTIVE"),
+                "close_reason": row["close_reason"],
+                "closed_at": row["closed_at"],
+                "closed_by": row["closed_by"],
+                "close_memo": row["close_memo"],
+            }
+        )
         record = TechnicalCaseRecord.model_validate(payload)
         revisions = self._load_revisions(case_id)
         if revisions:
@@ -210,11 +273,12 @@ class SqliteTechnicalCaseRepository:
         return record
 
     def list_recent_cases(self, limit: int = 8, *, view: str = "active") -> list[TechnicalCaseListItem]:
-        clause = lifecycle_where(view, completed_statuses=("COMPLETED",))
+        clause = _case_lifecycle_where(view)
         rows = self._connection.execute(
             f"""
             SELECT case_id, customer_name, case_title, status, provider, updated_at,
-                   archived_at, deleted_at, parent_case_id, relation_type
+                   archived_at, deleted_at, parent_case_id, relation_type,
+                   case_lifecycle_status, close_reason, closed_at
             FROM technical_cases
             WHERE {clause}
             ORDER BY updated_at DESC
@@ -234,6 +298,9 @@ class SqliteTechnicalCaseRepository:
                 deleted_at=row["deleted_at"],
                 parent_case_id=row["parent_case_id"],
                 relation_type=row["relation_type"],
+                case_lifecycle_status=CaseLifecycleStatus(row["case_lifecycle_status"] or "ACTIVE"),
+                close_reason=CaseCloseReason(row["close_reason"]) if row["close_reason"] else None,
+                closed_at=row["closed_at"],
             )
             for row in rows
         ]
@@ -242,7 +309,8 @@ class SqliteTechnicalCaseRepository:
         rows = self._connection.execute(
             """
             SELECT case_id, customer_name, case_title, status, provider, updated_at,
-                   archived_at, deleted_at, parent_case_id, relation_type
+                   archived_at, deleted_at, parent_case_id, relation_type,
+                   case_lifecycle_status, close_reason, closed_at
             FROM technical_cases
             WHERE parent_case_id = ? AND (deleted_at IS NULL OR deleted_at = '')
             ORDER BY updated_at DESC
@@ -261,6 +329,9 @@ class SqliteTechnicalCaseRepository:
                 deleted_at=row["deleted_at"],
                 parent_case_id=row["parent_case_id"],
                 relation_type=row["relation_type"],
+                case_lifecycle_status=CaseLifecycleStatus(row["case_lifecycle_status"] or "ACTIVE"),
+                close_reason=CaseCloseReason(row["close_reason"]) if row["close_reason"] else None,
+                closed_at=row["closed_at"],
             )
             for row in rows
         ]

@@ -30,10 +30,10 @@ PROJECT_CONTEXT とコードが矛盾した場合は、原則コード / Git を
 
 ## 3. Current Status
 
-- 現在 Phase: **v1.2.1 UX Patch**
+- 現在 Phase: **Phase B — Business Case Close / Reopen + Status Quick View**
 - v1.1.0 Online Multi-device MVP: **完成済み**。main baseline `1512f22112deff7f6d4b2512c273e5a2dac24ff9`（tag `v1.1.0`）
 - 旧記載の HEAD `e746ca9` はそれ以前の checkpoint。この文書とコードが矛盾する場合は Git / current code を優先
-- full pytest: 786 passed（`pytest -q`）
+- full pytest: 798 passed（`pytest -q`）
 - Price Master Data Quality: **DQ-4 COMPLETE**（Production SO_MASTER 更新済み。AUTO 116 / REVIEW 2 / EXCLUDED 1 → 12章）。次は DQ-5（SO Master Price Reference Repair）。DQ-5 は今回の Phase A に含めていない
 
 ### v1.2 Phase A: Manufacturer Online Price Master Sync
@@ -71,6 +71,15 @@ PROJECT_CONTEXT とコードが矛盾した場合は、原則コード / Git を
 - `FUTURE` のSPECTRA Online Sourceは通常画面で「オンライン連携：停止中」と表示し、URL編集・有効化・保存・接続確認・過去の接続エラーを表示しない。Registry値とbackend機能は維持する。
 - Quoteの内部warning / Enum / reasonは変更せず、通常UIだけを業務ユーザー向けの日英表現へ変換する。承認判定・Pricing・Snapshotには変更なし。
 - 既存Draft / validation / shipping placeholderの事実から、販売価格・国際輸送原価・国内送料・税率・納期等の要確認理由を重複なく短く表示し、詳細でも内部英語を直接表示しない。
+
+### Phase B: Business Case Close / Reopen + Status Quick View
+
+- `CaseLifecycleStatus`（ACTIVE / CLOSED）を追加。TechnicalCaseStatusの工程完了、Archive、Trashとは独立し、Close / Reopenでworkflow statusを変更しない。
+- Close reason、closed_at / by、memoをTechnicalCaseRecordとPostgreSQL / SQLiteのtop-level columnsへ保存する。既存行はACTIVE扱い。SQLiteは`ensure_columns`、PostgreSQLはrepository起動時と`deploy/postgres_schema.sql`のidempotent `ADD COLUMN IF NOT EXISTS`でmigrationする。
+- Close / Reopenは既存row_versionによるoptimistic lockを通し、`CASE_CLOSED` / `CASE_REOPENED`をActivity Ledgerへappend-onlyで記録する。Duplicate / Derived caseはACTIVEかつClose metadataなしで開始する。
+- Homeに「終了案件」と決定論的Status Quick Viewを追加。保存済みworkflow summaryと最新Activityだけを使い、AI / 外部APIは使用しない。
+- CLOSED案件は通常workflow mutation UIを表示せず、Reopen、Archive / Trash、履歴参照を優先する。
+- Quote / Pricing / Price Master / ApprovedQuoteSnapshotの仕様は変更していない。
 
 ### v1 First Launch Readiness（2026-10-08）
 
@@ -356,8 +365,8 @@ pre-bootstrap 状態への復旧（DQ-3B 以前に戻す場合のみ）:
 
 ## 13. Test Baseline
 
-- v1.2.1 targeted pytest: 182 passed（Price Master UI、SPECTRA Quote、warning/approval UI、PHOTON/MAG、pricing regression）
-- full pytest: 786 passed（`pytest -q`、2026-10-09 v1.2.1 UX Patch）
+- Phase B targeted pytest: 214 passed（Business lifecycle、migration、Activity、Technical Case、Home、multi-device、Quote / SPECTRA regression）
+- full pytest: 798 passed（`pytest -q`、2026-10-09 Phase B）
 - `git diff --check`: PASS
 - runtime / outputs / 元 Price Master: Acceptance の前後で変更なし（SHA-256 で確認）
 - API calls: 0
@@ -403,7 +412,7 @@ v1 完了を止めないもの:
 
 Pricing Policy v1 には追加せず、別 Phase として扱う。
 
-v1.2 Phase A〜A.4bは実装・Production Release済み。v1.2.1 UX Patch開始時のmain HEADは`b41968d`。
+v1.2.0 / v1.2.1はProduction Release済み。Phase B開始時のmain HEADは`3bdf93f`。
 
 優先候補:
 

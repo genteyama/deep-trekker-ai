@@ -160,6 +160,9 @@ def start_new_technical_case(session) -> None:
         SESSION_SAVE_STATUS,
         SESSION_SAVE_ERROR,
         SESSION_CASE_STEP,
+        "technical_case_close_form",
+        "technical_case_close_reason",
+        "technical_case_close_memo",
         *WIDGET_KEYS,
     ):
         if key in session:

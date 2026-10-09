@@ -28,6 +28,8 @@ EVENT_LABELS = {
     "QUOTE_SUBMITTED": "見積提出",
     "QUOTE_DOCUMENT_GENERATED": "正式見積書作成",
     "CASE_DERIVED": "派生案件作成",
+    "CASE_CLOSED": "案件終了",
+    "CASE_REOPENED": "案件再開",
     "ARCHIVED": "アーカイブ",
     "RESTORED": "復元",
     "MOVED_TO_TRASH": "ゴミ箱へ移動",

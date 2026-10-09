@@ -36,6 +36,7 @@ QUOTE_RELATION_OPTIONS = (
 HOME_FILTERS = (
     ("in_progress", "進行中"),
     ("completed", "完了"),
+    ("closed", "終了案件"),
     ("archived", "アーカイブ"),
     ("trash", "ゴミ箱"),
 )
@@ -57,6 +58,7 @@ def render_home_filter(texts: dict) -> str:
     display = {
         "in_progress": portal.get("filter_in_progress", labels.get("filter_in_progress", "進行中")),
         "completed": portal.get("filter_completed", labels.get("filter_completed", "完了")),
+        "closed": portal.get("filter_closed", labels.get("filter_closed", "終了案件")),
         "archived": portal.get("filter_archived", labels.get("filter_archived", "アーカイブ")),
         "trash": portal.get("filter_trash", labels.get("filter_trash", "ゴミ箱")),
     }

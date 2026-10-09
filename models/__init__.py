@@ -1,6 +1,8 @@
 from models.enums import (
     ActivityCategory,
     ActivityEventType,
+    CaseCloseReason,
+    CaseLifecycleStatus,
     CaseLineageType,
     AnswerSourceType,
     DestinationRegion,
@@ -183,6 +185,8 @@ __all__ = [
     "AnswerSourceType",
     "ApprovalRecord",
     "Case",
+    "CaseCloseReason",
+    "CaseLifecycleStatus",
     "CaseLineageType",
     "CaseRequirement",
     "Configuration",

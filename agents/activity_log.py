@@ -192,6 +192,58 @@ def record_case_lifecycle(
     return None
 
 
+def record_case_business_lifecycle(
+    repository: SqliteActivityRepository,
+    record: TechnicalCaseRecord,
+    action: str,
+    *,
+    previous: TechnicalCaseRecord,
+) -> Optional[ActivityEvent]:
+    if action == "close":
+        if previous.case_lifecycle_status.value != "ACTIVE" or record.case_lifecycle_status.value != "CLOSED":
+            return None
+        payload = {
+            "close_reason": _status_value(record.close_reason),
+            "close_memo": record.close_memo,
+            "closed_at": record.closed_at,
+            "closed_by": record.closed_by,
+            "previous_workflow_status": previous.status,
+        }
+        event_type = ActivityEventType.CASE_CLOSED.value
+        identity = record.closed_at
+    elif action == "reopen":
+        if previous.case_lifecycle_status.value != "CLOSED" or record.case_lifecycle_status.value != "ACTIVE":
+            return None
+        payload = {
+            "previous_close_reason": _status_value(previous.close_reason),
+            "previous_closed_at": previous.closed_at,
+            "workflow_status": record.status,
+        }
+        event_type = ActivityEventType.CASE_REOPENED.value
+        identity = previous.closed_at
+    else:
+        return None
+    if any(
+        item.event_type == event_type
+        and (
+            item.payload.get("closed_at") == identity
+            or item.payload.get("previous_closed_at") == identity
+        )
+        for item in repository.list_events(entity_kind="case", entity_id=record.case_id)
+    ):
+        return None
+    return append_activity_event(
+        repository,
+        event_type=event_type,
+        entity_kind="case",
+        entity_id=record.case_id,
+        customer_name=record.customer_name,
+        title=record.case_title,
+        payload=payload,
+        occurred_at=record.closed_at if action == "close" else None,
+    )
+
+
 def record_quote_saved(repository: SqliteActivityRepository, previous, draft, *, derived: bool = False) -> Optional[ActivityEvent]:
     if previous is not None and not derived:
         return None

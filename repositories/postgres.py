@@ -99,7 +99,8 @@ class PostgresConnection:
             raise _map_error(error) from error
 
     def executescript(self, script: str) -> None:
-        # Schema is managed by deploy/postgres_schema.sql, never by app start-up.
+        # Base schema is deployed from deploy/postgres_schema.sql. Repositories may separately run
+        # narrow idempotent ADD COLUMN migrations needed to read an existing production database.
         return None
 
     def commit(self) -> None:

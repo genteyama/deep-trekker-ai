@@ -48,6 +48,20 @@ class TechnicalCaseStatus(str, Enum):
     COMPLETED = "COMPLETED"
 
 
+class CaseLifecycleStatus(str, Enum):
+    ACTIVE = "ACTIVE"
+    CLOSED = "CLOSED"
+
+
+class CaseCloseReason(str, Enum):
+    WON = "WON"
+    LOST = "LOST"
+    NO_RESPONSE = "NO_RESPONSE"
+    INDEFINITE_HOLD = "INDEFINITE_HOLD"
+    CANCELLED = "CANCELLED"
+    OTHER = "OTHER"
+
+
 class QuestionGroundingSource(str, Enum):
     CUSTOMER_INPUT = "CUSTOMER_INPUT"
     EXTRACTED_REQUIREMENT = "EXTRACTED_REQUIREMENT"
@@ -479,6 +493,8 @@ class ActivityEventType(str, Enum):
     QUOTE_SUBMITTED = "QUOTE_SUBMITTED"
     QUOTE_DOCUMENT_GENERATED = "QUOTE_DOCUMENT_GENERATED"
     CASE_DERIVED = "CASE_DERIVED"
+    CASE_CLOSED = "CASE_CLOSED"
+    CASE_REOPENED = "CASE_REOPENED"
     ARCHIVED = "ARCHIVED"
     RESTORED = "RESTORED"
     MOVED_TO_TRASH = "MOVED_TO_TRASH"
@@ -489,6 +505,7 @@ class WorkListView(str, Enum):
     ACTIVE = "active"
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
+    CLOSED = "closed"
     ARCHIVED = "archived"
     TRASH = "trash"
 

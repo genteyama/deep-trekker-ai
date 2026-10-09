@@ -4,6 +4,8 @@ from typing import Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 from models.enums import (
+    CaseCloseReason,
+    CaseLifecycleStatus,
     DestinationRegion,
     FactConfidence,
     FactScope,
@@ -129,6 +131,11 @@ class TechnicalCaseRecord(BaseModel):
     deleted_at: Optional[str] = None
     parent_case_id: Optional[str] = None
     relation_type: Optional[str] = None
+    case_lifecycle_status: CaseLifecycleStatus = CaseLifecycleStatus.ACTIVE
+    close_reason: Optional[CaseCloseReason] = None
+    closed_at: Optional[str] = None
+    closed_by: Optional[str] = None
+    close_memo: Optional[str] = None
 
 
 class CaseRequirement(BaseModel):
