@@ -303,7 +303,7 @@
       "column_source_status": "状態",
       "column_notes": "Notes",
       "section_spaceone_reconcile": "SpaceOneマスター照合",
-      "section_spaceone_reconcile_description": "社内マスターをDT40 / PT30のSKUで照合します。セル位置は使いません。正式反映はしません。",
+      "section_spaceone_reconcile_description": "社内マスターを有効なメーカー価格マスターのSKUで照合します。セル位置は使いません。正式反映はしません。",
       "upload_dt40_label": "DT40（メーカー原典）",
       "upload_pt30_label": "PT30（メーカー原典）",
       "upload_spaceone_label": "SpaceOne社内マスター",
@@ -377,12 +377,14 @@
         "labels": {
           "DT40": "DT40（Deep Trekker 価格表）",
           "PT30": "PT30（PipeTrekker 価格表）",
+          "SPECTRA_GOLD": "SPECTRA GOLD（手動アップロード）",
           "SO_MASTER": "SpaceOne価格マスター",
           "QUOTE_CALC": "見積試算ポリシー（輸入税・保険・Shipping倍率）"
         },
         "short_labels": {
           "DT40": "DT40",
           "PT30": "PT30",
+          "SPECTRA_GOLD": "SPECTRA GOLD",
           "SO_MASTER": "SpaceOne価格マスター",
           "QUOTE_CALC": "見積試算ポリシー"
         },
@@ -404,6 +406,7 @@
         "validation_formats": {
           "DT40": "SKU {sku_count}件",
           "PT30": "SKU {sku_count}件",
+          "SPECTRA_GOLD": "SKU {sku_count}件 / 価格確定 {priced_sku_count}件 / 要手動確認 {manual_review_count}件",
           "SO_MASTER": "SKU {item_count}件 / 売価ルール {policy_count}件",
           "QUOTE_CALC": "輸入税 {import_tax_rate} / 保険 {insurance_rate} / Shipping倍率 {shipping_markup}"
         },
@@ -427,8 +430,8 @@
           "enabled_label": "このSourceを有効にする",
           "enabled": "有効",
           "disabled": "無効",
-          "future_status": "将来利用",
-          "future_notice": "将来利用予定。現在の見積価格には使用されません。",
+          "future_status": "オンライン連携保留",
+          "future_notice": "現在はExcel手動アップロードで価格マスターを運用しています。オンライン連携機能は準備済みですが、現在の見積価格には使用しません。",
           "check_status_label": "最終確認結果",
           "save_url_button": "URLを保存",
           "connection_button": "接続確認",
@@ -891,7 +894,7 @@
         "NO_LINK_REQUIRED": "リンク不要"
       },
       "manual_sku_link_label": "要確認SKUの手動紐付け",
-      "manual_sku_link_hint": "似たSKUへは自動置換しません。DT40/PT30に実在する正式SKUを入力してください。",
+      "manual_sku_link_hint": "似たSKUへは自動置換しません。有効なメーカー価格マスターに実在する正式SKUを入力してください。",
       "manual_manufacturer_sku_label": "正式Manufacturer SKU",
       "manual_link_button": "このSKUに紐付け",
       "section_update_inbox": "Deep Trekker 更新情報",
@@ -978,10 +981,10 @@
       "golden_qty": "Qty",
       "golden_unit_usd": "Unit USD",
       "golden_validation_label": "Supplier Quote Validation",
-      "golden_validate_button": "IHI Supplier QuoteをDT40/PT30と照合",
+      "golden_validate_button": "IHI Supplier Quoteをメーカー価格マスターと照合",
       "golden_validation_hint": "照合ボタンを押すと、Supplier Quoteをメーカー原典と突き合わせます。",
-      "golden_validation_no_books": "DT40 / PT30 のメーカー原典がまだないため、Validationを表示できません。",
-      "golden_validation_caption": "メーカー価格の正はDT40 / PT30です。Supplier Quote価格は仕入原価として採用しません。",
+      "golden_validation_no_books": "有効なメーカー価格マスターがまだないため、Validationを表示できません。",
+      "golden_validation_caption": "メーカー価格の正は有効なメーカー価格マスターです。Supplier Quote価格は仕入原価として採用しません。",
       "golden_overall_status": "Overall Status",
       "golden_supplier_price": "Supplier Price",
       "golden_current_dealer": "Current Dealer",

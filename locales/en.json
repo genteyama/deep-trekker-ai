@@ -303,7 +303,7 @@
       "column_source_status": "Status",
       "column_notes": "Notes",
       "section_spaceone_reconcile": "SpaceOne master reconciliation",
-      "section_spaceone_reconcile_description": "Match the internal master to DT40 / PT30 by SKU. Cell positions are not used. Nothing is applied.",
+      "section_spaceone_reconcile_description": "Match the internal master to active manufacturer price masters by SKU. Cell positions are not used. Nothing is applied.",
       "upload_dt40_label": "DT40 (manufacturer source)",
       "upload_pt30_label": "PT30 (manufacturer source)",
       "upload_spaceone_label": "SpaceOne internal master",
@@ -377,12 +377,14 @@
         "labels": {
           "DT40": "DT40 (Deep Trekker price book)",
           "PT30": "PT30 (PipeTrekker price book)",
+          "SPECTRA_GOLD": "SPECTRA GOLD (manual upload)",
           "SO_MASTER": "SpaceOne price master",
           "QUOTE_CALC": "Quote-calc policy (import tax, insurance, shipping markup)"
         },
         "short_labels": {
           "DT40": "DT40",
           "PT30": "PT30",
+          "SPECTRA_GOLD": "SPECTRA GOLD",
           "SO_MASTER": "SpaceOne master",
           "QUOTE_CALC": "Quote-calc policy"
         },
@@ -404,6 +406,7 @@
         "validation_formats": {
           "DT40": "{sku_count} SKUs",
           "PT30": "{sku_count} SKUs",
+          "SPECTRA_GOLD": "{sku_count} SKUs / {priced_sku_count} priced / {manual_review_count} manual review",
           "SO_MASTER": "{item_count} SKUs / {policy_count} price rules",
           "QUOTE_CALC": "Import tax {import_tax_rate} / insurance {insurance_rate} / shipping markup {shipping_markup}"
         },
@@ -427,8 +430,8 @@
           "enabled_label": "Enable this source",
           "enabled": "Enabled",
           "disabled": "Disabled",
-          "future_status": "Future use",
-          "future_notice": "Planned for future use. This source is not used for current quote pricing.",
+          "future_status": "Online integration paused",
+          "future_notice": "The price master currently uses manual Excel uploads. Online integration is prepared but is not used for current quote pricing.",
           "check_status_label": "Last check result",
           "save_url_button": "Save URL",
           "connection_button": "Check connection",
@@ -891,7 +894,7 @@
         "NO_LINK_REQUIRED": "No link required"
       },
       "manual_sku_link_label": "Manual SKU link for review items",
-      "manual_sku_link_hint": "Similar SKUs are not auto-corrected. Enter a SKU that exists in DT40 / PT30.",
+      "manual_sku_link_hint": "Similar SKUs are not auto-corrected. Enter an exact SKU from an active manufacturer price master.",
       "manual_manufacturer_sku_label": "Official manufacturer SKU",
       "manual_link_button": "Link this SKU",
       "section_update_inbox": "Deep Trekker updates",
@@ -978,10 +981,10 @@
       "golden_qty": "Qty",
       "golden_unit_usd": "Unit USD",
       "golden_validation_label": "Supplier Quote Validation",
-      "golden_validate_button": "Validate IHI Supplier Quote against DT40 / PT30",
+      "golden_validate_button": "Validate IHI Supplier Quote against manufacturer price masters",
       "golden_validation_hint": "Run validation to compare the Supplier Quote with the manufacturer books.",
-      "golden_validation_no_books": "DT40 / PT30 manufacturer books are not available, so validation is not shown.",
-      "golden_validation_caption": "DT40 / PT30 are the manufacturer price source of truth. Supplier Quote prices are not adopted as cost.",
+      "golden_validation_no_books": "No active manufacturer price master is available, so validation is not shown.",
+      "golden_validation_caption": "Active manufacturer price masters are the source of truth. Supplier Quote prices are not adopted as cost.",
       "golden_overall_status": "Overall status",
       "golden_supplier_price": "Supplier price",
       "golden_current_dealer": "Current dealer",

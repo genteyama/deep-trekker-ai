@@ -33,7 +33,7 @@ REVIEW_STATUSES = {
 
 
 def load_official_manufacturer_price_books() -> list[PriceBookImportResult]:
-    # Only the DT40 / PT30 masters activated in the price master registry are official.
+    # Only manufacturer masters activated in the Price Master Registry are official.
     from agents.price_master import active_price_books
 
     return [item.book for item in active_price_books()]
@@ -102,7 +102,7 @@ def validate_supplier_quote(
         status=_overall_status(summary),
         supplier_quote_total_usd=quote.total_usd,
         uses_supplier_quote_as_product_cost=False,
-        manufacturer_cost_basis="DT40_PT30_CURRENT_DEALER",
+        manufacturer_cost_basis="OFFICIAL_MANUFACTURER_CURRENT_DEALER",
     )
 
 
@@ -131,7 +131,7 @@ def _validate_product_line(
     if candidate is None:
         result.validation_status = SupplierQuoteValidationStatus.SKU_NOT_FOUND
         result.warnings.append(
-            "SKU was not found in the DT40 / PT30 Current Master. Similar SKUs were not substituted."
+            "SKU was not found in the current official Manufacturer Master. Similar SKUs were not substituted."
         )
         return result
 
@@ -199,7 +199,7 @@ def _non_product_line(
         line_kind=kind,
         supplier_unit_price_usd=shipping.unit_price_usd,
         validation_status=SupplierQuoteValidationStatus.NON_PRODUCT_COST,
-        warnings=["Shipping is not validated against DT40 / PT30 SKU prices. Use ShippingRule."],
+        warnings=["Shipping is not validated against Manufacturer Master SKU prices. Use ShippingRule."],
         source_reference=shipping.shipping_type.value if shipping.shipping_type else None,
     )
 
@@ -212,7 +212,7 @@ def _insurance_line(insurance: SupplierQuoteInsurance) -> SupplierQuoteLineValid
         line_kind=SupplierQuoteLineKind.INSURANCE,
         supplier_unit_price_usd=insurance.amount_usd,
         validation_status=SupplierQuoteValidationStatus.NON_PRODUCT_COST,
-        warnings=["Insurance is not validated against DT40 / PT30 SKU prices. Use Landed Cost later."],
+        warnings=["Insurance is not validated against Manufacturer Master SKU prices. Use Landed Cost later."],
     )
 
 

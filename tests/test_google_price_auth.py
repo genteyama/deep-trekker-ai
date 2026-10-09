@@ -19,7 +19,7 @@ from agents.online_price_source import (
     fetch_workbook,
     google_spreadsheet_file_id,
 )
-from agents.price_master import MANUFACTURER_MASTERS, get_active_master, import_price_master
+from agents.price_master import ONLINE_SYNC_MASTERS, get_active_master, import_price_master
 from agents.quote_builder import apply_exchange_rate
 from models import PriceMasterImportStatus, PriceMasterType
 from repositories.manufacturer_price_source_repository import (
@@ -359,8 +359,8 @@ def test_spectra_gold_authenticated_connectivity_succeeds_without_pricing(monkey
 
     assert checked.last_check_status == "CONNECTED_FUTURE"
     assert review is None
-    assert SOURCE_SPECTRA_GOLD not in {item.value for item in MANUFACTURER_MASTERS}
-    assert SOURCE_SPECTRA_GOLD not in {item.value for item in PriceMasterType}
+    assert SOURCE_SPECTRA_GOLD not in {item.value for item in ONLINE_SYNC_MASTERS}
+    assert get_active_master(PriceMasterType.SPECTRA_GOLD) is None
     assert get_active_master(PriceMasterType.DT40) is None
     assert get_active_master(PriceMasterType.PT30) is None
 

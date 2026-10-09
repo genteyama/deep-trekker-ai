@@ -2,7 +2,7 @@
 
 引き継ぎ用の要約。Source of Truth は Git / 現在コード（→ 2章）。
 
-Last updated: 2026-10-09（v1.1.0 baseline `1512f22`。Phase A〜A.3 の commit は Git を正とする）
+Last updated: 2026-10-09（v1.1.0 baseline `1512f22`。Phase A〜A.4 の commit は Git を正とする）
 
 ## 1. Project Purpose
 
@@ -30,10 +30,10 @@ PROJECT_CONTEXT とコードが矛盾した場合は、原則コード / Git を
 
 ## 3. Current Status
 
-- 現在 Phase: **v1.2 Phase A.3 — Authenticated Google Manufacturer Price Source**
+- 現在 Phase: **v1.2 Phase A.4 — SPECTRA GOLD Manual Price Master + Quote MVP**
 - v1.1.0 Online Multi-device MVP: **完成済み**。main baseline `1512f22112deff7f6d4b2512c273e5a2dac24ff9`（tag `v1.1.0`）
 - 旧記載の HEAD `e746ca9` はそれ以前の checkpoint。この文書とコードが矛盾する場合は Git / current code を優先
-- full pytest: 753 passed（`pytest -q`）
+- full pytest: 766 passed（`pytest -q`）
 - Price Master Data Quality: **DQ-4 COMPLETE**（Production SO_MASTER 更新済み。AUTO 116 / REVIEW 2 / EXCLUDED 1 → 12章）。次は DQ-5（SO Master Price Reference Repair）。DQ-5 は今回の Phase A に含めていない
 
 ### v1.2 Phase A: Manufacturer Online Price Master Sync
@@ -48,7 +48,7 @@ PROJECT_CONTEXT とコードが矛盾した場合は、原則コード / Git を
 - 取得失敗、空、xlsx でない、parser 不能、必須列不足、想定外のブック構造、validation error では自動 activate しない。
 - 通常運用の Source of Truth は PostgreSQL `manufacturer_price_sources`（ローカルは SQLite）。価格マスター管理の「オンライン価格表設定」から URL を保存する。URL 保存だけでは Snapshot / Active Master / Quote 価格は変わらない。
 - DB にまだ行がない初期移行時だけ、環境変数 / Streamlit Secrets → `config/manufacturer_price_sources.json` の順で bootstrap 値を読む。通常運用で複数箇所を編集しない。
-- Source は DT40 / PT30（正式利用）と SPECTRA_GOLD（`FUTURE`）。SPECTRA_GOLD は URL 保存と xlsx 接続確認だけで、`PriceMasterType`、Quote pricing、Pricing Policy には入れない。
+- Online Sync 対象は DT40 / PT30。SPECTRA_GOLD の Online Source は `FUTURE`（オンライン連携保留）で、URL 保存と xlsx 接続確認までを維持し、Online review / activation 対象には入れない。
 - Source Registry は URL、有効状態、parser profile、lifecycle、最終確認結果、updated_at / updated_by、row_version を保持し、古い画面からの更新を reject する。
 - Online review は確認時点の Active Master import_id と Source key / URL / enabled / row_version を固定する。承認時にいずれかが変わっていれば `ONLINE_REVIEW_STALE` で reject し、最新版の再確認を要求する。
 - PostgreSQL migration は更新後の `deploy/postgres_schema.sql` を既存 DB に再実行する（`CREATE TABLE IF NOT EXISTS` の追加のみ。既存テーブルは削除・変更しない）。
@@ -58,7 +58,10 @@ PROJECT_CONTEXT とコードが矛盾した場合は、原則コード / Git を
   - 非公開Google SpreadsheetはStreamlit Secretsの `[google_price_source_service_account]` を使用する。scopeはDrive read-only。秘密鍵・tokenはDB、provenance、ログへ保存しない。
   - Google SpreadsheetはService Account設定時にDrive API v3 `files.export`でxlsx取得する。権限がない場合も、公開Sheetなら従来のpublic xlsx exportへfallbackする。`google-api-python-client`は使用しない。
 - 新しい Snapshot の出所は、既存の import_id / sha256 / filename / validation に加え、`validation_summary.online_source`（source_id、source_key、source_url、source row_version、fetched_at、filename、sha256、auth_mode）。ApprovedQuoteSnapshot のprovenanceは変更していない。
-- SPECTRA_GOLDは認証付きxlsx接続確認まで。引き続き`FUTURE`で、PriceMasterType / Quote pricing / Pricing Policyには追加していない。
+- SPECTRA_GOLD は `PriceMasterType` として手動 xlsx upload / validation / human activation / immutable history に対応。専用 parser は `SPECTRA` sheet だけを読み、`Part Number` / `Description` / `Spectra`（MSRP）/ `Gold`（Dealer）と source marker を厳格に検証する。ONYX その他の sheet / Gold 列は混入させない。
+- SPECTRA の価格は source の明示値だけを使い、Gold 率等から逆算しない。片側欠損、TBD、CONTACT PRODUCT TO QUOTE 等は manual review として 0 USD 原価にせず、価格未確定 line は承認を block する。
+- priced SPECTRA SKU は完全一致で Quote の official manufacturer candidate に利用する。対応する SO_MASTER policy がなければ顧客売価を推測せず REVIEW とする。
+- SPECTRA_GOLD Online Source は引き続き `FUTURE`。将来 Online Sync を有効化するときは、同じ SPECTRA parser / Price Master import path を再利用する。
 - Quote 価格式、為替、SO_MASTER、QUOTE_CALC、顧客最終価格、正式帳票は変更していない。9701-MAG-4K / FX 165 = 6,432,000 円を維持。
 
 ### v1 First Launch Readiness（2026-10-08）
@@ -91,7 +94,7 @@ Next:
 | Technical Case Agent | 技術問い合わせの整理・メーカー回答の取り込み | `agents/technical_case_agent.py`, `ui/technical_case*.py` |
 | Quote / Pricing workflow | Step 1〜5（構成 → 原価・売価 → 顧客表示 → 承認 → 出力） | `ui/quote_workspace.py`, `agents/quote_builder.py` |
 | Activity Ledger | 作業履歴の記録・出力 | `agents/activity_log.py`, `ui/activity_ledger.py` |
-| Price Master Registry | DT40 / PT30 / SO_MASTER / QUOTE_CALC の検証・SHA 管理・有効化。DT40 / PT30 はオンライン価格表を確認し、人間の承認後にだけ新しい Snapshot を有効化する | `agents/price_master.py`, `agents/online_price_master.py` |
+| Price Master Registry | DT40 / PT30 / SPECTRA_GOLD / SO_MASTER / QUOTE_CALC の検証・SHA 管理・有効化。DT40 / PT30 はオンライン確認、SPECTRA_GOLD は手動 upload と人間の承認後にだけ新しい Snapshot を有効化する | `agents/price_master.py`, `agents/online_price_master.py` |
 | Manufacturer Price Source Registry | PostgreSQL / SQLite で DT40 / PT30 / SPECTRA_GOLD の URL・状態・監査情報・row_version を共有管理 | `repositories/manufacturer_price_source_repository.py`, `ui/price_master.py` |
 | Pricing Policy | SpaceOne 標準売価の解決 | `agents/pricing_policy.py` |
 | Exchange Rate provenance | 採用為替と市場参考為替・理由・設定者の保持 | `agents/quote_builder.py`, `ui/pricing_display.py` |
@@ -345,7 +348,8 @@ pre-bootstrap 状態への復旧（DQ-3B 以前に戻す場合のみ）:
 
 ## 13. Test Baseline
 
-- full pytest: 753 passed（`pytest -q`、2026-10-09 Phase A.3）
+- targeted pytest: 179 passed（Phase A〜A.4、Quote approval、Supplier Quote、FX 165 regression）
+- full pytest: 766 passed（`pytest -q`、2026-10-09 Phase A.4）
 - `git diff --check`: PASS
 - runtime / outputs / 元 Price Master: Acceptance の前後で変更なし（SHA-256 で確認）
 - API calls: 0
@@ -391,7 +395,7 @@ v1 完了を止めないもの:
 
 Pricing Policy v1 には追加せず、別 Phase として扱う。
 
-v1.2 Phase A（Manufacturer Online Price Master Sync）は実装済み。main baseline は v1.1.0 `1512f22`。
+v1.2 Phase A〜A.4（Manufacturer Online Sync と SPECTRA GOLD Manual Price Master）は実装済み。Phase A.4 開始時の main HEAD は `b17aadc`。
 
 優先候補:
 

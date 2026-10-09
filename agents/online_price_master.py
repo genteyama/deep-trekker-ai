@@ -22,12 +22,12 @@ from agents.online_price_source import (
     resolve_registered_price_source,
 )
 from agents.price_master import (
-    MANUFACTURER_MASTERS,
+    ONLINE_SYNC_MASTERS,
     XLSX_SIGNATURE,
     PriceMasterValidationError,
     get_active_master,
-    import_price_book,
     import_price_master,
+    parse_manufacturer_price_master,
     safe_display_filename,
     validate_price_master,
 )
@@ -132,7 +132,7 @@ def review_manufacturer_online_price(
     master_type = PriceMasterType(master_type)
     repo = repository or SqlitePriceMasterRepository()
     active_id = _active_import_id(master_type, repo)
-    if master_type not in MANUFACTURER_MASTERS:
+    if master_type not in ONLINE_SYNC_MASTERS:
         return _failed(master_type, OnlinePriceReviewStatus.NOT_CONFIGURED, active_id)
     source = source or resolve_online_price_source(master_type)
     if not source.configured:
@@ -224,7 +224,7 @@ def inspect_online_workbook(
     staging = _write_staging(repo, data)
     try:
         try:
-            book = import_price_book(staging, source_price_book=master_type.value, version="online-review")
+            book = parse_manufacturer_price_master(master_type, staging, version="online-review")
         except Exception as error:
             logger.warning("online_price_parse_failed type=%s error=%s", master_type.value, type(error).__name__)
             return OnlinePriceReview(status=OnlinePriceReviewStatus.PARSER_FAILED, reason_code="PARSER_FAILED", **base)
@@ -362,7 +362,7 @@ def _active_prices(master_type: PriceMasterType, repository: SqlitePriceMasterRe
             return None
         return {}
     try:
-        book = import_price_book(active.path, source_price_book=master_type.value, version=active.record.import_id)
+        book = parse_manufacturer_price_master(master_type, active.path, version=active.record.import_id)
     except Exception:
         logger.warning("online_price_active_unreadable type=%s import_id=%s", master_type.value, active.record.import_id)
         return None

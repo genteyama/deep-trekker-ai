@@ -119,7 +119,7 @@ def _reconcile_item(
             issues.append(
                 MasterReconciliationIssue(
                     code="SKU_NOT_FOUND",
-                    message="SKU was not found in the current DT40 / PT30 candidates.",
+                    message="SKU was not found in the current official manufacturer master candidates.",
                 )
             )
         elif candidate.duplicate_class == SkuDuplicateClass.PRICE_CONFLICT:
@@ -177,7 +177,7 @@ def _reconcile_item(
                     issues.append(
                         MasterReconciliationIssue(
                             code="PRICE_MISMATCH",
-                            message="SpaceOne manufacturer prices differ from DT40 / PT30.",
+                            message="SpaceOne manufacturer prices differ from the official manufacturer master.",
                         )
                     )
                 recommended = _price_recommendations(old_msrp, old_dealer, new_msrp, new_dealer)

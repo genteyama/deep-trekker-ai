@@ -1,4 +1,4 @@
-"""Managed price masters (DT40 / PT30 / SpaceOne master / quote-calc).
+"""Managed price masters (DT40 / PT30 / SPECTRA GOLD / SpaceOne master / quote-calc).
 
 Every consumer resolves the active master through this module. Files are imported once, validated
 with the existing parsers, stored immutably under <db dir>/price_masters (runtime/price_masters in
@@ -34,12 +34,15 @@ from models import (
 )
 from parsers.quote_calc_parser import extract_quote_calc_audit
 from parsers.spaceone_master_parser import parse_spaceone_master
+from parsers.spectra_gold_parser import parse_spectra_gold
 from repositories.sqlite import now_iso
 from repositories.sqlite_price_master_repository import SqlitePriceMasterRepository
 
 logger = logging.getLogger(__name__)
 
-MANUFACTURER_MASTERS = (PriceMasterType.DT40, PriceMasterType.PT30)
+GENERIC_MANUFACTURER_MASTERS = (PriceMasterType.DT40, PriceMasterType.PT30)
+MANUFACTURER_MASTERS = (*GENERIC_MANUFACTURER_MASTERS, PriceMasterType.SPECTRA_GOLD)
+ONLINE_SYNC_MASTERS = GENERIC_MANUFACTURER_MASTERS
 ALLOWED_EXTENSION = ".xlsx"
 XLSX_SIGNATURE = b"PK\x03\x04"
 STAGING_DIRECTORY = ".staging"
@@ -148,8 +151,8 @@ def validate_price_master(master_type: PriceMasterType, path: Path) -> dict:
     """Run the existing parser for the master type. Opening as xlsx alone is not enough."""
     master_type = PriceMasterType(master_type)
     try:
-        if master_type in MANUFACTURER_MASTERS:
-            book = import_price_book(path, source_price_book=master_type.value, version="validation")
+        if master_type in GENERIC_MANUFACTURER_MASTERS:
+            book = parse_manufacturer_price_master(master_type, path, version="validation")
             priced = [item for item in book.candidates if item.dealer_price_usd is not None]
             if not priced:
                 raise PriceMasterValidationError("No SKU with a dealer price was found.")
@@ -157,6 +160,29 @@ def validate_price_master(master_type: PriceMasterType, path: Path) -> dict:
             return {
                 "sku_count": len(priced),
                 "sheet_count": sum(1 for sheet in book.sheets if sheet.header_found),
+                "error_count": len(book.errors),
+                "warning_count": len(book.warnings),
+            }
+        if master_type == PriceMasterType.SPECTRA_GOLD:
+            book = parse_manufacturer_price_master(master_type, path, version="validation")
+            if book.errors:
+                issue = book.errors[0]
+                raise PriceMasterValidationError(issue.message, issue.code)
+            priced = [
+                item
+                for item in book.candidates
+                if item.msrp_usd is not None and item.dealer_price_usd is not None
+            ]
+            if not priced:
+                raise PriceMasterValidationError(
+                    "No SPECTRA SKU with explicit MSRP and Gold prices was found.",
+                    "SPECTRA_NO_PRICED_SKUS",
+                )
+            return {
+                "sku_count": len(book.candidates),
+                "priced_sku_count": len(priced),
+                "manual_review_count": len(book.candidates) - len(priced),
+                "sheet_count": 1,
                 "error_count": len(book.errors),
                 "warning_count": len(book.warnings),
             }
@@ -214,6 +240,20 @@ def _is_real_number(value) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
 
+def parse_manufacturer_price_master(
+    master_type: PriceMasterType,
+    path: Path,
+    *,
+    version: Optional[str] = None,
+) -> PriceBookImportResult:
+    master_type = PriceMasterType(master_type)
+    if master_type == PriceMasterType.SPECTRA_GOLD:
+        return parse_spectra_gold(path, version=version)
+    if master_type in GENERIC_MANUFACTURER_MASTERS:
+        return import_price_book(path, source_price_book=master_type.value, version=version)
+    raise PriceMasterValidationError(f"{master_type.value} is not a manufacturer price master.")
+
+
 def get_active_master(
     master_type: PriceMasterType,
     repository: Optional[SqlitePriceMasterRepository] = None,
@@ -236,7 +276,7 @@ def active_price_books(repository: Optional[SqlitePriceMasterRepository] = None)
         active = get_active_master(master_type, repo)
         if active is None:
             continue
-        book = import_price_book(active.path, source_price_book=master_type.value, version=active.record.import_id)
+        book = parse_manufacturer_price_master(master_type, active.path, version=active.record.import_id)
         books.append(ActivePriceBook(record=active.record, book=book))
     return books
 
@@ -269,7 +309,7 @@ def load_active_landed_policy(
 
 
 def attach_price_master_provenance(draft: QuoteDraft, records: Sequence[PriceMasterImport]) -> QuoteDraft:
-    """Record which DT40/PT30 import each official price came from. Used only when a draft is created."""
+    """Record which manufacturer master import each official price came from. Used only for new drafts."""
     by_book = {record.master_type.value: record for record in records}
     snapshots = [line.manufacturer_price_snapshot for line in draft.configuration_lines]
     snapshots += list(draft.pricing_context.manufacturer_price_snapshots)

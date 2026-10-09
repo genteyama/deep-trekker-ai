@@ -196,7 +196,7 @@ def try_manual_link(
     if candidate is None:
         return ManualLinkResult(
             accepted=False,
-            message="That SKU does not exist in the current DT40 / PT30 master.",
+            message="That SKU does not exist in the current official Manufacturer Master.",
             preview=preview,
         )
     if candidate.duplicate_class == SkuDuplicateClass.PRICE_CONFLICT:

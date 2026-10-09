@@ -124,7 +124,7 @@ def test_home_opens_quote_control_page():
     assert any(button.label == "価格表を読み込む" for button in at.button)
     assert any(button.label == "社内マスターをSKUで照合" for button in at.button)
     assert any(expander.label == "Golden Quote Cases（開発用）" for expander in at.expander)
-    assert any(button.label == "IHI Supplier QuoteをDT40/PT30と照合" for button in at.button)
+    assert any(button.label == "IHI Supplier Quoteをメーカー価格マスターと照合" for button in at.button)
     assert any(button.label == "案件原価を試算" for button in at.button)
     assert any(button.label == "IHI PHOTON 見積ドラフト" for button in at.button)
     assert any(button.label == "IHI MAG 見積ドラフト" for button in at.button)

@@ -19,7 +19,7 @@ from agents.online_price_master import (
     review_manufacturer_online_price,
 )
 from agents.online_price_source import resolve_online_price_source
-from agents.price_master import MANUFACTURER_MASTERS, get_active_master, import_price_master
+from agents.price_master import ONLINE_SYNC_MASTERS, get_active_master, import_price_master
 from agents.quote_dates import TOKYO
 from models import PriceMasterImport, PriceMasterImportOutcome, PriceMasterImportStatus, PriceMasterType
 from repositories.manufacturer_price_source_repository import (
@@ -161,7 +161,7 @@ def _render_master_section(
             f"{labels['hash_label']}：{active.sha256[:12]}…"
         )
         st.caption(f"{labels['validation_label']}：{format_validation(labels, active)}")
-    if master_type in MANUFACTURER_MASTERS:
+    if master_type in ONLINE_SYNC_MASTERS:
         _render_online_review(labels, master_type, repository, source_repository, active)
     uploaded = st.file_uploader(labels["upload_label"], type=["xlsx"], key=f"price_master_upload_{master_type.value}")
     if st.button(labels["import_button"], key=f"price_master_import_{master_type.value}"):
@@ -281,7 +281,12 @@ def outcome_message(labels: dict, outcome: PriceMasterImportOutcome) -> tuple[st
     templates = labels["outcomes"]
     record = outcome.record
     if outcome.status == PriceMasterImportStatus.REJECTED:
-        return "error", templates[outcome.reason_code or "VALIDATION_FAILED"].format(label=label)
+        template = (
+            templates.get(outcome.reason_code or "")
+            or templates.get("VALIDATION_FAILED")
+            or "{label}: validation failed"
+        )
+        return "error", template.format(label=label)
     text = templates[outcome.status.value].format(
         label=label,
         file=record.original_filename if record else "-",

@@ -361,6 +361,7 @@ class FinalPriceStatus(str, Enum):
 class PriceMasterType(str, Enum):
     DT40 = "DT40"
     PT30 = "PT30"
+    SPECTRA_GOLD = "SPECTRA_GOLD"
     SO_MASTER = "SO_MASTER"
     QUOTE_CALC = "QUOTE_CALC"
 

@@ -11,7 +11,7 @@ from agents.manufacturer_price_source import (
 )
 from agents.online_price_master import OnlinePriceReviewStatus
 from agents.online_price_source import FetchedWorkbook, resolve_registered_price_source
-from agents.price_master import MANUFACTURER_MASTERS, get_active_master, import_price_master
+from agents.price_master import ONLINE_SYNC_MASTERS, get_active_master, import_price_master
 from agents.quote_builder import apply_exchange_rate
 from models import PriceMasterType
 from repositories.actor import set_current_actor
@@ -267,8 +267,8 @@ def test_spectra_gold_connection_check_does_not_enter_quote_price_books():
 
     assert checked.last_check_status == "CONNECTED_FUTURE"
     assert review is None
-    assert SOURCE_SPECTRA_GOLD not in {item.value for item in MANUFACTURER_MASTERS}
-    assert SOURCE_SPECTRA_GOLD not in {item.value for item in PriceMasterType}
+    assert SOURCE_SPECTRA_GOLD not in {item.value for item in ONLINE_SYNC_MASTERS}
+    assert get_active_master(PriceMasterType.SPECTRA_GOLD) is None
     assert get_active_master(PriceMasterType.DT40) is None
     assert get_active_master(PriceMasterType.PT30) is None
 
@@ -342,7 +342,8 @@ def test_admin_ui_can_save_url_and_labels_spectra_as_future():
 
     at = _open_quote_page()
     assert "オンライン価格表設定" in _texts(at)
-    assert "将来利用予定。現在の見積価格には使用されません。" in _texts(at)
+    assert "現在はExcel手動アップロードで価格マスターを運用しています。" in _texts(at)
+    assert "現在の見積価格には使用しません。" in _texts(at)
 
     at.text_input(key="manufacturer_source_url_DT40").set_value("https://example.test/ui-dt40.xlsx")
     at.button(key="manufacturer_source_save_DT40").click().run()
