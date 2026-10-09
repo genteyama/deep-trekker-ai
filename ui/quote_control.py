@@ -54,6 +54,7 @@ from agents.price_master import (
     load_active_landed_policy,
     load_active_spaceone_master,
     mark_sales_master_missing,
+    parse_manufacturer_price_master,
 )
 from agents.supplier_quote_validation import load_official_manufacturer_price_books, validate_supplier_quote
 from data.golden_cases.loader import IHI_QUOTE_001, load_quote_golden_case
@@ -1286,12 +1287,17 @@ def _build_spectra_draft_from_ui(
         domestic = _optional_spectra_cost(domestic_shipping_jpy)
     except ValueError as error:
         raise SpectraQuoteEntryError("DOMESTIC_SHIPPING_INVALID") from error
-    books = [
-        item.book
-        for item in active_price_books()
-        if item.record.master_type == PriceMasterType.SPECTRA_GOLD
-    ]
-    sales = _sales_candidates_for_rate(rate, books=books)
+    active_spectra = get_active_master(PriceMasterType.SPECTRA_GOLD)
+    spectra_book = (
+        parse_manufacturer_price_master(
+            PriceMasterType.SPECTRA_GOLD,
+            active_spectra.path,
+            version=active_spectra.record.import_id,
+        )
+        if active_spectra is not None
+        else None
+    )
+    sales = _sales_candidates_for_rate(rate, books=[spectra_book]) if spectra_book is not None else None
     return create_spectra_quote_draft(
         customer=customer,
         title=title,

@@ -1,5 +1,6 @@
 import pytest
 
+import ui.quote_control as quote_control
 from agents.price_master import import_price_master
 from agents.quote_approval import validate_for_approval
 from agents.quote_builder import inspect_quote_economics
@@ -187,9 +188,18 @@ def test_missing_active_master_or_quote_calc_fails_closed():
         _create()
 
 
-def test_spectra_quote_entry_is_available_in_normal_new_quote_ui():
+def test_spectra_quote_entry_ui_does_not_load_dt40_or_pt30(monkeypatch):
     _activate_spectra()
     _activate_quote_calc()
+
+    def fail_if_all_manufacturer_books_are_loaded():
+        raise AssertionError("SPECTRA entry must not load DT40/PT30")
+
+    monkeypatch.setattr(
+        quote_control,
+        "active_price_books",
+        fail_if_all_manufacturer_books_are_loaded,
+    )
     at = _open_quote_page()
 
     assert "SPECTRA 見積下書き" in _texts(at)
@@ -204,3 +214,8 @@ def test_spectra_quote_entry_is_available_in_normal_new_quote_ui():
     assert draft.customer == "UI Customer"
     assert draft.configuration_name == "SPECTRA"
     assert draft.configuration_lines[0].manufacturer_sku == "SPECTRA0001"
+    assert draft.configuration_lines[0].dealer_price_usd == 141750
+    assert (
+        draft.configuration_lines[0].manufacturer_price_snapshot.manufacturer_msrp_usd
+        == 202500
+    )
