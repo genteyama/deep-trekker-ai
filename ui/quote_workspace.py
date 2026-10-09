@@ -809,7 +809,8 @@ def _render_step_review(page: dict, helpers, draft, snapshot) -> None:
                 st.error(page["workspace"].get("save_failed", str(error)))
             st.rerun()
         except (QuoteApprovalError, ValueError) as error:
-            st.error(str(error))
+            logger.warning("quote_approval_rejected reason=%s", type(error).__name__)
+            st.error(workspace["approval_action_blocked"])
     if snapshot is not None and st.button(page["create_revision_button"], key="create_quote_revision", type="secondary"):
         revision = create_revision_draft(snapshot, store=store)
         helpers["init_date_widgets"](revision, overwrite=True)
@@ -831,7 +832,13 @@ def _render_approval_state(page: dict, draft, validation) -> None:
     if validation.can_approve:
         st.success(page["approval_ready"])
     else:
-        st.error(validation.blocking_reason or page["approval_blocked"])
+        if draft.status != QuoteDraftStatus.READY_FOR_APPROVAL:
+            message = workspace["approval_status_blocked"]
+        elif validation.critical_warnings:
+            message = workspace["approval_critical_blocked"]
+        else:
+            message = page["approval_blocked"]
+        st.error(message)
         st.write(workspace["approval_needs"])
 
 

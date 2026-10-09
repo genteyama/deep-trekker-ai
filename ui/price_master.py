@@ -77,6 +77,8 @@ def _render_source_registry(labels: dict, source_repository, price_master_reposi
             st.markdown(f"**{heading}**")
             if source.lifecycle_status == "FUTURE":
                 st.caption(online["future_notice"])
+                st.write(f"{online['future_state_label']}：{online['future_state_stopped']}")
+                continue
             state = online["enabled"] if source.enabled else online["disabled"]
             st.write(f"{online['state_label']}：{state}")
             st.write(

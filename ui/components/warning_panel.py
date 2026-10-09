@@ -1,7 +1,11 @@
 import streamlit as st
 
 from ui.quote_steps import non_official_price_lines
-from ui.warning_summary import format_warning_lines, summarize_draft_warnings
+from ui.warning_summary import (
+    format_warning_details,
+    format_warning_lines,
+    summarize_draft_warnings,
+)
 
 
 def render_price_source_notice(page: dict, draft) -> None:
@@ -29,7 +33,11 @@ def render_warning_panel(page: dict, draft) -> None:
     )
     if summary["raw"]:
         with st.expander(workspace.get("warning_details", "警告の詳細"), expanded=False):
-            for item in summary["raw"]:
+            for item in format_warning_details(
+                summary,
+                labels,
+                workspace.get("warning_detail_other", labels.get("other", "{count}")).format(count=1),
+            ):
                 st.caption(item)
 
 
@@ -45,5 +53,10 @@ def render_validation_warnings(page: dict, validation) -> None:
     elif validation.regular_warnings:
         st.warning(workspace.get("warning_title", "要確認があります"))
     with st.expander(workspace.get("warning_details", "警告の詳細"), expanded=False):
-        for item in raw:
+        summary = {"raw": list(dict.fromkeys(raw))}
+        for item in format_warning_details(
+            summary,
+            workspace.get("warning_kinds", {}),
+            workspace.get("warning_detail_other", "Review is required."),
+        ):
             st.caption(item)

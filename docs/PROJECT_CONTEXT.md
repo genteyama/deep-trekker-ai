@@ -30,10 +30,10 @@ PROJECT_CONTEXT とコードが矛盾した場合は、原則コード / Git を
 
 ## 3. Current Status
 
-- 現在 Phase: **v1.2 Phase A.4b — SPECTRA Single-SKU Quote Entry**
+- 現在 Phase: **v1.2.1 UX Patch**
 - v1.1.0 Online Multi-device MVP: **完成済み**。main baseline `1512f22112deff7f6d4b2512c273e5a2dac24ff9`（tag `v1.1.0`）
 - 旧記載の HEAD `e746ca9` はそれ以前の checkpoint。この文書とコードが矛盾する場合は Git / current code を優先
-- full pytest: 783 passed（`pytest -q`）
+- full pytest: 786 passed（`pytest -q`）
 - Price Master Data Quality: **DQ-4 COMPLETE**（Production SO_MASTER 更新済み。AUTO 116 / REVIEW 2 / EXCLUDED 1 → 12章）。次は DQ-5（SO Master Price Reference Repair）。DQ-5 は今回の Phase A に含めていない
 
 ### v1.2 Phase A: Manufacturer Online Price Master Sync
@@ -65,6 +65,12 @@ PROJECT_CONTEXT とコードが矛盾した場合は、原則コード / Git を
 - SPECTRA単品見積の輸送原価は人間の明示入力だけを使う。国際輸送または国内送料が未入力ならpending placeholderでtotal landed costを未確定にし、Draftは作成できるが承認をblockする。
 - SPECTRA_GOLD Online Source は引き続き `FUTURE`。将来 Online Sync を有効化するときは、同じ SPECTRA parser / Price Master import path を再利用する。
 - Quote 価格式、為替、SO_MASTER、QUOTE_CALC、顧客最終価格、正式帳票は変更していない。9701-MAG-4K / FX 165 = 6,432,000 円を維持。
+
+### v1.2.1 UX Patch
+
+- `FUTURE` のSPECTRA Online Sourceは通常画面で「オンライン連携：停止中」と表示し、URL編集・有効化・保存・接続確認・過去の接続エラーを表示しない。Registry値とbackend機能は維持する。
+- Quoteの内部warning / Enum / reasonは変更せず、通常UIだけを業務ユーザー向けの日英表現へ変換する。承認判定・Pricing・Snapshotには変更なし。
+- 既存Draft / validation / shipping placeholderの事実から、販売価格・国際輸送原価・国内送料・税率・納期等の要確認理由を重複なく短く表示し、詳細でも内部英語を直接表示しない。
 
 ### v1 First Launch Readiness（2026-10-08）
 
@@ -350,8 +356,8 @@ pre-bootstrap 状態への復旧（DQ-3B 以前に戻す場合のみ）:
 
 ## 13. Test Baseline
 
-- Phase A.4b targeted pytest: 174 passed（SPECTRA entry/master、Quote builder/approval、PHOTON/MAG、DT40/PT30 pricing regression）
-- full pytest: 783 passed（`pytest -q`、2026-10-09 Phase A.4b）
+- v1.2.1 targeted pytest: 182 passed（Price Master UI、SPECTRA Quote、warning/approval UI、PHOTON/MAG、pricing regression）
+- full pytest: 786 passed（`pytest -q`、2026-10-09 v1.2.1 UX Patch）
 - `git diff --check`: PASS
 - runtime / outputs / 元 Price Master: Acceptance の前後で変更なし（SHA-256 で確認）
 - API calls: 0
@@ -397,7 +403,7 @@ v1 完了を止めないもの:
 
 Pricing Policy v1 には追加せず、別 Phase として扱う。
 
-v1.2 Phase A〜A.4b（Manufacturer Online Sync、SPECTRA GOLD Manual Price Master、Single-SKU Quote Entry）は実装済み。Phase A.4b 開始時の main HEAD は `9d9b1cd`。
+v1.2 Phase A〜A.4bは実装・Production Release済み。v1.2.1 UX Patch開始時のmain HEADは`b41968d`。
 
 優先候補:
 
