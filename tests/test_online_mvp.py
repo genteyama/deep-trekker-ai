@@ -289,5 +289,6 @@ def test_no_secrets_committed():
         if path.suffix not in {".py", ".toml", ".example", ".md", ".sql", ".txt", ".json"} or not path.is_file():
             continue
         text = path.read_text(encoding="utf-8", errors="ignore")
-        assert "eyJhbGciOi" not in text, name
-        assert "sb_secret_" not in text, name
+        # Needles are split so this file does not contain the tokens it scans for.
+        for needle in ("eyJ" + "hbGciOi", "sb_" + "secret_"):
+            assert needle not in text, name

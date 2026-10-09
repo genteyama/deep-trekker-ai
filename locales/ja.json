@@ -415,7 +415,50 @@
           "VALIDATION_FAILED": "{label}として読み込めませんでした。ファイル内容をご確認ください。現在の価格マスターは変更していません。",
           "MASTER_TYPE_UNCONFIRMED": "{label}として確認できませんでした。選択したファイルの種類をご確認ください（PT30とDT40など、別の種類の価格表の可能性があります）。現在の価格マスターは変更していません。",
           "POLICY_INCOMPLETE": "{label}として必要な値（輸入税・保険・Shipping倍率）をすべて読み取れませんでした。ファイル内容をご確認ください。現在の価格マスターは変更していません。",
-          "STORAGE_FAILED": "{label}の保存に失敗しました。現在の価格マスターは変更していません。"
+          "STORAGE_FAILED": "{label}の保存に失敗しました。現在の価格マスターは変更していません。",
+          "ONLINE_REVIEW_REQUIRED": "{label}は、確認結果に問題がない場合だけ新しいPrice Masterとして登録できます。現在の価格マスターは変更していません。"
+        },
+        "online": {
+          "source_label": "Online Source",
+          "configured": "設定済み",
+          "not_configured": "未設定",
+          "active_label": "現在Active",
+          "unset": "未設定",
+          "checked_at_label": "最終確認日時",
+          "not_checked": "未確認",
+          "check_button": "メーカー価格表を確認",
+          "activate_button": "新しいPrice Masterとして登録・有効化",
+          "summary_title": "最新確認結果",
+          "price_changes": "価格変更 {count}",
+          "dealer_changes": "Dealer Price変更 {count}",
+          "msrp_changes": "MSRP変更 {count}",
+          "sku_added": "SKU追加 {count}",
+          "sku_removed": "SKU削除 {count}",
+          "errors": "エラー {count}",
+          "details": "変更詳細",
+          "no_change": "現在のActive Masterと同じ内容です。新しいSnapshotは作りません。",
+          "column_sku": "SKU",
+          "column_change": "変更",
+          "column_dealer": "Dealer Price",
+          "column_msrp": "MSRP",
+          "change_kinds": {
+            "ADDED": "追加",
+            "REMOVED": "削除",
+            "DEALER": "Dealer Price",
+            "MSRP": "MSRP",
+            "DEALER_AND_MSRP": "Dealer Price / MSRP"
+          },
+          "statuses": {
+            "NOT_CONFIGURED": "{label}のOnline Sourceが未設定です。現在の価格マスターは変更していません。",
+            "FETCH_FAILED": "{label}のメーカー価格表を取得できませんでした。現在の価格マスターは変更していません。",
+            "EMPTY": "{label}の取得結果が空でした。現在の価格マスターは変更していません。",
+            "NOT_XLSX": "{label}の取得結果はExcel（.xlsx）ではありません。現在の価格マスターは変更していません。",
+            "PARSER_FAILED": "{label}のメーカー価格表を読み込めませんでした。現在の価格マスターは変更していません。",
+            "DUPLICATE_SKU": "{label}に、価格の異なる同一SKUがあります。現在の価格マスターは変更していません。",
+            "MISSING_COLUMNS": "{label}の必須列（Part Number / Description / MSRP / Dealer）が見つかりません。現在の価格マスターは変更していません。",
+            "NO_DATA": "{label}にDealer PriceのあるSKUがありません。現在の価格マスターは変更していません。",
+            "VALIDATION_FAILED": "{label}の検証で問題が見つかりました。現在の価格マスターは変更していません。"
+          }
         }
       },
       "scenario_exchange_rate_label": "シナリオ試算専用の為替（円/USD・見積には反映されません）",

@@ -366,8 +366,9 @@ class PriceMasterType(str, Enum):
 
 
 class PriceMasterSourceType(str, Enum):
-    # Future sources (e.g. GOOGLE_SHEETS) go through the same validation, hashing and activation.
+    # Online manufacturer workbooks use the same validation, hashing and activation as uploads.
     FILE_UPLOAD = "FILE_UPLOAD"
+    MANUFACTURER_ONLINE = "MANUFACTURER_ONLINE"
 
 
 class PriceMasterValidationStatus(str, Enum):

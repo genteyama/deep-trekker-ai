@@ -70,6 +70,7 @@ def import_price_master(
     *,
     repository: Optional[SqlitePriceMasterRepository] = None,
     source_type: PriceMasterSourceType = PriceMasterSourceType.FILE_UPLOAD,
+    provenance: Optional[dict] = None,
 ) -> PriceMasterImportOutcome:
     """Validate, store and activate one upload. A rejected upload never changes the active master."""
     master_type = PriceMasterType(master_type)
@@ -104,6 +105,8 @@ def import_price_master(
         staging.write_bytes(data)
         try:
             summary = validate_price_master(master_type, staging)
+            if provenance:
+                summary = {**summary, "online_source": dict(provenance)}
         except PriceMasterValidationError as error:
             logger.warning("price_master_rejected type=%s file=%s reason=%s", master_type.value, display_name, error)
             return _rejected(master_type, error.code)

@@ -2,7 +2,7 @@
 
 引き継ぎ用の要約。Source of Truth は Git / 現在コード（→ 2章）。
 
-Last updated: 2026-10-08（HEAD `e746ca9`）
+Last updated: 2026-10-09（v1.1.0 baseline `1512f22`。Phase A の commit は Git を正とする）
 
 ## 1. Project Purpose
 
@@ -30,11 +30,29 @@ PROJECT_CONTEXT とコードが矛盾した場合は、原則コード / Git を
 
 ## 3. Current Status
 
-- 現在 Phase: **v1 FIRST LAUNCH READY**（2026-10-08）
-- Launch commit: `e746ca9 Ignore SO Master helper sheets in parser`（main = origin/main）
-- full pytest: 678 passed
-- working tree: clean
-- Price Master Data Quality: **DQ-4 COMPLETE**（Production SO_MASTER 更新済み。AUTO 116 / REVIEW 2 / EXCLUDED 1 → 12章）。次は DQ-5（SO Master Price Reference Repair）
+- 現在 Phase: **v1.2 Phase A — Manufacturer Online Price Master Sync**（この変更。main へは未 push）
+- v1.1.0 Online Multi-device MVP: **完成済み**。main baseline `1512f22112deff7f6d4b2512c273e5a2dac24ff9`（tag `v1.1.0`）
+- 旧記載の HEAD `e746ca9` はそれ以前の checkpoint。この文書とコードが矛盾する場合は Git / current code を優先
+- full pytest: 710 passed（`pytest -q`）
+- Price Master Data Quality: **DQ-4 COMPLETE**（Production SO_MASTER 更新済み。AUTO 116 / REVIEW 2 / EXCLUDED 1 → 12章）。次は DQ-5（SO Master Price Reference Repair）。DQ-5 は今回の Phase A に含めていない
+
+### v1.2 Phase A: Manufacturer Online Price Master Sync
+
+オンラインのメーカー価格表は、見積計算に直接使わない。
+
+メーカー Online Price Data → 取得 → 既存 Active Master との差分 → validation → 人間確認 → 新しい Price Master Snapshot として登録・有効化 → 見積計算。
+
+- 対象は DT40 / PT30。Price Master 管理画面の「メーカー価格表を確認」で差分を見て、問題がないときだけ「新しいPrice Masterとして登録・有効化」する。
+- 比較は normalized SKU の完全一致と正式な価格列（Dealer Price / MSRP）。行番号・行順は価格変更にしない。SKU と価格が同じなら新しい Snapshot は作らない。
+- 同一 SKU で MSRP または Dealer Price が食い違う場合は reject し、既存 Active Master を維持する。シートをまたいで同一価格の SKU は、既存 parser どおり 1 SKU にまとめる。
+- 取得失敗、空、xlsx でない、parser 不能、必須列不足、想定外のブック構造、validation error では自動 activate しない。
+- 新しい設定（実 Source URL はコードにもこの文書にも無い。人が入れる）:
+  - `config/manufacturer_price_sources.json` の `DT40.url` / `PT30.url`（空なら未設定）
+  - 環境変数または Streamlit Secrets がファイルより優先: `DT40_ONLINE_PRICE_SOURCE_URL`、`PT30_ONLINE_PRICE_SOURCE_URL`
+  - export URL が非公開のときだけ任意: `DT40_ONLINE_PRICE_SOURCE_AUTHORIZATION`、`PT30_ONLINE_PRICE_SOURCE_AUTHORIZATION`
+  - Google Spreadsheet の URL は、その spreadsheet の xlsx export に変換して取得する。Google API クライアントは使わない。
+- 新しい Snapshot の出所は、既存の import_id / sha256 / filename / validation に加え、`validation_summary.online_source`（source_id、source_url、fetched_at、filename、sha256）。ApprovedQuoteSnapshot の provenance は変更していない。
+- Quote 価格式、為替、SO_MASTER、QUOTE_CALC、顧客最終価格、正式帳票は変更していない。9701-MAG-4K / FX 165 = 6,432,000 円を維持。
 
 ### v1 First Launch Readiness（2026-10-08）
 
@@ -66,7 +84,7 @@ Next:
 | Technical Case Agent | 技術問い合わせの整理・メーカー回答の取り込み | `agents/technical_case_agent.py`, `ui/technical_case*.py` |
 | Quote / Pricing workflow | Step 1〜5（構成 → 原価・売価 → 顧客表示 → 承認 → 出力） | `ui/quote_workspace.py`, `agents/quote_builder.py` |
 | Activity Ledger | 作業履歴の記録・出力 | `agents/activity_log.py`, `ui/activity_ledger.py` |
-| Price Master Registry | DT40 / PT30 / SO_MASTER / QUOTE_CALC の検証・SHA 管理・有効化 | `agents/price_master.py` |
+| Price Master Registry | DT40 / PT30 / SO_MASTER / QUOTE_CALC の検証・SHA 管理・有効化。DT40 / PT30 はオンライン価格表を確認し、人間の承認後にだけ新しい Snapshot を有効化する | `agents/price_master.py`, `agents/online_price_master.py` |
 | Pricing Policy | SpaceOne 標準売価の解決 | `agents/pricing_policy.py` |
 | Exchange Rate provenance | 採用為替と市場参考為替・理由・設定者の保持 | `agents/quote_builder.py`, `ui/pricing_display.py` |
 | Customer Price Rounding | 顧客向け価格の 1,000 円単位丸め | `agents/pricing_policy.py` |
@@ -319,7 +337,7 @@ pre-bootstrap 状態への復旧（DQ-3B 以前に戻す場合のみ）:
 
 ## 13. Test Baseline
 
-- full pytest: 678 passed（`pytest -q`）
+- full pytest: 710 passed（`pytest -q`、2026-10-09 Phase A）
 - `git diff --check`: PASS
 - runtime / outputs / 元 Price Master: Acceptance の前後で変更なし（SHA-256 で確認）
 - API calls: 0
@@ -364,6 +382,8 @@ v1 完了を止めないもの:
 ## 16. Next Phase Candidates
 
 Pricing Policy v1 には追加せず、別 Phase として扱う。
+
+v1.2 Phase A（Manufacturer Online Price Master Sync）は実装済み。main baseline は v1.1.0 `1512f22`。
 
 優先候補:
 

@@ -415,7 +415,50 @@
           "VALIDATION_FAILED": "The file could not be read as {label}. Check the file. The current price master was not changed.",
           "MASTER_TYPE_UNCONFIRMED": "The file could not be confirmed as {label}. Check which price book you selected (for example DT40 vs PT30). The current price master was not changed.",
           "POLICY_INCOMPLETE": "Not all required values (import tax, insurance, shipping markup) could be read for {label}. Check the file. The current price master was not changed.",
-          "STORAGE_FAILED": "Saving {label} failed. The current price master was not changed."
+          "STORAGE_FAILED": "Saving {label} failed. The current price master was not changed.",
+          "ONLINE_REVIEW_REQUIRED": "{label} can be registered only after a review finds valid differences. The current price master was not changed."
+        },
+        "online": {
+          "source_label": "Online source",
+          "configured": "Configured",
+          "not_configured": "Not configured",
+          "active_label": "Active now",
+          "unset": "Not set",
+          "checked_at_label": "Last check",
+          "not_checked": "Not checked",
+          "check_button": "Check manufacturer price book",
+          "activate_button": "Register and activate as a new price master",
+          "summary_title": "Latest check",
+          "price_changes": "Price changes {count}",
+          "dealer_changes": "Dealer price changes {count}",
+          "msrp_changes": "MSRP changes {count}",
+          "sku_added": "SKUs added {count}",
+          "sku_removed": "SKUs removed {count}",
+          "errors": "Errors {count}",
+          "details": "Change details",
+          "no_change": "This matches the active master. No new snapshot was created.",
+          "column_sku": "SKU",
+          "column_change": "Change",
+          "column_dealer": "Dealer price",
+          "column_msrp": "MSRP",
+          "change_kinds": {
+            "ADDED": "Added",
+            "REMOVED": "Removed",
+            "DEALER": "Dealer price",
+            "MSRP": "MSRP",
+            "DEALER_AND_MSRP": "Dealer price / MSRP"
+          },
+          "statuses": {
+            "NOT_CONFIGURED": "The online source for {label} is not configured. The current price master was not changed.",
+            "FETCH_FAILED": "The manufacturer price book for {label} could not be fetched. The current price master was not changed.",
+            "EMPTY": "The fetch for {label} was empty. The current price master was not changed.",
+            "NOT_XLSX": "The fetch for {label} is not an Excel (.xlsx) file. The current price master was not changed.",
+            "PARSER_FAILED": "The manufacturer price book for {label} could not be read. The current price master was not changed.",
+            "DUPLICATE_SKU": "{label} contains the same SKU with different prices. The current price master was not changed.",
+            "MISSING_COLUMNS": "Required columns were not found for {label}. The current price master was not changed.",
+            "NO_DATA": "{label} has no SKU with a dealer price. The current price master was not changed.",
+            "VALIDATION_FAILED": "Validation failed for {label}. The current price master was not changed."
+          }
         }
       },
       "scenario_exchange_rate_label": "Scenario-only exchange rate (JPY/USD, not applied to quotes)",
