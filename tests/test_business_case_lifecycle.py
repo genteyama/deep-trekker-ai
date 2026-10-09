@@ -5,6 +5,7 @@ import pytest
 
 from agents.activity_catalog import timeline_event_label
 from agents.activity_log import record_case_business_lifecycle
+from agents.technical_case_persistence import run_from_record
 from agents.work_lifecycle import (
     CaseLifecycleError,
     archive_record,
@@ -27,6 +28,7 @@ from repositories.sqlite import table_columns
 from repositories.sqlite_activity_repository import SqliteActivityRepository
 from repositories.sqlite_technical_case_repository import SqliteTechnicalCaseRepository
 from repositories.technical_case_repository import TechnicalCaseConflictError
+from ui.technical_case_persistence import persist_technical_case
 
 
 def _record(case_id="CASE-B1", status=TechnicalCaseStatus.WAITING_MANUFACTURER.value):
@@ -73,6 +75,35 @@ def test_close_and_reopen_preserve_workflow_archive_and_close_metadata():
     assert reopened.closed_by == closed.closed_by
     assert reopened.close_memo == closed.close_memo
     set_current_actor(None)
+
+
+def test_normal_save_after_reopen_preserves_close_metadata(tmp_path):
+    repo = SqliteTechnicalCaseRepository(tmp_path / "cases.sqlite3")
+    original = _record(status=TechnicalCaseStatus.WAITING_MANUFACTURER.value)
+    repo.save_case(original)
+    set_current_actor("owner@example.com")
+    closed = close_technical_case(
+        repo.get_case(original.case_id),
+        reason=CaseCloseReason.LOST,
+        memo="Customer selected another supplier",
+        closed_at="2026-10-09T10:00:00+00:00",
+    )
+    repo.save_case(closed)
+    reopened = reopen_technical_case(repo.get_case(original.case_id))
+    repo.save_case(reopened)
+    set_current_actor(None)
+
+    session = {}
+    saved = persist_technical_case(session, run_from_record(reopened), repository=repo)
+    loaded = repo.get_case(original.case_id)
+
+    assert saved is not None
+    assert loaded.case_lifecycle_status == CaseLifecycleStatus.ACTIVE
+    assert loaded.status == TechnicalCaseStatus.WAITING_MANUFACTURER.value
+    assert loaded.close_reason == CaseCloseReason.LOST
+    assert loaded.closed_at == "2026-10-09T10:00:00+00:00"
+    assert loaded.closed_by == "owner@example.com"
+    assert loaded.close_memo == "Customer selected another supplier"
 
 
 def test_close_and_reopen_validation_fail_closed():
