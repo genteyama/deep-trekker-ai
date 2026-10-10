@@ -31,3 +31,4 @@ runtime/*.sqlite3-*
 
 runtime/exports/
 runtime/price_masters/
+runtime/dq5_audit/

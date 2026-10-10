@@ -33,8 +33,8 @@ PROJECT_CONTEXT とコードが矛盾した場合は、原則コード / Git を
 - 現在 Phase: **Phase B — Business Case Close / Reopen + Status Quick View**
 - v1.1.0 Online Multi-device MVP: **完成済み**。main baseline `1512f22112deff7f6d4b2512c273e5a2dac24ff9`（tag `v1.1.0`）
 - 旧記載の HEAD `e746ca9` はそれ以前の checkpoint。この文書とコードが矛盾する場合は Git / current code を優先
-- full pytest: 801 passed（`pytest -q`、2026-10-10 v1.3.0 display patch）
-- Price Master Data Quality: **DQ-4 COMPLETE**（Production SO_MASTER 更新済み。AUTO 116 / REVIEW 2 / EXCLUDED 1 → 12章）。次は DQ-5（SO Master Price Reference Repair）。DQ-5 は今回の Phase A に含めていない
+- full pytest: 803 passed（`pytest -q`、2026-10-10 DQ-5A）
+- Price Master Data Quality: **DQ-4 COMPLETE**。**DQ-5A audit only COMPLETE**（修正は未実施。→ 12章 / 15章）
 
 ### v1.2 Phase A: Manufacturer Online Price Master Sync
 
@@ -349,7 +349,7 @@ pre-bootstrap 状態への復旧（DQ-3B 以前に戻す場合のみ）:
 
 ### Known Data Quality Issue: SO Master の価格参照
 
-- SO Master の Manufacturer 価格参照式（`IMPORTRANGE`）に大規模なずれがある。DQ-4A の監査では、79 references のうち 49 references が別 SKU の row を参照している可能性が高い。既知の PRICE_MISMATCH は 34 行。
+- SO Master の Manufacturer 価格参照式（`IMPORTRANGE`）に row ずれがある。DQ-4A の過去参考値は 79 references / 49 suspected wrong / 34 PRICE_MISMATCH rows。DQ-5A は現在の Active Master で再監査し、この過去値へ合わせていない。
 - Production の見積価格は Manufacturer Master の official MSRP を使うため、現在の見積候補は正常。
 - ただし人が SO Master を直接見たときに、誤った価格を見るリスクがある。DQ-5 で扱う（→ 15章）。
 
@@ -371,7 +371,8 @@ pre-bootstrap 状態への復旧（DQ-3B 以前に戻す場合のみ）:
 - v1.3.0 display patch: user-facing timestamps are Asia/Tokyo; persisted timestamps remain UTC; Technical Case progress uses the 7-step workflow; Quote progress logic is unchanged
 - Phase B targeted pytest: 214 passed（Business lifecycle、migration、Activity、Technical Case、Home、multi-device、Quote / SPECTRA regression）
 - v1.3.0 display targeted pytest: 31 passed（datetime、Home、Quick View、Technical workflow、Phase B UI）
-- full pytest: 801 passed（`pytest -q`、2026-10-10）
+- DQ-5A targeted pytest: 152 passed（reference audit、SpaceOne parser、SKU link、pricing policy、price master）
+- full pytest: 803 passed（`pytest -q`、2026-10-10）
 - `git diff --check`: PASS
 - runtime / outputs / 元 Price Master: Acceptance の前後で変更なし（SHA-256 で確認）
 - API calls: 0
@@ -399,14 +400,39 @@ v1 完了を止めないもの:
 - `exchange_rate_set_at`: UI の `submit_exchange_rate` が設定日時を渡しておらず、Approved Snapshot では None。採用為替をいつ決めたかの監査情報として追加を検討する。
 - `PriceAdjustment.entered_by`: UI から入力者を渡しておらず None。誰が案件価格を設定したかの監査情報として追加を検討する。
 
-### Price Master Data Quality DQ-5: SO Master Price Reference Repair
+### Price Master Data Quality DQ-5A: SO Master Price Reference Audit
 
-目的: SO Master 上の Manufacturer 価格参照を正しい SKU / Manufacturer row に直し、人が Google Sheet 上で見ても誤った MSRP / Dealer / 試算価格を参照しない状態にする（→ 12章 Known Data Quality Issue）。
+判定: **DQ-5A COMPLETE / audit only**（2026-10-10）。Google Sheet、Production Registry、Price Master、Quote は変更していない。
+
+Active inputs:
+
+- `SO_MASTER-20261008T051104Z-4f6c4b00`
+- `DT40-20261008T034155Z-60b1958a`
+- `PT30-20261008T034155Z-4663ccbd`
+
+結果（MSRP / Dealer を別 field として監査）:
+
+- SO items 119 / reference fields 238
+- CORRECT 102
+- EXACT_REPAIRABLE 66 fields / unique SO rows 33
+- AMBIGUOUS_OCCURRENCE 66 fields / 21 SKUs
+- SKU_NOT_FOUND 2 fields（9685 の MSRP / Dealer）
+- MANUAL_REVIEW 2 fields（legacy shipping）
+- displayed price mismatch 21 unique SO rows（MSRP 21 / Dealer 21）
+- `safe_to_repair` は一意な exact active occurrence だけ。fuzzy / 類似 SKU は未使用。
+- 9685 は数値のみで formula がなく、Manufacturer Master に exact SKU がない。`safe_to_repair = false`。Pricing Policy は REVIEW / SKU_NOT_FOUND のまま。
+- 10800PRO の参照 cell は A-200 の exact row と一致。Pricing Policy の MANUAL_REVIEW は変更していない。
+- 過去参考値（79 / 49 / 34）とは集計単位が違う。現在の Active Master の結果を優先する。
+- 監査出力は `runtime/dq5_audit/`。Git へは入れない。
+- DQ-5B で人間確認後に repair する。今回の workbook 修正は 0。
+
+### Price Master Data Quality DQ-5B: SO Master Price Reference Repair
+
+目的: DQ-5A で `safe_to_repair` と判定した参照だけを、人間確認後に正しい Manufacturer cell へ直す。
 
 - Pricing engine のロジック変更ではない。Production の見積は現在正常。
-- まず audit する。いきなり 49 箇所を変更しない。
 - 推測で修正しない。fuzzy match で自動解決しない。
-- 9685 は Manufacturer の確認が取れ次第、別途扱う。
+- ambiguous / SKU_NOT_FOUND / 9685 は自動修正しない。
 
 ### Performance
 
@@ -421,7 +447,7 @@ v1.2.0 / v1.2.1はProduction Release済み。Phase B開始時のmain HEADは`3bd
 
 優先候補:
 
-1. Price Master Data Quality DQ-5: SO Master Price Reference Repair（DQ-4 まで COMPLETE）
+1. Price Master Data Quality DQ-5B: SO Master Price Reference Repair（DQ-5A audit only は完了。workbook 修正は未実施）
 2. Performance
 3. v1.1 Audit Trail
 
