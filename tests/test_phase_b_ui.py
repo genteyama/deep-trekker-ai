@@ -3,6 +3,11 @@ from models import CaseCloseReason, CaseLifecycleStatus, TechnicalCaseRecord, Te
 from repositories.sqlite_activity_repository import SqliteActivityRepository
 from repositories.sqlite_technical_case_repository import SqliteTechnicalCaseRepository
 from tests.test_app_pages import _start_app
+from ui.components.portal import format_portal_datetime
+from ui.home import _user_progress
+from ui.technical_case import _display_timestamp
+from ui.technical_case_steps import build_technical_workflow
+from ui.work_status import summarize_technical_case
 
 
 def _texts(at):
@@ -40,12 +45,20 @@ def test_home_quick_view_is_deterministic_and_opens_case_without_ai():
     at.button(key="home_quick_technical_CASE-UI").click().run()
     texts = _texts(at)
 
+    loaded = SqliteTechnicalCaseRepository().get_case("CASE-UI")
+    workflow = build_technical_workflow(summarize_technical_case(record=loaded))
     assert "案件ステータス" in texts
     assert "業務状態：進行中" in texts
     assert "現在Phase：メーカー回答待ち" in texts
     assert "現在の状況：メーカー回答待ち" in texts
     assert "次にやること：メーカー回答を待つ" in texts
     assert "最新更新内容：メーカー回答受領" in texts
+    assert f"進捗：{workflow.completed} / 7" in texts
+    assert f"要確認：{workflow.review_required}件" in texts
+    assert format_portal_datetime(loaded.updated_at) in texts
+    assert loaded.updated_at not in texts
+    assert "+00:00" not in texts
+    assert "T00:" not in texts
 
     at.button(key="quick_open_technical_CASE-UI").click().run()
     assert at.title[0].value == "営業・技術受付AI"

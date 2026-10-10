@@ -72,6 +72,7 @@ from ui.technical_case_flow import (
 )
 from ui.components.lifecycle import apply_case_lifecycle, render_case_actions_menu, render_lineage_card
 from ui.components.process_stepper import ProcessStepView, render_process_stepper, render_work_panel
+from ui.components.portal import format_portal_datetime
 from ui.components.status import render_workflow_progress
 from ui.technical_case_persistence import (
     WIDGET_KEYS,
@@ -418,7 +419,9 @@ def _render_case_summary(page: dict, summary, workflow) -> None:
             st.caption(f"{page.get('provider_label', 'AI Provider')}: {summary.provider or '-'}")
             st.caption(f"{page.get('model_label', 'Model')}: {summary.model or '-'}")
             if summary.updated_at:
-                st.caption(f"{page.get('updated_at_label', '最終更新')}: {summary.updated_at}")
+                st.caption(
+                    f"{page.get('updated_at_label', '最終更新')}: {format_portal_datetime(summary.updated_at)}"
+                )
             record = _current_record()
             if record is not None and record.deleted_at:
                 st.caption("ゴミ箱")
@@ -528,13 +531,7 @@ def _save_business_lifecycle_change(repo, previous, updated, action: str) -> Non
 def _display_timestamp(value: Optional[str]) -> str:
     if not value:
         return "-"
-    try:
-        from datetime import datetime
-
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-        return parsed.astimezone().strftime("%Y/%m/%d %H:%M")
-    except ValueError:
-        return value
+    return format_portal_datetime(value)
 
 
 def _current_record():

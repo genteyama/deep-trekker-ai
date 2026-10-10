@@ -4,6 +4,7 @@ from agents.activity_catalog import timeline_event_label
 from models import CaseLifecycleStatus
 from repositories.sqlite_activity_repository import SqliteActivityRepository
 from ui.components.portal import (
+    format_portal_datetime,
     render_home_hero,
     render_menu_card,
     render_portal_section_title,
@@ -14,6 +15,7 @@ from ui.components.status import render_recent_case_card
 from ui.navigation import PAGE_ACTIVITY_LEDGER, PAGE_QUOTE_CONTROL, PAGE_TECHNICAL_CASE, set_current_page
 from ui.quote_persistence import get_quote_repository
 from ui.technical_case_persistence import get_technical_case_repository, resume_case_into_session
+from ui.technical_case_steps import build_technical_workflow
 from ui.work_status import KIND_QUOTE, KIND_TECHNICAL, summarize_quote, summarize_technical_case
 
 
@@ -96,13 +98,14 @@ def render_home(texts: dict) -> None:
         return
     for item in items:
         kind_label = portal.get("kind_technical", "営業・技術") if item["kind"] == KIND_TECHNICAL else portal.get("kind_quote", "見積")
+        completed, total, review_required = _user_progress(item)
         render_recent_case_card(
             kind_label=kind_label,
             customer=item["customer"],
             title=item["title"],
             process_label=item["process"],
-            progress=f"{portal.get('progress_label', '進捗')}：{item['summary'].completed} / {item['summary'].total}",
-            review_label=f"{portal.get('review_label', '要確認')}：{item['summary'].review_required}{portal.get('review_unit', '件')}",
+            progress=f"{portal.get('progress_label', '進捗')}：{completed} / {total}",
+            review_label=f"{portal.get('review_label', '要確認')}：{review_required}{portal.get('review_unit', '件')}",
             updated_at=item["updated_at"],
             updated_prefix=quote_page["workspace"].get("updated_at_label", "最終更新"),
         )
@@ -157,6 +160,7 @@ def _recent_work_items(view: str = "in_progress") -> list[dict]:
                 "process": summary.process_label(),
                 "updated_at": item.updated_at,
                 "summary": summary,
+                "workflow": build_technical_workflow(summary),
                 "record": record,
             }
         )
@@ -184,9 +188,14 @@ def _recent_work_items(view: str = "in_progress") -> list[dict]:
     return items[:8]
 
 
+def _user_progress(item: dict) -> tuple[int, int, int]:
+    source = item["workflow"] if item["kind"] == KIND_TECHNICAL else item["summary"]
+    return source.completed, source.total, source.review_required
+
+
 def _render_technical_quick_view(item: dict, portal: dict, technical_page: dict) -> None:
     record = item["record"]
-    summary = item["summary"]
+    completed, total, review_required = _user_progress(item)
     labels = portal.get("quick_view", {})
     closed = record.case_lifecycle_status == CaseLifecycleStatus.CLOSED
     status = record.status or "DRAFT"
@@ -212,10 +221,11 @@ def _render_technical_quick_view(item: dict, portal: dict, technical_page: dict)
             f"{labels.get('closed', '終了') if closed else labels.get('active', '進行中')}"
         )
         st.write(f"{labels.get('phase', '現在Phase')}：{phase_labels.get(status, status)}")
-        st.write(f"{labels.get('progress', '進捗')}：{summary.completed} / {summary.total}")
-        st.write(f"{labels.get('review', '要確認')}：{summary.review_required}{labels.get('review_unit', '件')}")
+        st.write(f"{labels.get('progress', '進捗')}：{completed} / {total}")
+        st.write(f"{labels.get('review', '要確認')}：{review_required}{labels.get('review_unit', '件')}")
         st.write(f"{labels.get('situation', '現在の状況')}：{situation or phase_labels.get(status, status)}")
-        st.write(f"{labels.get('updated_at', '最終更新日時')}：{record.updated_at or '-'}")
+        updated_at = format_portal_datetime(record.updated_at) if record.updated_at else "-"
+        st.write(f"{labels.get('updated_at', '最終更新日時')}：{updated_at}")
         st.write(f"{labels.get('latest_activity', '最新更新内容')}：{latest_label}")
         st.write(f"{labels.get('next_action', '次にやること')}：{next_action or '-'}")
         if st.button(

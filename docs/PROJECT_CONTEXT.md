@@ -33,7 +33,7 @@ PROJECT_CONTEXT とコードが矛盾した場合は、原則コード / Git を
 - 現在 Phase: **Phase B — Business Case Close / Reopen + Status Quick View**
 - v1.1.0 Online Multi-device MVP: **完成済み**。main baseline `1512f22112deff7f6d4b2512c273e5a2dac24ff9`（tag `v1.1.0`）
 - 旧記載の HEAD `e746ca9` はそれ以前の checkpoint。この文書とコードが矛盾する場合は Git / current code を優先
-- full pytest: 798 passed（`pytest -q`）
+- full pytest: 801 passed（`pytest -q`、2026-10-10 v1.3.0 display patch）
 - Price Master Data Quality: **DQ-4 COMPLETE**（Production SO_MASTER 更新済み。AUTO 116 / REVIEW 2 / EXCLUDED 1 → 12章）。次は DQ-5（SO Master Price Reference Repair）。DQ-5 は今回の Phase A に含めていない
 
 ### v1.2 Phase A: Manufacturer Online Price Master Sync
@@ -80,6 +80,8 @@ PROJECT_CONTEXT とコードが矛盾した場合は、原則コード / Git を
 - Homeに「終了案件」と決定論的Status Quick Viewを追加。保存済みworkflow summaryと最新Activityだけを使い、AI / 外部APIは使用しない。
 - CLOSED案件は通常workflow mutation UIを表示せず、Reopen、Archive / Trash、履歴参照を優先する。
 - Quote / Pricing / Price Master / ApprovedQuoteSnapshotの仕様は変更していない。
+- Production SmokeはPASS。保存timestampはUTCのまま、業務画面の日時はAsia/Tokyoで表示する。
+- Technical CaseのHome cardとQuick Viewの進捗は、案件本体と同じ7工程workflowを表示する。Quoteの進捗計算は変更していない。
 
 ### v1 First Launch Readiness（2026-10-08）
 
@@ -365,8 +367,11 @@ pre-bootstrap 状態への復旧（DQ-3B 以前に戻す場合のみ）:
 
 ## 13. Test Baseline
 
+- Phase B Production Smoke: PASS（Close、終了案件、Quick View、Reopen、workflow status保持、通常workflow復帰）
+- v1.3.0 display patch: user-facing timestamps are Asia/Tokyo; persisted timestamps remain UTC; Technical Case progress uses the 7-step workflow; Quote progress logic is unchanged
 - Phase B targeted pytest: 214 passed（Business lifecycle、migration、Activity、Technical Case、Home、multi-device、Quote / SPECTRA regression）
-- full pytest: 798 passed（`pytest -q`、2026-10-09 Phase B）
+- v1.3.0 display targeted pytest: 31 passed（datetime、Home、Quick View、Technical workflow、Phase B UI）
+- full pytest: 801 passed（`pytest -q`、2026-10-10）
 - `git diff --check`: PASS
 - runtime / outputs / 元 Price Master: Acceptance の前後で変更なし（SHA-256 で確認）
 - API calls: 0

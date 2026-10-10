@@ -1,6 +1,7 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from html import escape
 from typing import Callable, Optional
+from zoneinfo import ZoneInfo
 
 import streamlit as st
 
@@ -72,7 +73,9 @@ def render_product_choice_card(product_key: str, caption: str) -> None:
 def format_portal_datetime(value: str) -> str:
     try:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-        return parsed.astimezone().strftime("%Y/%m/%d %H:%M")
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(ZoneInfo("Asia/Tokyo")).strftime("%Y/%m/%d %H:%M")
     except ValueError:
         return value
 

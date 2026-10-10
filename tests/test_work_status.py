@@ -207,3 +207,10 @@ def test_home_recent_work_distinguishes_technical_and_quote(monkeypatch):
     assert quote["customer"]
     assert tech["process"]
     assert quote["process"]
+    from ui.home import _user_progress
+    from ui.technical_case_steps import build_technical_workflow
+
+    workflow = build_technical_workflow(tech["summary"])
+    assert _user_progress(tech) == (workflow.completed, 7, workflow.review_required)
+    assert tech["summary"].total == 9
+    assert _user_progress(quote) == (quote["summary"].completed, 12, quote["summary"].review_required)
