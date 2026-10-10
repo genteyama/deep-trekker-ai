@@ -111,12 +111,19 @@ def render_home(texts: dict) -> None:
         )
         if item["kind"] == KIND_TECHNICAL:
             quick_key = f"home_quick_technical_{item['id']}"
+            quick_open = bool(st.session_state.get(f"{quick_key}_open", False))
+            quick_label = (
+                portal.get("quick_view_button_close", "ステータスを閉じる ▲")
+                if quick_open
+                else portal.get("quick_view_button_open", "ステータスを確認 ▼")
+            )
             if st.button(
-                portal.get("quick_view_button", "ステータスを確認"),
+                quick_label,
                 key=quick_key,
                 type="secondary",
             ):
                 st.session_state[f"{quick_key}_open"] = not st.session_state.get(f"{quick_key}_open", False)
+                st.rerun()
             if st.session_state.get(f"{quick_key}_open"):
                 _render_technical_quick_view(item, portal, texts["pages"]["technical_case"])
             if st.button(

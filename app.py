@@ -9,7 +9,14 @@ from ui.activity_ledger import render_activity_ledger
 from ui.auth import render_identity, require_login
 from ui.conflict import render_conflict_banner
 from ui.home import render_home
-from ui.navigation import PAGE_ACTIVITY_LEDGER, PAGE_QUOTE_CONTROL, PAGE_TECHNICAL_CASE, get_current_page, init_navigation
+from ui.navigation import (
+    PAGE_ACTIVITY_LEDGER,
+    PAGE_QUOTE_CONTROL,
+    PAGE_TECHNICAL_CASE,
+    get_current_page,
+    init_navigation,
+    render_current_location,
+)
 from ui.quote_control import render_quote_control
 from ui.technical_case import render_technical_case
 from ui.styles import page_icon_value
@@ -38,6 +45,7 @@ def main() -> None:
         page_title=texts["app_title"],
         page_icon=page_icon_value(),
         layout="wide",
+        initial_sidebar_state="expanded",
     )
     apply_light_theme()
     if not require_login():
@@ -45,6 +53,7 @@ def main() -> None:
     render_identity()
     render_brand_header()
     init_navigation()
+    render_current_location(texts)
     render_conflict_banner()
 
     current_page = get_current_page()

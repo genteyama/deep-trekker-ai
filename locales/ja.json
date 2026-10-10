@@ -6,6 +6,16 @@
   "open_label": "開く",
   "coming_soon": "準備中",
   "back_to_home": "トップへ戻る",
+  "location": {
+    "label": "現在地",
+    "home": "HOME",
+    "separator": "›",
+    "pages": {
+      "technical_case": "営業・技術問い合わせAI",
+      "quote_control": "見積・価格管理AI",
+      "activity_ledger": "履歴・活動台帳"
+    }
+  },
   "portal": {
     "recent_work_label": "進行中の案件",
     "recent_work_empty": "進行中の案件はまだありません。",
@@ -25,6 +35,8 @@
     "filter_archived": "アーカイブ",
     "filter_trash": "ゴミ箱",
     "quick_view_button": "ステータスを確認",
+    "quick_view_button_open": "ステータスを確認 ▼",
+    "quick_view_button_close": "ステータスを閉じる ▲",
     "quick_view": {
       "title": "案件ステータス",
       "case_name": "案件名",

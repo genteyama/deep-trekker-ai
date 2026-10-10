@@ -6,6 +6,16 @@
   "open_label": "Open",
   "coming_soon": "Coming soon",
   "back_to_home": "Back to home",
+  "location": {
+    "label": "Current location",
+    "home": "HOME",
+    "separator": "›",
+    "pages": {
+      "technical_case": "Sales & Technical Inquiry AI",
+      "quote_control": "Quote & Price Control AI",
+      "activity_ledger": "Activity Ledger"
+    }
+  },
   "portal": {
     "recent_work_label": "In-progress work",
     "recent_work_empty": "No in-progress cases yet.",
@@ -25,6 +35,8 @@
     "filter_archived": "Archived",
     "filter_trash": "Trash",
     "quick_view_button": "Check status",
+    "quick_view_button_open": "Check status ▼",
+    "quick_view_button_close": "Close status ▲",
     "quick_view": {
       "title": "Case status",
       "case_name": "Case",
