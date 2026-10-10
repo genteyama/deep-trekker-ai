@@ -34,7 +34,7 @@ PROJECT_CONTEXT とコードが矛盾した場合は、原則コード / Git を
 - v1.1.0 Online Multi-device MVP: **完成済み**。main baseline `1512f22112deff7f6d4b2512c273e5a2dac24ff9`（tag `v1.1.0`）
 - 旧記載の HEAD `e746ca9` はそれ以前の checkpoint。この文書とコードが矛盾する場合は Git / current code を優先
 - full pytest: 811 passed（`pytest -q`、2026-10-10 DQ-5B Preview）
-- Price Master Data Quality: **DQ-4 COMPLETE**。**DQ-5A audit only COMPLETE**（修正は未実施。→ 12章 / 15章）
+- Price Master Data Quality: **DQ-5 COMPLETE**（Live SO Master修正、fresh export監査、Production activation、Pricing regressionまでPASS。→ 12章 / 15章）
 
 ### v1.2 Phase A: Manufacturer Online Price Master Sync
 
@@ -293,14 +293,15 @@ DQ-3B で初回 Bootstrap 済み（それ以前の Acceptance / DQ はすべて 
 
 Active Price Masters:
 
-| Type | import_id | SHA-256 |
+| Type | import_id / activated source | SHA-256 |
 | --- | --- | --- |
 | DT40 | `DT40-20261008T034155Z-60b1958a` | `f230c85c4ccb49c838abdb8cb11892fbd378d361ff1c926c6ef249e489ceedfe` |
 | PT30 | `PT30-20261008T034155Z-4663ccbd` | `34c0516e73675dd0daca8c6bda292078faacd01448b3627997c3efd51fc423f2` |
 | QUOTE_CALC | `QUOTE_CALC-20261008T034205Z-2fd41ea2` | `915fdf8cca8ace4ca9833cfbcd518f98d3d1b0b7f747f959646f347b54392412` |
-| SO_MASTER | `SO_MASTER-20261008T051104Z-4f6c4b00` | `a7a3bfd87c6b5bd04c6786e2ff88e1e32c23300dace7f82009b6569e36e7bd06` |
+| SO_MASTER | `SO_MASTER_DQ5_FIXED_20261010.xlsx`（Human activation。import_idはcloseout時未記録） | `eb908391da888f1bca507dfb8ce2856aabc7679f805bcd896625604953b6c8a6` |
 
-- SO_MASTER は DQ-4C で更新。Validation VALID（118 items / 118 policies）、stored path `SO_MASTER/SO_MASTER-20261008T051104Z-4f6c4b00.xlsx`。source の absolute path には依存しない。
+- SO_MASTER は DQ-5完了時にHuman-in-the-Loopで更新。2026-10-10 12:31 JSTに取り込み・有効化し、ValidationはSKU 118件 / 売価ルール118件。
+- DQ-5修正前のSO_MASTERは`SO_MASTER-20261008T051104Z-4f6c4b00`（SHA-256 `a7a3bfd87c6b5bd04c6786e2ff88e1e32c23300dace7f82009b6569e36e7bd06`）。
 - 旧 SO_MASTER `SO_MASTER-20261008T034206Z-32d7a8b0`（SHA-256 `0f603d4a434bbae7176513ca886c1738020ffb8b6a012b8e86209fbdce0a0f59`）は history と stored file を保持したまま inactive。
 - DQ-4C の前後で DT40 / PT30 / QUOTE_CALC、既存業務 6 table、コードは不変。
 
@@ -347,11 +348,12 @@ pre-bootstrap 状態への復旧（DQ-3B 以前に戻す場合のみ）:
 1. 10800PRO: intentional MANUAL_REVIEW。修正対象外。
 2. 9685: SKU_NOT_FOUND。Manufacturer の確認待ち。類似 SKU から推測して修正しない。
 
-### Known Data Quality Issue: SO Master の価格参照
+### Resolved Data Quality Issue: SO Master の価格参照
 
-- SO Master の Manufacturer 価格参照式（`IMPORTRANGE`）に row ずれがある。DQ-4A の過去参考値は 79 references / 49 suspected wrong / 34 PRICE_MISMATCH rows。DQ-5A は現在の Active Master で再監査し、この過去値へ合わせていない。
+- SO MasterのManufacturer価格参照式（`IMPORTRANGE`）にあったrowずれはDQ-5で修正済み。
+- exact SKUだけを使用し、fuzzy repair、NO_REFERENCEの新規作成、ambiguous / missing SKUの推測修正は行っていない。
 - Production の見積価格は Manufacturer Master の official MSRP を使うため、現在の見積候補は正常。
-- ただし人が SO Master を直接見たときに、誤った価格を見るリスクがある。DQ-5 で扱う（→ 15章）。
+- post-repair fresh export監査はEXACT_REPAIRABLE 0、MSRP / Dealer mismatch 0（→ 15章）。
 
 ### Workbook Format Note
 
@@ -426,7 +428,7 @@ Active inputs:
 - 10800PRO の参照 cell は A-200 の exact row と一致。Pricing Policy の MANUAL_REVIEW は変更していない。
 - 過去参考値（79 / 49 / 34）とは集計単位が違う。現在の Active Master の結果を優先する。
 - 監査出力は `runtime/dq5_audit/`。Git へは入れない。
-- DQ-5B で人間確認後に repair する。今回の workbook 修正は 0。
+- DQ-5A自体はaudit onlyでworkbook修正0。修正は後続のDQ-5B Preview / Human Review / Live repairで実施した。
 
 ### Price Master Data Quality DQ-5B: SO Master Price Reference Repair Preview
 
@@ -440,9 +442,27 @@ workbook、Quoteは変更していない。
 - fallbackは監査のみで変更していない（match 4 / mismatch 42 / unavailable 18）。
 - Preview xlsxはformula差分とvalidationの確認専用で、正式upload sourceではない。openpyxl保存後はcached
   formula valueが再計算されない場合があるため、cached値を修正済みの証拠にしない。
-- DQ-5CでHuman Review後に正式Google Sheetの対象cellへ適用し、fresh export後に最終reference auditとprice mismatch確認を行う。
+- Preview後のHuman Reviewを経て正式Google Sheetへ適用し、fresh export後の最終reference auditとprice mismatch確認まで完了した。
 - 出力は`runtime/dq5_repair/`（Repair Plan CSV/JSON、Human Review CSV、logical diff JSON、Preview xlsx）。Gitへは入れない。
 - Pricing engineのロジック変更はない。Productionの見積は現在正常。
+
+### Price Master Data Quality DQ-5: COMPLETE
+
+判定: **DQ-5 COMPLETE**（2026-10-10）。
+
+- DQ-5A修正前監査: SO items 119 / reference fields 238 / CORRECT 102 / EXACT_REPAIRABLE 64 / NO_REFERENCE 2 / AMBIGUOUS 66 / SKU_NOT_FOUND 2 / MANUAL_REVIEW 2。safe repairは32 unique SO rows。
+- Human Reviewは32 rows / 64 fields PASS。Workbook跨ぎは0。`7719+9449-300-U-PIV-EXPERT`だけは同じDT40 workbook内でPHOTON参照からPIVOT exact SKU参照へ変更した。
+- Live SO Master `☆マスター☆DT/PT価格表（試算表）_スペースワン`をread-only preflightし、DQ-5B current reference 64 / 64、DT40 expected official cell 64 / 64、direct IMPORTRANGE 64 / 64の一致を確認した。
+- Live FormulaにはIFERROR fallbackがなく、xlsx exportで見えていたfallbackはLive business logicではなかったため変更していない。
+- 正式修正前にfull copy `☆マスター☆DT/PT価格表（試算表）_スペースワン_BACKUP_DQ5_20261010`を作成した。
+- Human approval後、正式Google Sheetの32 rows / 64 Manufacturer IMPORTRANGE cellsだけを修正。直前precondition、write、write直後verificationはいずれも64 / 64 PASS。
+- 変更はManufacturer sheet / cell referenceのみ。SKU、Description、Pricing formula、Exchange-rate formula、その他業務データは変更していない。
+- Fresh export `SO_MASTER_DQ5_FIXED_20261010.xlsx`（SHA-256 `eb908391da888f1bca507dfb8ce2856aabc7679f805bcd896625604953b6c8a6`）を取得した。
+- post-repair監査: SO items 119 / reference fields 238 / CORRECT 166 / EXACT_REPAIRABLE 0 / NO_REFERENCE 2 / AMBIGUOUS 66 / SKU_NOT_FOUND 2 / MANUAL_REVIEW 2 / MSRP mismatch 0 / Dealer mismatch 0 / repair対象row 0。
+- NO_REFERENCEは新規Formulaを作らず、ambiguousは自動選択せず、9685はSKU_NOT_FOUND / REVIEWのまま。exact SKU only、fuzzy repair禁止を維持した。
+- ProductionへHuman-in-the-Loopで取り込み・有効化済み（2026-10-10 12:31 JST、SKU 118件 / 売価ルール118件）。既存見積は変更しない。
+- Pricing regression（FX 165）: `9701-MAG-4K` 6,432,000円、`9701-MAX-4K` 10,243,000円、`9680-EXPERT` 5,262,000円、`7511-DC-NAV` 19,314,000円、`2500-1` 4,764,000円、すべてPASS。
+- 10800PROは特殊なSO sales formula `=E17*1.2-M17`を持つためMANUAL_REVIEWを維持。9685はDT40 / PT30にもexact SKUがなくSKU_NOT_FOUNDを維持。SPECTRA_GOLD / Pricing logicはDQ-5対象外で変更していない。
 
 ### Performance
 
@@ -457,9 +477,8 @@ v1.2.0 / v1.2.1はProduction Release済み。Phase B開始時のmain HEADは`3bd
 
 優先候補:
 
-1. Price Master Data Quality DQ-5C: Human Review後の正式Google Sheet修正とfresh export再監査
-2. Performance
-3. v1.1 Audit Trail
+1. Performance
+2. v1.1 Audit Trail
 
 次 Phase を始める前に、業務上の優先順位を確認する。
 
