@@ -33,7 +33,7 @@ PROJECT_CONTEXT とコードが矛盾した場合は、原則コード / Git を
 - 現在 Phase: **Phase B — Business Case Close / Reopen + Status Quick View**
 - v1.1.0 Online Multi-device MVP: **完成済み**。main baseline `1512f22112deff7f6d4b2512c273e5a2dac24ff9`（tag `v1.1.0`）
 - 旧記載の HEAD `e746ca9` はそれ以前の checkpoint。この文書とコードが矛盾する場合は Git / current code を優先
-- full pytest: 803 passed（`pytest -q`、2026-10-10 DQ-5A）
+- full pytest: 804 passed（`pytest -q`、2026-10-10 DQ-5A）
 - Price Master Data Quality: **DQ-4 COMPLETE**。**DQ-5A audit only COMPLETE**（修正は未実施。→ 12章 / 15章）
 
 ### v1.2 Phase A: Manufacturer Online Price Master Sync
@@ -371,8 +371,8 @@ pre-bootstrap 状態への復旧（DQ-3B 以前に戻す場合のみ）:
 - v1.3.0 display patch: user-facing timestamps are Asia/Tokyo; persisted timestamps remain UTC; Technical Case progress uses the 7-step workflow; Quote progress logic is unchanged
 - Phase B targeted pytest: 214 passed（Business lifecycle、migration、Activity、Technical Case、Home、multi-device、Quote / SPECTRA regression）
 - v1.3.0 display targeted pytest: 31 passed（datetime、Home、Quick View、Technical workflow、Phase B UI）
-- DQ-5A targeted pytest: 152 passed（reference audit、SpaceOne parser、SKU link、pricing policy、price master）
-- full pytest: 803 passed（`pytest -q`、2026-10-10）
+- DQ-5A targeted pytest: 153 passed（reference audit、SpaceOne parser、SKU link、pricing policy、price master）
+- full pytest: 804 passed（`pytest -q`、2026-10-10）
 - `git diff --check`: PASS
 - runtime / outputs / 元 Price Master: Acceptance の前後で変更なし（SHA-256 で確認）
 - API calls: 0
@@ -414,12 +414,13 @@ Active inputs:
 
 - SO items 119 / reference fields 238
 - CORRECT 102
-- EXACT_REPAIRABLE 66 fields / unique SO rows 33
+- EXACT_REPAIRABLE 64 fields / unique SO rows 32
+- NO_REFERENCE 2 fields。Formulaがないセルは `safe_to_repair = false`。期待cellは監査情報として残せるが、新しい IMPORTRANGE は人間確認なしに追加しない。
 - AMBIGUOUS_OCCURRENCE 66 fields / 21 SKUs
 - SKU_NOT_FOUND 2 fields（9685 の MSRP / Dealer）
 - MANUAL_REVIEW 2 fields（legacy shipping）
 - displayed price mismatch 21 unique SO rows（MSRP 21 / Dealer 21）
-- `safe_to_repair` は一意な exact active occurrence だけ。fuzzy / 類似 SKU は未使用。
+- `safe_to_repair` は、既存の単一 Manufacturer reference が期待cellと異なり、exact active occurrence が一意な場合だけ。fuzzy / 類似 SKU は未使用。
 - 9685 は数値のみで formula がなく、Manufacturer Master に exact SKU がない。`safe_to_repair = false`。Pricing Policy は REVIEW / SKU_NOT_FOUND のまま。
 - 10800PRO の参照 cell は A-200 の exact row と一致。Pricing Policy の MANUAL_REVIEW は変更していない。
 - 過去参考値（79 / 49 / 34）とは集計単位が違う。現在の Active Master の結果を優先する。
@@ -428,11 +429,12 @@ Active inputs:
 
 ### Price Master Data Quality DQ-5B: SO Master Price Reference Repair
 
-目的: DQ-5A で `safe_to_repair` と判定した参照だけを、人間確認後に正しい Manufacturer cell へ直す。
+目的: DQ-5A で `safe_to_repair` と判定した既存 reference だけを、人間確認後に正しい Manufacturer cell へ直す。
 
 - Pricing engine のロジック変更ではない。Production の見積は現在正常。
+- 自動対象は既存 reference の exact row repair だけ。NO_REFERENCE のセルへ新しい IMPORTRANGE は追加しない。
 - 推測で修正しない。fuzzy match で自動解決しない。
-- ambiguous / SKU_NOT_FOUND / 9685 は自動修正しない。
+- ambiguous / SKU_NOT_FOUND / NO_REFERENCE / 9685 は自動修正しない。
 
 ### Performance
 

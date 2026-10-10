@@ -258,10 +258,10 @@ def _audit_field(item: dict, field_name: str, resolution: dict) -> ReferenceAudi
         if _values_differ(row.so_display_value, row.official_value):
             row.reason = "Reference cell matches, but the displayed value differs from the official manufacturer price."
         return row
-    if current["kind"] == "none":
-        row.status = ReferenceAuditStatus.EXACT_REPAIRABLE
-        row.safe_to_repair = True
-        row.reason = "No manufacturer reference is present. The unique active cell is known."
+    if current["kind"] != "reference":
+        row.status = ReferenceAuditStatus.NO_REFERENCE
+        row.safe_to_repair = False
+        row.reason = "No manufacturer reference is present. Adding a new reference requires human review."
         return row
     row.status = ReferenceAuditStatus.EXACT_REPAIRABLE
     row.safe_to_repair = True

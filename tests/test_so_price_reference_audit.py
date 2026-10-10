@@ -41,6 +41,7 @@ def _books():
                 ["SKU-B", "Item B", 200, 120, None],
                 ["SKU-OK", "Independent", 300, 180, None],
                 ["SKU-FORMULA", "Formula", 400, 240, None],
+                ["SKU-NO-REF", "No reference", 700, 420, None],
             ],
             "PIVOT": [
                 ["Part Number", "Description", "MSRP", "DT40", "Notes:"],
@@ -82,6 +83,7 @@ def _books():
                 ["OLD-SKU", "廃番", None, _formula("C2", 1), _formula("D2", 1)],
                 ["SKU-FORMULA", "非対応式", None, "=SUM(A1)", "=SUM(B1)"],
                 ["SKU-OK", "列ごとの監査", None, _formula("C4", 300), _formula("D3", 120)],
+                ["SKU-NO-REF", "参照なし", None, 700, 420],
                 [datetime(2020, 1, 1), "不正SKU", None, None, None],
                 [None, "キャビブラスター輸送費", None, None, None],
             ],
@@ -141,6 +143,19 @@ def test_reference_audit_classifies_exact_ambiguous_and_unsafe_cases():
     assert shipping.status == ReferenceAuditStatus.MANUAL_REVIEW
     assert shipping.safe_to_repair is False
     assert {row.field for row in report.rows if row.normalized_sku == "SKU-A"} == {"MSRP", "DEALER"}
+
+
+def test_numeric_cells_without_formula_are_not_repairable():
+    rows = _by_sku(audit_price_references(*_books()))["SKU-NO-REF"]
+
+    for field_name, expected_cell in (("MSRP", "C6"), ("DEALER", "D6")):
+        row = rows[field_name]
+        assert row.status == ReferenceAuditStatus.NO_REFERENCE
+        assert row.safe_to_repair is False
+        assert row.expected_workbook == "DT40"
+        assert row.expected_sheet == "PHOTON"
+        assert row.expected_row == 6
+        assert row.expected_cell == expected_cell
 
 
 def test_audit_does_not_change_workbooks_or_registry(tmp_path, monkeypatch):
