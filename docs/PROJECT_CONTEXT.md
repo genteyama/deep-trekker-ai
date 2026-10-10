@@ -33,7 +33,7 @@ PROJECT_CONTEXT とコードが矛盾した場合は、原則コード / Git を
 - 現在 Phase: **Phase B — Business Case Close / Reopen + Status Quick View**
 - v1.1.0 Online Multi-device MVP: **完成済み**。main baseline `1512f22112deff7f6d4b2512c273e5a2dac24ff9`（tag `v1.1.0`）
 - 旧記載の HEAD `e746ca9` はそれ以前の checkpoint。この文書とコードが矛盾する場合は Git / current code を優先
-- full pytest: 804 passed（`pytest -q`、2026-10-10 DQ-5A）
+- full pytest: 811 passed（`pytest -q`、2026-10-10 DQ-5B Preview）
 - Price Master Data Quality: **DQ-4 COMPLETE**。**DQ-5A audit only COMPLETE**（修正は未実施。→ 12章 / 15章）
 
 ### v1.2 Phase A: Manufacturer Online Price Master Sync
@@ -372,7 +372,8 @@ pre-bootstrap 状態への復旧（DQ-3B 以前に戻す場合のみ）:
 - Phase B targeted pytest: 214 passed（Business lifecycle、migration、Activity、Technical Case、Home、multi-device、Quote / SPECTRA regression）
 - v1.3.0 display targeted pytest: 31 passed（datetime、Home、Quick View、Technical workflow、Phase B UI）
 - DQ-5A targeted pytest: 153 passed（reference audit、SpaceOne parser、SKU link、pricing policy、price master）
-- full pytest: 804 passed（`pytest -q`、2026-10-10）
+- DQ-5B targeted pytest: 190 passed（repair preview、DQ-5A、parser、reconciliation、pricing、SPECTRA）
+- full pytest: 811 passed（`pytest -q`、2026-10-10）
 - `git diff --check`: PASS
 - runtime / outputs / 元 Price Master: Acceptance の前後で変更なし（SHA-256 で確認）
 - API calls: 0
@@ -427,14 +428,21 @@ Active inputs:
 - 監査出力は `runtime/dq5_audit/`。Git へは入れない。
 - DQ-5B で人間確認後に repair する。今回の workbook 修正は 0。
 
-### Price Master Data Quality DQ-5B: SO Master Price Reference Repair
+### Price Master Data Quality DQ-5B: SO Master Price Reference Repair Preview
 
-目的: DQ-5A で `safe_to_repair` と判定した既存 reference だけを、人間確認後に正しい Manufacturer cell へ直す。
+判定: **DQ-5B PREVIEW COMPLETE**（2026-10-10）。正式Google Sheet、Production Registry、元Active
+workbook、Quoteは変更していない。
 
-- Pricing engine のロジック変更ではない。Production の見積は現在正常。
-- 自動対象は既存 reference の exact row repair だけ。NO_REFERENCE のセルへ新しい IMPORTRANGE は追加しない。
-- 推測で修正しない。fuzzy match で自動解決しない。
-- ambiguous / SKU_NOT_FOUND / NO_REFERENCE / 9685 は自動修正しない。
+- Fresh DQ-5Aで64 existing exact references / 32 SO rowsを確認してから、COPYへ64件を一括適用。件数またはSource SHAが変わればbatch全体を停止する。
+- Formulaは既存URL、IFERROR wrapper、fallbackを保持し、Manufacturer sheet / cell rangeだけを変更する。workbook切替は禁止。
+- Preview再監査は対象64 / 64がCORRECT。logical diffも計画対象64 formula cellsだけ。
+- NO_REFERENCE 2、AMBIGUOUS 66、SKU_NOT_FOUND 2、MANUAL_REVIEW 2は変更していない。9685も変更なし。
+- fallbackは監査のみで変更していない（match 4 / mismatch 42 / unavailable 18）。
+- Preview xlsxはformula差分とvalidationの確認専用で、正式upload sourceではない。openpyxl保存後はcached
+  formula valueが再計算されない場合があるため、cached値を修正済みの証拠にしない。
+- DQ-5CでHuman Review後に正式Google Sheetの対象cellへ適用し、fresh export後に最終reference auditとprice mismatch確認を行う。
+- 出力は`runtime/dq5_repair/`（Repair Plan CSV/JSON、Human Review CSV、logical diff JSON、Preview xlsx）。Gitへは入れない。
+- Pricing engineのロジック変更はない。Productionの見積は現在正常。
 
 ### Performance
 
@@ -449,7 +457,7 @@ v1.2.0 / v1.2.1はProduction Release済み。Phase B開始時のmain HEADは`3bd
 
 優先候補:
 
-1. Price Master Data Quality DQ-5B: SO Master Price Reference Repair（DQ-5A audit only は完了。workbook 修正は未実施）
+1. Price Master Data Quality DQ-5C: Human Review後の正式Google Sheet修正とfresh export再監査
 2. Performance
 3. v1.1 Audit Trail
 
