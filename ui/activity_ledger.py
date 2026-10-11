@@ -35,7 +35,7 @@ from agents.activity_report import (
     render_customer_csv,
 )
 from repositories.sqlite_customer_repository import SqliteCustomerRepository
-from ui.components.portal import render_portal_section_title, resume_draft_into_session
+from ui.components.portal import resume_draft_into_session
 from ui.navigation import PAGE_QUOTE_CONTROL, PAGE_TECHNICAL_CASE, set_current_page
 from ui.quote_persistence import get_quote_repository
 from ui.technical_case_persistence import get_technical_case_repository
@@ -73,8 +73,7 @@ def render_activity_ledger(texts: dict) -> None:
     sort = _current_sort()
     filtered = sort_activity_rows(apply_activity_filter(rows, filt), sort)
     _render_dashboard(page, filtered)
-    _render_filters(page, rows, filt)
-    _render_sort(page, sort)
+    _render_filters(page, rows, filt, sort)
     selection = _current_selection()
     _render_selection_bar(page, filtered, selection)
     _render_table(page, filtered, rows, selection)
@@ -113,7 +112,6 @@ def _current_selection() -> ActivitySelection:
 
 def _render_dashboard(page: dict, rows) -> None:
     summary = summarize_activity(rows)
-    cols = st.columns(5)
     labels = (
         ("total", page.get("stat_total", "総件数")),
         ("inquiry", page.get("stat_inquiry", "問い合わせ")),
@@ -121,35 +119,65 @@ def _render_dashboard(page: dict, rows) -> None:
         ("completed", page.get("stat_completed", "完了")),
         ("in_progress", page.get("stat_in_progress", "進行中")),
     )
-    for column, (key, label) in zip(cols, labels):
-        column.metric(label, summary[key])
+    cards = "".join(
+        "<div class='activity-summary-card'>"
+        f"<div class='activity-summary-label'>{escape(label)}</div>"
+        f"<div class='activity-summary-value'>{escape(str(summary[key]))}</div>"
+        "</div>"
+        for key, label in labels
+    )
+    st.markdown(f"<div class='activity-summary-grid'>{cards}</div>", unsafe_allow_html=True)
 
 
-def _render_filters(page: dict, rows, filt: ActivityFilter) -> None:
-    render_portal_section_title(page.get("filter_label", "フィルター"))
+def _render_filters(page: dict, rows, filt: ActivityFilter, sort: ActivitySort) -> None:
     customers = sorted({row.customer for row in rows if row.customer})
     end_users = sorted({row.end_user for row in rows if row.end_user})
     products = sorted({row.product for row in rows if row.product})
     statuses = sorted({row.status for row in rows if row.status})
     categories = list(CATEGORY_LABELS.keys())
-    left, right = st.columns(2)
-    with left:
-        date_from = st.text_input(page.get("date_from", "期間 From"), value=filt.date_from or "", key="activity_date_from")
-        date_to = st.text_input(page.get("date_to", "期間 To"), value=filt.date_to or "", key="activity_date_to")
-        selected_customers = st.multiselect(page.get("filter_customer", "顧客名"), customers, default=list(filt.customers), key="activity_filter_customers")
-        selected_end_users = st.multiselect(page.get("filter_end_user", "End User"), end_users, default=list(filt.end_users), key="activity_filter_end_users")
-    with right:
-        selected_products = st.multiselect(page.get("filter_product", "機種"), products, default=list(filt.products), key="activity_filter_products")
-        selected_categories = st.multiselect(
-            page.get("filter_category", "区分"),
-            categories,
-            default=list(filt.categories),
-            format_func=lambda value: CATEGORY_LABELS.get(value, value),
-            key="activity_filter_categories",
+    keyword_col, customer_col, category_col, status_col = st.columns([2, 1.3, 1.2, 1.3])
+    keyword = keyword_col.text_input(page.get("filter_keyword", "キーワード"), value=filt.keyword, key="activity_filter_keyword")
+    selected_customers = customer_col.multiselect(
+        page.get("filter_customer", "顧客名"),
+        customers,
+        default=list(filt.customers),
+        key="activity_filter_customers",
+    )
+    selected_categories = category_col.multiselect(
+        page.get("filter_category", "区分"),
+        categories,
+        default=list(filt.categories),
+        format_func=lambda value: CATEGORY_LABELS.get(value, value),
+        key="activity_filter_categories",
+    )
+    selected_statuses = status_col.multiselect(
+        page.get("filter_status", "対応ステータス"),
+        statuses,
+        default=list(filt.statuses),
+        key="activity_filter_statuses",
+    )
+    _render_sort(page, sort)
+    with st.expander(page.get("advanced_filters", "詳細フィルター"), expanded=False):
+        date_left, date_right = st.columns(2)
+        date_from = date_left.text_input(page.get("date_from", "期間 From"), value=filt.date_from or "", key="activity_date_from")
+        date_to = date_right.text_input(page.get("date_to", "期間 To"), value=filt.date_to or "", key="activity_date_to")
+        selected_end_users = st.multiselect(
+            page.get("filter_end_user", "End User"),
+            end_users,
+            default=list(filt.end_users),
+            key="activity_filter_end_users",
         )
-        selected_statuses = st.multiselect(page.get("filter_status", "対応ステータス"), statuses, default=list(filt.statuses), key="activity_filter_statuses")
-        keyword = st.text_input(page.get("filter_keyword", "キーワード"), value=filt.keyword, key="activity_filter_keyword")
-        include_archived = st.checkbox(page.get("include_archived", "アーカイブを表示"), value=filt.include_archived, key="activity_include_archived")
+        selected_products = st.multiselect(
+            page.get("filter_product", "機種"),
+            products,
+            default=list(filt.products),
+            key="activity_filter_products",
+        )
+        include_archived = st.checkbox(
+            page.get("include_archived", "アーカイブを表示"),
+            value=filt.include_archived,
+            key="activity_include_archived",
+        )
     st.session_state[SESSION_FILTER] = ActivityFilter(
         date_from=date_from.strip() or None,
         date_to=date_to.strip() or None,
@@ -161,25 +189,27 @@ def _render_filters(page: dict, rows, filt: ActivityFilter) -> None:
         keyword=keyword or "",
         include_archived=include_archived,
     )
-    if st.button(page.get("reset_filters", "フィルターをリセット"), key="activity_reset_filters"):
-        st.session_state[SESSION_FILTER] = reset_activity_filter()
-        st.session_state[SESSION_SORT] = reset_activity_sort()
-        for key in (
-            "activity_date_from",
-            "activity_date_to",
-            "activity_filter_customers",
-            "activity_filter_end_users",
-            "activity_filter_products",
-            "activity_filter_categories",
-            "activity_filter_statuses",
-            "activity_filter_keyword",
-            "activity_include_archived",
-            "activity_sort_field",
-            "activity_sort_dir",
-        ):
-            if key in st.session_state:
-                del st.session_state[key]
-        st.rerun()
+
+
+def _reset_filters() -> None:
+    st.session_state[SESSION_FILTER] = reset_activity_filter()
+    st.session_state[SESSION_SORT] = reset_activity_sort()
+    for key in (
+        "activity_date_from",
+        "activity_date_to",
+        "activity_filter_customers",
+        "activity_filter_end_users",
+        "activity_filter_products",
+        "activity_filter_categories",
+        "activity_filter_statuses",
+        "activity_filter_keyword",
+        "activity_include_archived",
+        "activity_sort_field",
+        "activity_sort_dir",
+    ):
+        if key in st.session_state:
+            del st.session_state[key]
+    st.rerun()
 
 
 def _render_sort(page: dict, sort: ActivitySort) -> None:
@@ -209,12 +239,19 @@ def _render_sort(page: dict, sort: ActivitySort) -> None:
 
 
 def _render_selection_bar(page: dict, rows, selection: ActivitySelection) -> None:
-    st.caption(f"{page.get('selected_count', '選択中')}：{len(selection.selected_rows(rows))}{page.get('count_unit', '件')}")
-    cols = st.columns(4)
-    if cols[0].button(page.get("select_all", "全選択"), key="activity_select_all", type="primary"):
+    unit = page.get("count_unit", "件")
+    summary = (
+        f"{page.get('shown_count', '表示')} {len(rows)}{unit}"
+        f"　{page.get('selected_count', '選択中')} {len(selection.selected_rows(rows))}{unit}"
+    )
+    count_col, reset_col, select_col, clear_col = st.columns([2.4, 1.5, 0.8, 0.8])
+    count_col.markdown(f"<div class='activity-selection-bar'>{escape(summary)}</div>", unsafe_allow_html=True)
+    if reset_col.button(page.get("reset_filters", "フィルターをリセット"), key="activity_reset_filters"):
+        _reset_filters()
+    if select_col.button(page.get("select_all", "全選択"), key="activity_select_all"):
         selection.select_all(rows)
         st.rerun()
-    if cols[1].button(page.get("deselect_all", "全解除"), key="activity_deselect_all"):
+    if clear_col.button(page.get("deselect_all", "全解除"), key="activity_deselect_all"):
         selection.deselect_all()
         st.rerun()
 
@@ -230,22 +267,64 @@ def _cell(text: str, *, kind: str = "td", extra: str = "") -> str:
     return f"<div class='{css}'>{escape(text)}</div>"
 
 
-TABLE_WEIGHTS = [0.35, 0.35, 0.75, 1.0, 0.8, 0.75, 0.95, 1.7, 1.25, 0.75, 0.85, 0.55]
+def _stacked_cell(primary: str, secondary: str = "", *, extra: str = "", primary_class: str = "activity-primary") -> str:
+    css = "activity-td"
+    if extra:
+        css = f"{css} {extra}"
+    body = f"<div class='{primary_class}'>{escape(primary)}</div>"
+    if secondary:
+        body += f"<div class='activity-secondary'>{escape(secondary)}</div>"
+    return f"<div class='{css}'>{body}</div>"
+
+
+def _activity_cell(page: dict, row) -> str:
+    activity = display_day(row.last_activity_at) or "-"
+    created = display_day(row.date)
+    secondary = ""
+    if created and created != activity:
+        secondary = f"{page.get('created_prefix', '作成')}: {created}"
+    return _stacked_cell(activity, secondary)
+
+
+def _customer_cell(page: dict, row) -> str:
+    end_user = row.end_user or "-"
+    return _stacked_cell(row.customer or "-", f"{page.get('col_end_user', 'End User')}: {end_user}")
+
+
+def _category_cell(row) -> str:
+    label = escape(row.category_label() or "-")
+    product = escape(row.product or "-")
+    return (
+        "<div class='activity-td activity-td-product'>"
+        f"<div class='activity-category-badge'>{label}</div>"
+        f"<div class='activity-secondary'>{product}</div>"
+        "</div>"
+    )
+
+
+def _status_cell(status: str) -> str:
+    return (
+        "<div class='activity-td activity-td-status'>"
+        f"<span class='activity-status-badge'>{escape(_status_label(status))}</span>"
+        "</div>"
+    )
+
+
+TABLE_WEIGHTS = [0.42, 1.05, 1.55, 1.2, 2.35, 1.1, 1.0, 0.62]
 
 
 def _render_table(page: dict, rows, all_rows, selection: ActivitySelection) -> None:
-    render_portal_section_title(page.get("list_label", "履歴一覧"))
+    st.markdown(
+        f"<h3 class='portal-section-title activity-list-title'>{escape(page.get('list_label', '履歴一覧'))}</h3>",
+        unsafe_allow_html=True,
+    )
     labels = (
         page.get("col_select", "選択"),
-        page.get("col_no", "No."),
-        page.get("col_date", "DATE"),
-        page.get("col_customer", "顧客"),
-        page.get("col_end_user", "End User"),
-        page.get("col_category", "区分"),
-        page.get("col_product", "機種"),
+        page.get("col_last_activity", "最終活動"),
+        page.get("col_customer_end_user", "顧客 / End User"),
+        page.get("col_category_product", "区分 / 機種"),
         page.get("col_title", "案件名"),
         page.get("col_status", "対応ステータス"),
-        page.get("col_updated", "最終更新"),
         page.get("col_related", "関連元"),
         page.get("open_row", "開く"),
     )
@@ -255,24 +334,20 @@ def _render_table(page: dict, rows, all_rows, selection: ActivitySelection) -> N
     if not rows:
         st.caption(page.get("empty", "該当する履歴はありません。"))
         return
-    for index, row in enumerate(rows, start=1):
+    for row in rows:
         cols = st.columns(TABLE_WEIGHTS)
         checked = cols[0].checkbox(" ", value=row.row_id in selection.selected, key=f"activity_select_{row.row_id}", label_visibility="collapsed")
         if checked:
             selection.select_one(row.row_id)
         elif row.row_id in selection.selected:
             selection.selected.discard(row.row_id)
-        cols[1].markdown(_cell(str(index)), unsafe_allow_html=True)
-        cols[2].markdown(_cell(display_day(row.date) or "-"), unsafe_allow_html=True)
-        cols[3].markdown(_cell(row.customer or "-"), unsafe_allow_html=True)
-        cols[4].markdown(_cell(row.end_user or "-"), unsafe_allow_html=True)
-        cols[5].markdown(_cell(row.category_label()), unsafe_allow_html=True)
-        cols[6].markdown(_cell(row.product or "-", extra="activity-td-product"), unsafe_allow_html=True)
-        cols[7].markdown(_cell(row.title or "-", extra="activity-td-title"), unsafe_allow_html=True)
-        cols[8].markdown(_cell(_status_label(row.status), extra="activity-td-status"), unsafe_allow_html=True)
-        cols[9].markdown(_cell(display_day(row.updated_at) or "-"), unsafe_allow_html=True)
-        cols[10].markdown(_cell(related_source_label(row, all_rows) or "-"), unsafe_allow_html=True)
-        if cols[11].button(page.get("open_row", "開く"), key=f"activity_open_{row.row_id}", type="primary"):
+        cols[1].markdown(_activity_cell(page, row), unsafe_allow_html=True)
+        cols[2].markdown(_customer_cell(page, row), unsafe_allow_html=True)
+        cols[3].markdown(_category_cell(row), unsafe_allow_html=True)
+        cols[4].markdown(_stacked_cell(row.title or "-", extra="activity-td-title"), unsafe_allow_html=True)
+        cols[5].markdown(_status_cell(row.status), unsafe_allow_html=True)
+        cols[6].markdown(_cell(related_source_label(row, all_rows) or "-"), unsafe_allow_html=True)
+        if cols[7].button(page.get("open_row", "開く"), key=f"activity_open_{row.row_id}"):
             st.session_state[SESSION_DETAIL] = row.row_id
             _open_row(row)
 
@@ -288,10 +363,22 @@ def _detail_row(rows, selection: ActivitySelection):
 
 
 def _render_detail(page: dict, row, all_rows, case_repo, quote_repo, activity_repo) -> None:
-    render_portal_section_title(page.get("detail_label", "履歴詳細"))
-    with st.container(border=True):
+    st.markdown(
+        f"<h3 class='portal-section-title activity-detail-title'>{escape(page.get('detail_label', '履歴詳細'))}</h3>",
+        unsafe_allow_html=True,
+    )
+    with st.container(border=True, key="activity_detail_panel"):
         st.markdown(f"**{row.title or row.entity_id}**")
         st.caption(f"{row.category_label()} / {row.customer or '-'} / {_status_label(row.status)}")
+        st.caption(
+            " / ".join(
+                (
+                    f"{page.get('col_last_activity', '最終活動')}：{display_day(row.last_activity_at) or '-'}",
+                    f"{page.get('col_date', 'DATE')}：{display_day(row.date) or '-'}",
+                    f"{page.get('col_updated', '最終更新')}：{display_day(row.updated_at) or '-'}",
+                )
+            )
+        )
         actions = st.columns(4)
         if row.entity_kind == "case":
             if actions[0].button(page.get("open_case", "案件を開く"), key=f"activity_open_case_{row.entity_id}", type="primary"):
@@ -387,7 +474,11 @@ def _render_preview(page: dict, snapshot) -> None:
 
 
 def _render_exports(page: dict, rows, selection: ActivitySelection, filt: ActivityFilter, customer_repo, all_rows) -> None:
-    render_portal_section_title(page.get("export_label", "レポート出力"))
+    with st.expander(page.get("export_label", "レポート出力"), expanded=False):
+        _render_export_actions(page, rows, selection, filt, customer_repo, all_rows)
+
+
+def _render_export_actions(page: dict, rows, selection: ActivitySelection, filt: ActivityFilter, customer_repo, all_rows) -> None:
     selected = selection.selected_rows(rows)
     target = selected or rows
     stamp = date.today().strftime("%Y%m%d")

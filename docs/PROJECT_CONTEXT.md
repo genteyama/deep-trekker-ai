@@ -33,7 +33,7 @@ PROJECT_CONTEXT とコードが矛盾した場合は、原則コード / Git を
 - 現在 Phase: **Phase B — Business Case Close / Reopen + Status Quick View**
 - v1.1.0 Online Multi-device MVP: **完成済み**。main baseline `1512f22112deff7f6d4b2512c273e5a2dac24ff9`（tag `v1.1.0`）
 - 旧記載の HEAD `e746ca9` はそれ以前の checkpoint。この文書とコードが矛盾する場合は Git / current code を優先
-- full pytest: 861 passed（`pytest -q`、2026-10-11 UX-2F）
+- full pytest: 864 passed（`pytest -q`、2026-10-11 UX-2G）
 - Price Master Data Quality: **DQ-5 COMPLETE**（Live SO Master修正、fresh export監査、Production activation、Pricing regressionまでPASS。→ 12章 / 15章）
 
 ### UX-1
@@ -90,9 +90,14 @@ PROJECT_CONTEXT とコードが矛盾した場合は、原則コード / Git を
 - Production smoke PASS。
 - 最終Production baseline: `c042d891117236ad5c5ca5fe5e79c4c58cd76e66`
 
-### Next
+### UX-2G
 
-- UX-2G: Activity Ledger density / high-density history workspace。
+- 開始。Activity Ledger high-density workspace。
+- compact summary。quick filters。collapsed advanced filters。
+- compact sort / selection toolbar。
+- 8-column dense activity table。last_activity_at visible。
+- exports collapsed。
+- DB / business logicは変更しない。
 
 ### v1.2 Phase A: Manufacturer Online Price Master Sync
 
