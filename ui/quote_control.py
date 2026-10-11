@@ -46,8 +46,10 @@ from agents.pricing_policy import (
     summarize_pricing_patterns,
 )
 from agents.sku_link import build_sku_link_preview, try_manual_link
+from agents.general_quote_entry import GeneralQuoteEntryError, create_general_quote_draft
 from agents.spectra_quote_entry import SpectraQuoteEntryError, create_spectra_quote_draft
 from agents.price_master import (
+    GENERIC_MANUFACTURER_MASTERS,
     active_price_books,
     attach_price_master_provenance,
     get_active_master,
@@ -115,6 +117,7 @@ def render_quote_control(texts: dict) -> None:
         helpers={
             "create_ihi_draft": _build_ihi_draft_from_ui,
             "create_spectra_draft": _build_spectra_draft_from_ui,
+            "create_general_draft": _build_general_draft_from_ui,
             "init_date_widgets": _init_date_widget_state,
             "render_dates": _render_quote_date_inputs,
             "render_export": _render_file_export,
@@ -1263,6 +1266,53 @@ def _build_ihi_draft_from_ui(page: dict, case: dict, configuration: str):
     if simulated is None:
         mark_sales_master_missing(draft)
     return draft
+
+
+def _build_general_draft_from_ui(
+    _page: dict,
+    *,
+    customer: str,
+    title: str,
+    lines,
+    international_shipping_usd: str,
+    domestic_shipping_jpy: str,
+):
+    ensure_new_quote_exchange_rate(st.session_state)
+    try:
+        rate = parse_exchange_rate(st.session_state[SESSION_NEW_QUOTE_FX])
+    except ValueError as error:
+        raise GeneralQuoteEntryError("EXCHANGE_RATE_INVALID") from error
+    try:
+        international = _optional_spectra_cost(international_shipping_usd)
+    except ValueError as error:
+        raise GeneralQuoteEntryError("INTERNATIONAL_SHIPPING_INVALID") from error
+    try:
+        domestic = _optional_spectra_cost(domestic_shipping_jpy)
+    except ValueError as error:
+        raise GeneralQuoteEntryError("DOMESTIC_SHIPPING_INVALID") from error
+    books = []
+    for master_type in GENERIC_MANUFACTURER_MASTERS:
+        active = get_active_master(master_type)
+        if active is None:
+            continue
+        books.append(
+            parse_manufacturer_price_master(
+                master_type,
+                active.path,
+                version=active.record.import_id,
+            )
+        )
+    return create_general_quote_draft(
+        customer=customer,
+        title=title,
+        lines=lines,
+        exchange_rate=rate,
+        international_shipping_usd=international,
+        domestic_shipping_jpy=domestic,
+        sales_candidates=_sales_candidates_for_rate(rate, books=books),
+        exchange_rate_source=new_quote_exchange_rate_source(st.session_state),
+        tax_rate=_optional_float(st.session_state.get("input_draft_tax_rate")),
+    )
 
 
 def _build_spectra_draft_from_ui(

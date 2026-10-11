@@ -29,6 +29,11 @@ _QUOTE_PRE_DRAFT_STASH_KEYS = (
     "spectra_quote_quantity",
     "spectra_quote_international_shipping",
     "spectra_quote_domestic_shipping",
+    "generic_quote_customer",
+    "generic_quote_title",
+    "generic_quote_lines",
+    "generic_quote_international_shipping",
+    "generic_quote_domestic_shipping",
 )
 
 

@@ -1,5 +1,6 @@
 from datetime import datetime
 import logging
+from uuid import uuid4
 
 import streamlit as st
 
@@ -25,6 +26,7 @@ from agents.quote_builder import (
     refresh_quote_draft,
 )
 from agents.quote_dates import date_widget_keys, format_quote_date
+from agents.general_quote_entry import GeneralQuoteEntryError
 from agents.spectra_quote_entry import SpectraQuoteEntryError
 from data.golden_cases.loader import IHI_QUOTE_001, load_quote_golden_case
 from models import CustomerPresentationMode, FinalPriceStatus, QuoteDraftStatus
@@ -214,18 +216,129 @@ def _render_new_quote_buttons(page: dict, helpers) -> None:
     st.write(page["section_quote_builder_description"])
     st.caption(page["quote_builder_hint"])
     _render_new_quote_exchange_rate(page)
-    case = load_quote_golden_case(IHI_QUOTE_001)
-    left, right = st.columns(2)
-    with left:
-        render_product_choice_card("PHOTON", page["ihi_photon_draft_button"])
-        if st.button(page["ihi_photon_draft_button"], key="ihi_photon_draft", type="primary"):
-            _create_draft(page, helpers, case, "PHOTON")
-    with right:
-        render_product_choice_card("MAG", page["ihi_mag_draft_button"])
-        if st.button(page["ihi_mag_draft_button"], key="ihi_mag_draft", type="primary"):
-            _create_draft(page, helpers, case, "MAG")
+    _render_general_quote_entry(page, helpers)
     st.divider()
     _render_spectra_quote_entry(page, helpers)
+    workspace = page["workspace"]
+    with st.expander(workspace.get("golden_samples_label", "検証用・固定サンプル"), expanded=False):
+        case = load_quote_golden_case(IHI_QUOTE_001)
+        left, right = st.columns(2)
+        with left:
+            render_product_choice_card("PHOTON", page["ihi_photon_draft_button"])
+            if st.button(page["ihi_photon_draft_button"], key="ihi_photon_draft", type="primary"):
+                _create_draft(page, helpers, case, "PHOTON")
+        with right:
+            render_product_choice_card("MAG", page["ihi_mag_draft_button"])
+            if st.button(page["ihi_mag_draft_button"], key="ihi_mag_draft", type="primary"):
+                _create_draft(page, helpers, case, "MAG")
+
+
+def _generic_quote_lines() -> list[dict]:
+    stored = st.session_state.get("generic_quote_lines")
+    lines = []
+    if isinstance(stored, list):
+        for item in stored:
+            if not isinstance(item, dict) or not item.get("id"):
+                continue
+            quantity = item.get("quantity")
+            lines.append(
+                {
+                    "id": str(item["id"]),
+                    "sku": str(item.get("sku") or ""),
+                    "quantity": quantity if isinstance(quantity, int) and not isinstance(quantity, bool) and quantity >= 1 else 1,
+                }
+            )
+    if not lines:
+        lines = [{"id": uuid4().hex, "sku": "", "quantity": 1}]
+    st.session_state["generic_quote_lines"] = lines
+    return lines
+
+
+def _render_general_quote_entry(page: dict, helpers: dict) -> None:
+    workspace = page["workspace"]
+    with st.container(border=True):
+        st.markdown(f"**{workspace['general_entry_title']}**")
+        st.caption(workspace["general_entry_caption"])
+        customer = st.text_input(workspace["general_customer_label"], key="generic_quote_customer")
+        title = st.text_input(workspace["general_title_label"], key="generic_quote_title")
+        st.markdown(f"**{workspace['general_lines_label']}**")
+        prepared = []
+        remove_id = None
+        for line in _generic_quote_lines():
+            line_id = line["id"]
+            sku_key = f"generic_quote_sku_{line_id}"
+            qty_key = f"generic_quote_qty_{line_id}"
+            if sku_key not in st.session_state:
+                st.session_state[sku_key] = line["sku"]
+            if qty_key not in st.session_state:
+                st.session_state[qty_key] = line["quantity"]
+            sku_column, qty_column, remove_column = st.columns([2.4, 1, 0.7])
+            with sku_column:
+                sku = st.text_input(workspace["general_sku_label"], key=sku_key)
+            with qty_column:
+                quantity = st.number_input(
+                    workspace["general_quantity_label"],
+                    min_value=1,
+                    step=1,
+                    key=qty_key,
+                )
+            with remove_column:
+                if st.button(workspace["general_remove_line"], key=f"generic_quote_remove_{line_id}"):
+                    remove_id = line_id
+            prepared.append({"id": line_id, "sku": sku, "quantity": int(quantity)})
+        st.session_state["generic_quote_lines"] = prepared
+        if st.button(workspace["general_add_line"], key="generic_quote_add_line"):
+            prepared.append({"id": uuid4().hex, "sku": "", "quantity": 1})
+            st.session_state["generic_quote_lines"] = prepared
+            st.rerun()
+        if remove_id is not None:
+            st.session_state["generic_quote_lines"] = [item for item in prepared if item["id"] != remove_id]
+            st.session_state.pop(f"generic_quote_sku_{remove_id}", None)
+            st.session_state.pop(f"generic_quote_qty_{remove_id}", None)
+            st.rerun()
+        left, right = st.columns(2)
+        with left:
+            international = st.text_input(
+                workspace["general_international_shipping_label"],
+                key="generic_quote_international_shipping",
+            )
+        with right:
+            domestic = st.text_input(
+                workspace["general_domestic_shipping_label"],
+                key="generic_quote_domestic_shipping",
+            )
+        if st.button(workspace["general_create_button"], key="generic_quote_create", type="primary"):
+            _create_general_draft(
+                page,
+                helpers,
+                customer=customer,
+                title=title,
+                lines=prepared,
+                international_shipping_usd=international,
+                domestic_shipping_jpy=domestic,
+            )
+
+
+def _create_general_draft(page: dict, helpers: dict, **inputs) -> None:
+    workspace = page["workspace"]
+    try:
+        draft = helpers["create_general_draft"](page, **inputs)
+    except GeneralQuoteEntryError as error:
+        message = workspace["general_errors"].get(error.code, workspace["general_errors"]["UNEXPECTED"])
+        if error.sku and "{sku}" in message:
+            message = message.format(sku=error.sku)
+        st.error(message)
+        return
+    except Exception:
+        logger.exception("general_quote_entry_failed")
+        st.error(workspace["general_errors"]["UNEXPECTED"])
+        return
+    st.session_state["quote_draft"] = draft
+    helpers["init_date_widgets"](draft, overwrite=True)
+    st.session_state[SESSION_QUOTE_STEP] = 1
+    reset_pending_form(st.session_state, 1)
+    _save_draft(page, draft, manual=True, from_widgets=False)
+    st.rerun()
 
 
 def _render_spectra_quote_entry(page: dict, helpers: dict) -> None:

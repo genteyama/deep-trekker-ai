@@ -33,7 +33,7 @@ PROJECT_CONTEXT とコードが矛盾した場合は、原則コード / Git を
 - 現在 Phase: **Phase B — Business Case Close / Reopen + Status Quick View**
 - v1.1.0 Online Multi-device MVP: **完成済み**。main baseline `1512f22112deff7f6d4b2512c273e5a2dac24ff9`（tag `v1.1.0`）
 - 旧記載の HEAD `e746ca9` はそれ以前の checkpoint。この文書とコードが矛盾する場合は Git / current code を優先
-- full pytest: 866 passed（`pytest -q`、2026-10-11 UX-2G）
+- full pytest: 894 passed（`pytest -q`、2026-10-11 QUOTE-1A）
 - Price Master Data Quality: **DQ-5 COMPLETE**（Live SO Master修正、fresh export監査、Production activation、Pricing regressionまでPASS。→ 12章 / 15章）
 
 ### UX-1
@@ -105,6 +105,20 @@ PROJECT_CONTEXT とコードが矛盾した場合は、原則コード / Git を
 - DB / repository / ActivityRow / business logicは変更しない。
 - Production smoke PASS。keyword filter即時反映 PASS。
 - 最終Production baseline: `0ed25a481400d075795039e310c01fb0835d06d2`
+
+### QUOTE-1A
+
+- 開始。General Deep Trekker / PipeTrekker Quote Entry。
+- 任意の顧客名 / 案件名。
+- 複数SKUを完全一致で1見積へ入れる。
+- DT40 / PT30 の Active Manufacturer Master のみ。
+- 既存 Pricing Policy。
+- 既存の5工程見積ワークフローへ接続。
+- fuzzy SKU は使わない。
+- メーカー価格が無いSKUは fail closed。
+- `case_id` は次Phase用の任意引数。UIからは渡さない。
+- DB変更なし。
+- Next: QUOTE-1B Technical Case → General Quote handoff。
 
 ### v1.2 Phase A: Manufacturer Online Price Master Sync
 
