@@ -33,7 +33,7 @@ PROJECT_CONTEXT とコードが矛盾した場合は、原則コード / Git を
 - 現在 Phase: **Phase B — Business Case Close / Reopen + Status Quick View**
 - v1.1.0 Online Multi-device MVP: **完成済み**。main baseline `1512f22112deff7f6d4b2512c273e5a2dac24ff9`（tag `v1.1.0`）
 - 旧記載の HEAD `e746ca9` はそれ以前の checkpoint。この文書とコードが矛盾する場合は Git / current code を優先
-- full pytest: 813 passed（`pytest -q`、2026-10-10 UX-1）
+- full pytest: 837 passed（`pytest -q`、2026-10-11 AUTH-1B）
 - Price Master Data Quality: **DQ-5 COMPLETE**（Live SO Master修正、fresh export監査、Production activation、Pricing regressionまでPASS。→ 12章 / 15章）
 
 ### UX-1
@@ -41,7 +41,12 @@ PROJECT_CONTEXT とコードが矛盾した場合は、原則コード / Git を
 - HOME Quick Viewはopen/close labelを明示
 - sidebarへread-only current location表示
 - sidebar navigation機能はまだ追加しない
-- Auth persistenceは次Step AUTH-1
+- Auth persistenceはAUTH-1で段階導入
+
+### AUTH-1B
+
+- Google OIDC Persistent Loginのcode supportを実装。Streamlit native auth、`ALLOWED_EMAILS`、12h absolute timeoutを使用し、DB migrationはない。
+- Production mode switchは未実施。`AUTH_MODE=google_oidc`を明示設定するまでProductionはlegacy Supabase password authを維持する。
 
 ### v1.2 Phase A: Manufacturer Online Price Master Sync
 
