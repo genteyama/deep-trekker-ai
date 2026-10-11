@@ -50,6 +50,16 @@ def test_sidebar_compact_styles_are_scoped_to_sidebar():
     assert ".brand-header.is-compact" in APP_CSS
     assert ".dt-step-card.is-compact" in APP_CSS
     assert "min-height: 88px" in APP_CSS
+    home_css, compact_css = APP_CSS.split(".brand-header.is-compact", 1)
+    home_rule = home_css.split(".brand-header {", 1)[1].split("}", 1)[0]
+    assert "min-height: 88px" in home_rule
+    assert "margin-top:" not in home_rule
+    compact_rule = compact_css.split("}", 1)[0]
+    assert "min-height: 52px" in compact_rule
+    assert "margin-top: 28px" in compact_rule
+    parent_rule = APP_CSS.split(":has(.brand-header)", 1)[1].split("}", 1)[0]
+    assert "overflow: visible" in parent_rule
+    assert "height: auto" in parent_rule
     assert '[data-testid="stSidebar"] [class*="st-key-sidebar_quote_step_"]' in APP_CSS
     assert '[data-testid="stSidebar"] [class*="st-key-sidebar_technical_step_"]' in APP_CSS
     assert "div.stButton > button" in APP_CSS

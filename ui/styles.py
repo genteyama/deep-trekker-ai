@@ -122,6 +122,8 @@ APP_CSS = """
         gap: 12px 16px;
         min-height: 52px;
         padding: 10px 16px;
+        /* Streamlit's toolbar is 60px and covers content that starts near 35px. */
+        margin-top: 28px;
         margin-bottom: 6px;
     }
     .brand-header.is-compact .brand-logos-left,

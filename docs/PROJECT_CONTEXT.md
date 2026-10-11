@@ -73,6 +73,7 @@ PROJECT_CONTEXT とコードが矛盾した場合は、原則コード / Git を
 
 - 開始。Internal pageのBrand Headerをcompact化する。
 - Main Workflowはread-only status overviewにする。Sidebarはdirect navigationのまま。
+- Compact header clipping hotfix: Streamlit toolbar（60px）の下へ compact header のみ下げ、26pxロゴを全面表示する。
 
 ### v1.2 Phase A: Manufacturer Online Price Master Sync
 
