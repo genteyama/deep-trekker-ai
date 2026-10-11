@@ -92,14 +92,19 @@ PROJECT_CONTEXT とコードが矛盾した場合は、原則コード / Git を
 
 ### UX-2G
 
-- 開始。Activity Ledger high-density workspace。
-- compact summary。quick filters。collapsed advanced filters。
+- COMPLETE
+- Activity Ledgerをhigh-density finder workspace化。
+- compact 5-item summary。Quick Filtersは常時表示。Advanced Filtersはcollapsed。
 - compact sort / selection toolbar。
-- 8-column dense activity table。last_activity_at visible。
+- 8-column dense activity table。last_activity_atを一覧表示。
+- customer / End Userを同一cell化。category / productを同一cell化。
 - exports collapsed。
-- Quick Filter / Sort current widget state is applied in the same rerun.
-- Production table density polish: reduce excessive wrapping.
-- DB / business logicは変更しない。
+- Quick Filter / Sortはsame rerunで即時反映。
+- Production table density polish完了。excessive wrapping解消。
+- Record Workspaceへのopen navigationは維持。
+- DB / repository / ActivityRow / business logicは変更しない。
+- Production smoke PASS。keyword filter即時反映 PASS。
+- 最終Production baseline: `0ed25a481400d075795039e310c01fb0835d06d2`
 
 ### v1.2 Phase A: Manufacturer Online Price Master Sync
 
