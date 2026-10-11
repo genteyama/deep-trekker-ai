@@ -43,12 +43,13 @@ PROJECT_CONTEXT とコードが矛盾した場合は、原則コード / Git を
 - sidebar navigation機能はまだ追加しない
 - Auth persistenceはAUTH-1で段階導入
 
-### AUTH-1B
+### AUTH-1 — COMPLETE
 
-- Google OIDC Persistent Loginのcode supportを実装。Streamlit native auth、`ALLOWED_EMAILS`、12h absolute timeoutを使用し、DB migrationはない。
-- Production mode switchは未実施。`AUTH_MODE=google_oidc`を明示設定するまでProductionはlegacy Supabase password authを維持する。
-- Production rolloutではStreamlit 1.50.0をpinする。
-- 初回Production OIDC切替はOAuth開始時の400エラーにより`AUTH_MODE=legacy`へrollback済み。Authlib compatibility hotfixとして1.6.5へpinし、hotfix deploy後にOIDCを再有効化する。
+- Google OIDC Production activation COMPLETE。Streamlit native OIDC、`ALLOWED_EMAILS` authorization、12h absolute timeout、`AUTH_EMAIL_KEY` actor compatibilityを使用し、DB migrationはない。
+- Streamlit 1.50.0 / Authlib 1.6.5をpinする。
+- Production smoke: Google login、HOME表示、browser reload後のlogin維持、browser close/reopen後のlogin維持、explicit logoutはPASS。12h timeoutはautomated test PASS。
+- 初回rolloutはOAuth開始時の400 error後に`AUTH_MODE=legacy`へ即時rollbackし、Authlib 1.6.5 pin hotfix後の再rolloutでPASS。
+- Rollbackは`AUTH_MODE=legacy`で従来Supabase password loginへ戻す。
 
 ### v1.2 Phase A: Manufacturer Online Price Master Sync
 
