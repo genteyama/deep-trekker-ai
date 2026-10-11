@@ -334,7 +334,7 @@ def _activity_cell(page: dict, row) -> str:
     secondary = ""
     if created and created != activity:
         secondary = f"{page.get('created_prefix', '作成')}: {created}"
-    return _stacked_cell(activity, secondary)
+    return _stacked_cell(activity, secondary, primary_class="activity-primary activity-primary-date")
 
 
 def _customer_cell(page: dict, row) -> str:
@@ -361,7 +361,7 @@ def _status_cell(status: str) -> str:
     )
 
 
-TABLE_WEIGHTS = [0.42, 1.05, 1.55, 1.2, 2.35, 1.1, 1.0, 0.62]
+TABLE_WEIGHTS = [0.35, 0.85, 1.55, 1.15, 2.7, 1.15, 0.9, 0.55]
 
 
 def _render_table(page: dict, rows, all_rows, selection: ActivitySelection) -> None:

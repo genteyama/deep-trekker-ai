@@ -204,7 +204,7 @@ def test_dense_table_keeps_open_navigation_and_collapsed_exports(tmp_path):
     assert "最終更新" not in header_text
 
     activity = display_day(parent_row.last_activity_at)
-    activity_cell = next(value for value in _markdown(at) if activity in value and "activity-secondary" in value)
+    activity_cell = next(value for value in _markdown(at) if activity in value and "activity-primary-date" in value)
     assert f"作成: {display_day(parent_row.date)}" in activity_cell
     customer_cell = next(value for value in _markdown(at) if "IHI検査計測" in value and "activity-primary" in value)
     assert "End User: 造船所" in customer_cell
@@ -233,3 +233,31 @@ def test_dense_table_keeps_open_navigation_and_collapsed_exports(tmp_path):
         expander = _expander_of(at, key)
         assert expander is not None
         assert expander.label == "レポート出力"
+
+
+def test_activity_table_wrap_rules_stay_scoped():
+    from ui.activity_ledger import TABLE_WEIGHTS
+    from ui.styles import APP_CSS
+
+    assert len(TABLE_WEIGHTS) == 8
+    assert TABLE_WEIGHTS[4] > TABLE_WEIGHTS[2] > TABLE_WEIGHTS[5]
+    cell_rule = APP_CSS.split(".activity-td {", 1)[1].split("}", 1)[0]
+    assert "overflow-wrap: normal" in cell_rule
+    assert "word-break: normal" in cell_rule
+    assert "overflow-wrap: anywhere" not in cell_rule
+    title_rule = APP_CSS.split(".activity-td-title .activity-primary {", 1)[1].split("}", 1)[0]
+    assert "white-space: normal" in title_rule
+    assert "overflow-wrap: anywhere" in title_rule
+    nowrap_rule = APP_CSS.split(".activity-primary-date,", 1)[1].split("}", 1)[0]
+    assert ".activity-category-badge" in nowrap_rule
+    assert ".activity-status-badge" in nowrap_rule
+    assert "white-space: nowrap" in nowrap_rule
+    header_rule = APP_CSS.split(".activity-th {", 1)[1].split("}", 1)[0]
+    assert "word-break: keep-all" in header_rule
+    global_button = APP_CSS.split("div.stButton > button", 1)[1].split("}", 1)[0]
+    assert "min-height: 40px" in global_button
+    open_button = APP_CSS.split('[data-testid="stHorizontalBlock"]:has(.activity-td) [data-testid="stButton"] button {', 1)[1].split("}", 1)[0]
+    assert "white-space: nowrap" in APP_CSS.split('[data-testid="stHorizontalBlock"]:has(.activity-td) [data-testid="stButton"] button,', 1)[1].split("}", 1)[0]
+    assert "min-height: 30px" in open_button
+    assert "min-height: 40px" not in open_button
+    assert ".block-container { padding-top: 1.2rem; max-width: 1240px; }" in APP_CSS

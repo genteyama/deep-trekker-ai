@@ -428,7 +428,19 @@ APP_CSS = """
     .activity-list-title, .activity-detail-title { margin: 8px 0 4px 0; font-size: 16px; }
     .st-key-activity_detail_panel { padding-top: 2px; }
     .activity-primary { color: var(--dt-text); font-size: 12px; font-weight: 650; line-height: 1.25; }
-    .activity-secondary { color: var(--dt-muted); font-size: 11px; line-height: 1.2; margin-top: 1px; }
+    .activity-secondary {
+        color: var(--dt-muted);
+        font-size: 11px;
+        line-height: 1.2;
+        margin-top: 1px;
+        word-break: keep-all;
+        overflow-wrap: anywhere;
+    }
+    .activity-primary-date,
+    .activity-category-badge,
+    .activity-status-badge {
+        white-space: nowrap;
+    }
     .activity-category-badge {
         display: inline-block;
         color: var(--dt-navy);
@@ -479,11 +491,19 @@ APP_CSS = """
     [data-testid="stHorizontalBlock"]:has(.activity-th) [data-testid="stVerticalBlock"] {
         gap: 0 !important;
     }
+    [data-testid="stHorizontalBlock"]:has(.activity-td) [data-testid="stButton"] button,
+    [data-testid="stHorizontalBlock"]:has(.activity-td) [data-testid="stButton"] button p {
+        white-space: nowrap;
+    }
     [data-testid="stHorizontalBlock"]:has(.activity-td) [data-testid="stButton"] button {
-        min-height: 1.7rem;
-        padding: 0.1rem 0.45rem;
+        min-height: 30px;
+        min-width: 3.4rem;
+        padding: 0.1rem 0.55rem;
         font-size: 12px;
         line-height: 1.2;
+    }
+    [data-testid="stHorizontalBlock"]:has(.activity-td) [data-testid="stButton"] button p {
+        margin: 0;
     }
     .activity-th {
         color: var(--dt-white);
@@ -491,17 +511,24 @@ APP_CSS = """
         font-weight: 700;
         line-height: 1.25;
         padding: 4px 2px;
+        white-space: normal;
+        word-break: keep-all;
     }
     .activity-td {
         color: var(--dt-text);
         font-size: 12px;
         line-height: 1.25;
         padding: 3px 2px;
-        overflow-wrap: anywhere;
-        word-break: break-word;
+        overflow-wrap: normal;
+        word-break: normal;
         min-width: 0;
     }
-    .activity-td-title .activity-primary { font-weight: 650; font-size: 13px; }
+    .activity-td-title .activity-primary {
+        font-weight: 650;
+        font-size: 13px;
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
     .save-status { font-size: 13px; color: var(--dt-accent); }
     .save-error { font-size: 13px; color: var(--dt-danger); }
     [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
