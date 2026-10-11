@@ -80,11 +80,19 @@ PROJECT_CONTEXT とコードが矛盾した場合は、原則コード / Git を
 
 ### UX-2F
 
-- 開始。Technical CaseをCRM-style Record Workspaceにする。
+- COMPLETE
+- Technical CaseをCRM-style Record Workspace化。
 - Record identity header。Main active work area。Right-side record context。
-- Related quotesは常時表示。DB / business logicは変更しない。
-- Production polish: Business lifecycle controls moved to Record Right Rail。
-- 次：UX-2G Activity Ledger density。
+- Related quotesは常時表示。
+- Business lifecycle controlsをRecord Right Railへ移動。CLOSED caseのreopen behaviorは維持。
+- Sidebar direct workflow navigationは維持。Main workflowはread-only compact status overview。
+- DB / repository / business logicは変更しない。
+- Production smoke PASS。
+- 最終Production baseline: `c042d891117236ad5c5ca5fe5e79c4c58cd76e66`
+
+### Next
+
+- UX-2G: Activity Ledger density / high-density history workspace。
 
 ### v1.2 Phase A: Manufacturer Online Price Master Sync
 
