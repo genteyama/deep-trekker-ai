@@ -194,7 +194,7 @@ def test_analyze_button_shows_mock_results():
     assert at.error.len == 0
     assert any(button.key == "new_technical_case" for button in at.button)
     assert any(button.key == "save_technical_case" for button in at.button)
-    assert "最近の案件" in " ".join(visible_text)
+    assert any(expander.label == "最近の案件" for expander in at.expander)
     assert any(expander.label == "確認済み技術情報一覧" for expander in at.expander)
 
 

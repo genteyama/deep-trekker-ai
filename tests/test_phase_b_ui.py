@@ -3,6 +3,7 @@ from models import CaseCloseReason, CaseLifecycleStatus, TechnicalCaseRecord, Te
 from repositories.sqlite_activity_repository import SqliteActivityRepository
 from repositories.sqlite_technical_case_repository import SqliteTechnicalCaseRepository
 from tests.test_app_pages import _start_app
+from tests.test_price_master_ui import _drop_stale_widgets
 from ui.components.portal import format_portal_datetime
 from ui.home import _user_progress
 from ui.technical_case import _display_timestamp
@@ -91,6 +92,7 @@ def test_close_form_validates_other_then_closes_and_reopens():
     events = SqliteActivityRepository().list_events(entity_kind="case", entity_id="CASE-UI")
     assert [item.event_type for item in events].count("CASE_CLOSED") == 1
 
+    _drop_stale_widgets(at)
     at.button(key="reopen_technical_case").click().run()
     reopened = SqliteTechnicalCaseRepository().get_case("CASE-UI")
     assert reopened.case_lifecycle_status == CaseLifecycleStatus.ACTIVE

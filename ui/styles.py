@@ -310,6 +310,65 @@ APP_CSS = """
     .dt-step-card.is-compact .dt-step-card-top {
         margin-bottom: 4px;
     }
+    .record-header {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        gap: 8px 24px;
+        padding: 12px 16px;
+        border: 1px solid var(--dt-border);
+        border-radius: 8px;
+        background: var(--dt-white);
+        margin-bottom: 8px;
+    }
+    .record-header-identity { min-width: 0; }
+    .record-customer { color: var(--dt-muted); font-size: 13px; }
+    .record-title { color: var(--dt-navy); font-size: 20px; font-weight: 700; line-height: 1.3; }
+    .record-header-status { text-align: right; }
+    .record-status { color: var(--dt-navy); font-weight: 700; }
+    .record-header-meta {
+        flex-basis: 100%;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 20px;
+        color: var(--dt-muted);
+        font-size: 13px;
+    }
+    .record-meta-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        color: var(--dt-text);
+        font-size: 13px;
+        line-height: 1.45;
+    }
+    .record-flag {
+        display: inline-block;
+        margin-left: 6px;
+        padding: 1px 6px;
+        border-radius: 999px;
+        background: var(--dt-bg-soft);
+        color: var(--dt-navy);
+        font-size: 12px;
+    }
+    .record-side-card {
+        padding: 10px 12px;
+        margin-bottom: 8px;
+        border-radius: 8px;
+        background: var(--dt-bg-soft);
+    }
+    .record-side-title {
+        color: var(--dt-navy);
+        font-size: 13px;
+        font-weight: 700;
+        margin-bottom: 6px;
+    }
+    .record-related-item {
+        padding: 4px 0;
+        border-top: 1px solid var(--dt-border);
+        color: var(--dt-text);
+        font-size: 13px;
+    }
     .dt-step-card-top {
         display: flex;
         justify-content: space-between;

@@ -72,7 +72,7 @@ from ui.technical_case_flow import (
 from ui.components.lifecycle import apply_case_lifecycle, render_case_actions_menu, render_lineage_card
 from ui.components.process_stepper import ProcessStepView, render_process_stepper, render_work_panel
 from ui.components.portal import format_portal_datetime
-from ui.components.status import render_workflow_progress
+from ui.components.record_workspace import render_record_header, render_related_list, render_side_card
 from ui.technical_case_persistence import (
     WIDGET_KEYS,
     get_technical_case_repository,
@@ -120,22 +120,59 @@ def render_technical_case(texts: dict) -> None:
     st.write(page["description"])
     summary = _current_work_summary()
     workflow = build_technical_workflow(summary, workflow_labels)
-    _render_case_summary(page, summary, workflow)
     record = _current_record()
-    _render_business_lifecycle(texts, page, record)
-    if record is not None and record.case_lifecycle_status == CaseLifecycleStatus.CLOSED:
-        _render_case_lifecycle(texts, page)
-        _render_recent_cases(page)
-        return
-    _render_case_actions(page)
-
-    if get_active_provider_name() == "mock":
-        st.warning(page["mock_warning"])
-    with st.expander(page.get("dev_settings_label", page.get("provider_status_label", "AI Provider")), expanded=False):
-        _render_provider_status(page)
-        _render_technical_fact_view(page)
-
     selected = selected_or_current(st.session_state.get(SESSION_CASE_STEP), workflow)
+    closed = record is not None and record.case_lifecycle_status == CaseLifecycleStatus.CLOSED
+    _render_record_header(texts, page, summary, workflow, record, selected)
+    if not closed:
+        _render_case_actions(page)
+        if get_active_provider_name() == "mock":
+            st.warning(page["mock_warning"])
+    _render_business_lifecycle(texts, page, record)
+
+    main, rail = st.columns([3, 1])
+    with main:
+        if closed:
+            _render_case_lifecycle(texts, page)
+        else:
+            run = st.session_state.get(SESSION_RUN)
+            if run is not None and run.case_summary:
+                st.write(run.case_summary)
+            _render_workflow_overview(page, workflow, selected)
+            if selected != 1:
+                with st.expander(page["section_case_info"], expanded=False):
+                    _render_intake_fields(page)
+            _render_selected_step(texts, page, selected, summary, workflow)
+            _render_step_nav(page, selected)
+    with rail:
+        _render_record_context(texts, page, record)
+        if not closed:
+            with st.expander(
+                page.get("dev_settings_label", page.get("provider_status_label", "AI Provider")),
+                expanded=False,
+            ):
+                _render_provider_status(page)
+                _render_technical_fact_view(page)
+    _render_recent_cases(page)
+
+
+def _current_work_summary():
+    record = None
+    saved_id = st.session_state.get("technical_case_saved_id")
+    if saved_id:
+        record = get_technical_case_repository().get_case(saved_id)
+    return summarize_technical_case(
+        inquiry_text=st.session_state.get("input_customer_inquiry") or st.session_state.get(SESSION_INQUIRY),
+        case_name=st.session_state.get("input_case_name"),
+        customer_name=st.session_state.get("input_customer_name"),
+        run=st.session_state.get(SESSION_RUN),
+        response_run=st.session_state.get(SESSION_RESPONSE_RUN),
+        record=record,
+    )
+
+
+def _render_workflow_overview(page: dict, workflow, selected: int) -> None:
+    workflow_labels = page.get("workflow", {})
     views = [
         ProcessStepView(
             step=item.step,
@@ -159,28 +196,6 @@ def render_technical_case(texts: dict) -> None:
     if clicked != selected:
         st.session_state[SESSION_CASE_STEP] = clicked
         st.rerun()
-
-    if selected != 1:
-        with st.expander(page["section_case_info"], expanded=False):
-            _render_intake_fields(page)
-    _render_selected_step(texts, page, selected, summary, workflow)
-    _render_step_nav(page, selected)
-    _render_recent_cases(page)
-
-
-def _current_work_summary():
-    record = None
-    saved_id = st.session_state.get("technical_case_saved_id")
-    if saved_id:
-        record = get_technical_case_repository().get_case(saved_id)
-    return summarize_technical_case(
-        inquiry_text=st.session_state.get("input_customer_inquiry") or st.session_state.get(SESSION_INQUIRY),
-        case_name=st.session_state.get("input_case_name"),
-        customer_name=st.session_state.get("input_customer_name"),
-        run=st.session_state.get(SESSION_RUN),
-        response_run=st.session_state.get(SESSION_RESPONSE_RUN),
-        record=record,
-    )
 
 
 def _render_selected_step(texts: dict, page: dict, selected: int, summary, workflow) -> None:
@@ -331,23 +346,30 @@ def _render_step_complete(texts: dict, page: dict, summary, workflow) -> None:
         st.session_state[SESSION_CASE_STEP] = 7
         st.rerun()
     _render_case_lifecycle(texts, page)
-    _render_related_quotes(page)
 
 
-def _render_related_quotes(page: dict) -> None:
-    record = _current_record()
+def _related_quote_label(draft) -> str:
+    name = draft.title or draft.configuration_name or draft.quote_draft_id
+    version = getattr(draft, "quote_version", None)
+    if version:
+        return f"{name}　v{version}"
+    return name
+
+
+def _render_related_quotes(page: dict, record) -> None:
     if record is None:
         return
     from agents.activity_catalog import load_related_quotes
     from ui.quote_persistence import get_quote_repository
 
     quotes = load_related_quotes(get_quote_repository(), record.case_id)
-    st.markdown(f"**{page.get('workflow', {}).get('related_quotes', '関連見積')}**")
-    if not quotes:
-        st.text(page.get("no_results", "まだ解析結果はありません"))
-        return
-    for draft in quotes:
-        st.write(f"- {draft.title or draft.configuration_name or draft.quote_draft_id}")
+    label = page.get("workflow", {}).get("related_quotes", "関連見積")
+    unit = page.get("workflow", {}).get("review_unit", "件")
+    render_related_list(
+        label,
+        f"{label}：{len(quotes)}{unit}",
+        [_related_quote_label(draft) for draft in quotes],
+    )
 
 
 def _render_requirements_detail(page: dict, run) -> None:
@@ -396,38 +418,111 @@ def _render_existing_equipment(page: dict, run) -> None:
             st.write(f"- {_requirement_line(item, page)}")
 
 
-def _render_case_summary(page: dict, summary, workflow) -> None:
+def _display_or_dash(value: Optional[str]) -> str:
+    text = (value or "").strip()
+    return text or "-"
+
+
+def _render_record_header(texts: dict, page: dict, summary, workflow, record, selected: int) -> None:
+    labels = page.get("workflow", {})
     status_labels = page.get("case_status", {})
-    run = st.session_state.get(SESSION_RUN)
-    with st.container(border=True):
-        cols = st.columns([2, 1])
-        with cols[0]:
-            st.markdown(f"**{summary.title or page.get('unnamed_item', '項目')}**")
-            st.write(summary.customer or page.get("no_value", "-"))
-            st.caption(f"{page.get('end_user_name', 'End User')}: {st.session_state.get('input_end_user_name') or '-'}")
-            if run is not None and run.case_summary:
-                st.write(run.case_summary)
-        with cols[1]:
-            st.caption(
-                f"{page.get('case_status_label', '案件状態')}: "
-                f"{status_labels.get(summary.process_status, summary.process_label())}"
-            )
-            render_workflow_progress(workflow, page.get("workflow") or page)
-            st.caption(f"{page.get('provider_label', 'AI Provider')}: {summary.provider or '-'}")
-            st.caption(f"{page.get('model_label', 'Model')}: {summary.model or '-'}")
-            if summary.updated_at:
-                st.caption(
-                    f"{page.get('updated_at_label', '最終更新')}: {format_portal_datetime(summary.updated_at)}"
-                )
-            record = _current_record()
-            if record is not None and record.deleted_at:
-                st.caption("ゴミ箱")
-            elif record is not None and record.archived_at:
-                st.caption("アーカイブ")
+    lifecycle = texts.get("lifecycle", {})
+    end_user = st.session_state.get("input_end_user_name") or (record.end_user_name if record is not None else None)
+    closed = record is not None and record.case_lifecycle_status == CaseLifecycleStatus.CLOSED
+    status = (
+        lifecycle.get("case_closed_heading", "案件終了済み")
+        if closed
+        else status_labels.get(summary.process_status, summary.process_label())
+    )
+    flags = []
+    if record is not None and record.deleted_at:
+        flags.append("ゴミ箱")
+    elif record is not None and record.archived_at:
+        flags.append("アーカイブ")
+    updated = (
+        f"{page.get('updated_at_label', '最終更新')}：{format_portal_datetime(summary.updated_at)}"
+        if summary.updated_at
+        else f"{page.get('updated_at_label', '最終更新')}：-"
+    )
+    render_record_header(
+        customer=_display_or_dash(summary.customer) if summary.customer else "顧客なし",
+        title=_display_or_dash(summary.title) if summary.title else "案件名なし",
+        end_user=f"{page.get('end_user_name', 'End User')}：{_display_or_dash(end_user)}",
+        status=status,
+        current_step=(
+            f"{labels.get('current_label', '現在')}："
+            f"{selected}. {step_title(selected, labels)}"
+        ),
+        progress=f"{labels.get('progress_label', '進捗')}：{workflow.completed} / {workflow.total}",
+        review=(
+            f"{labels.get('review_label', '要確認')}："
+            f"{workflow.review_required}{labels.get('review_unit', '件')}"
+        ),
+        updated=updated,
+        flags=flags,
+    )
+
+
+def _render_record_context(texts: dict, page: dict, record) -> None:
+    dash = page.get("no_value", "-")
+    products = dash
+    case_id = dash
+    created = dash
+    updated = dash
+    customer = dash
+    end_user = _display_or_dash(st.session_state.get("input_end_user_name"))
+    parent_row = None
+    if record is not None:
+        case_id = record.case_id or dash
+        customer = _display_or_dash(record.customer_name)
+        end_user = _display_or_dash(record.end_user_name or st.session_state.get("input_end_user_name"))
+        products = "、".join(item for item in record.requested_products if item) or dash
+        created = format_portal_datetime(record.created_at) if record.created_at else dash
+        updated = format_portal_datetime(record.updated_at) if record.updated_at else dash
+        if record.parent_case_id:
+            parent = get_technical_case_repository().get_case(record.parent_case_id)
+            parent_name = parent.case_title if parent is not None and parent.case_title else record.parent_case_id
+            parent_row = (texts.get("lifecycle", {}).get("parent_label", "元"), parent_name)
+    rows = [
+        (page.get("customer_name", "顧客名"), customer if record is not None else _display_or_dash(st.session_state.get("input_customer_name"))),
+        (page.get("end_user_name", "End User"), end_user),
+        ("案件ID", case_id),
+        (page.get("requested_products_label", "対象製品"), products),
+        ("作成日", created),
+        (page.get("updated_at_label", "最終更新"), updated),
+    ]
+    if parent_row is not None:
+        rows.append(parent_row)
+    render_side_card("案件情報", rows)
+    _render_related_quotes(page, record)
+    if record is None:
+        return
+    parent = get_technical_case_repository().get_case(record.parent_case_id) if record.parent_case_id else None
+    children = get_technical_case_repository().list_child_cases(record.case_id)
+
+    def _open_parent():
+        if parent is not None:
+            resume_case_into_session(parent, st.session_state)
+            st.rerun()
+
+    def _open_child(child):
+        loaded = get_technical_case_repository().get_case(child.case_id)
+        if loaded is not None:
+            resume_case_into_session(loaded, st.session_state)
+            st.rerun()
+
+    render_lineage_card(
+        texts=texts,
+        parent=parent,
+        children=children,
+        kind="case",
+        parent_open=_open_parent if parent is not None else None,
+        child_open=_open_child,
+    )
 
 
 def _render_case_actions(page: dict) -> None:
-    cols = st.columns(2)
+    cols = st.columns([1, 1, 2])
     if cols[0].button(page.get("new_case_button", "新規案件"), key="new_technical_case", type="secondary"):
         start_new_technical_case(st.session_state)
         st.rerun()
@@ -559,30 +654,6 @@ def _render_case_lifecycle(texts: dict, page: dict) -> None:
         elif action in {"archive", "trash", "restore"}:
             st.session_state["technical_case_saved_id"] = updated.case_id
         st.rerun()
-    if record is None:
-        return
-    parent = repo.get_case(record.parent_case_id) if record.parent_case_id else None
-    children = repo.list_child_cases(record.case_id)
-
-    def _open_parent():
-        if parent is not None:
-            resume_case_into_session(parent, st.session_state)
-            st.rerun()
-
-    def _open_child(child):
-        loaded = repo.get_case(child.case_id)
-        if loaded is not None:
-            resume_case_into_session(loaded, st.session_state)
-            st.rerun()
-
-    render_lineage_card(
-        texts=texts,
-        parent=parent,
-        children=children,
-        kind="case",
-        parent_open=_open_parent if parent is not None else None,
-        child_open=_open_child,
-    )
 
 
 def _render_evidence_card(page: dict, run: Optional[ManufacturerResponseRun]) -> None:
@@ -610,7 +681,6 @@ def _render_evidence_card(page: dict, run: Optional[ManufacturerResponseRun]) ->
 def _render_recent_cases(page: dict) -> None:
     repo = get_technical_case_repository()
     recent = repo.list_recent_cases()
-    st.markdown(f"**{page.get('recent_cases_label', '最近の案件')}**")
     with st.expander(page.get("recent_cases_label", "最近の案件"), expanded=False):
         if not recent:
             st.caption(page.get("recent_cases_empty", "保存済み案件はまだありません"))
