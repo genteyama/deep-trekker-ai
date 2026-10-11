@@ -80,7 +80,6 @@ from models import (
     UpdateSourceType,
 )
 from parsers.spaceone_master_parser import parse_spaceone_master
-from ui.navigation import PAGE_HOME, set_current_page
 from ui.price_master import render_price_master_management, render_price_master_summary
 from ui.quote_steps import SESSION_NEW_QUOTE_FX, ensure_new_quote_exchange_rate, new_quote_exchange_rate_source
 from ui.quote_workspace import render_quote_debug_details, render_quote_workspace
@@ -106,10 +105,6 @@ DIFF_ORDER = (
 def render_quote_control(texts: dict) -> None:
     page = texts["pages"]["quote_control"]
     _ensure_official_master()
-
-    if st.button(texts["back_to_home"], key="back_to_home", type="secondary"):
-        set_current_page(PAGE_HOME)
-        st.rerun()
 
     st.title(page["title"])
     st.caption(page["internal_name"])

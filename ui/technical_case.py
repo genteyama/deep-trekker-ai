@@ -61,7 +61,6 @@ from agents.work_lifecycle import (
     close_technical_case,
     reopen_technical_case,
 )
-from ui.navigation import PAGE_HOME, set_current_page
 from ui.technical_case_flow import (
     SESSION_ANALYSIS,
     SESSION_APPROVAL_BOARD,
@@ -115,10 +114,6 @@ def render_technical_case(texts: dict) -> None:
     for key in WIDGET_KEYS:
         st.session_state.setdefault(key, "")
     _apply_pending_resume()
-
-    if st.button(texts["back_to_home"], key="back_to_home", type="secondary"):
-        set_current_page(PAGE_HOME)
-        st.rerun()
 
     st.title(page["title"])
     st.caption(page["internal_name"])

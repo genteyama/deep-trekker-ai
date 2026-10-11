@@ -71,6 +71,21 @@ def test_global_sidebar_opens_each_page_and_returns_home():
     assert at.session_state[SESSION_CURRENT_PAGE] == PAGE_HOME
 
 
+def test_old_back_to_home_buttons_are_removed():
+    pages = (
+        ("sidebar_nav_technical", PAGE_TECHNICAL_CASE),
+        ("sidebar_nav_quote", PAGE_QUOTE_CONTROL),
+        ("sidebar_nav_activity", PAGE_ACTIVITY_LEDGER),
+    )
+    for nav_key, expected_page in pages:
+        at = _start_app()
+        at.button(key=nav_key).click().run()
+        assert at.session_state[SESSION_CURRENT_PAGE] == expected_page
+        assert all(getattr(button, "key", None) != "back_to_home" for button in at.button)
+        at.button(key="sidebar_nav_home").click().run()
+        assert at.session_state[SESSION_CURRENT_PAGE] == PAGE_HOME
+
+
 def test_quote_deep_location_and_direct_step_navigation():
     at = _start_app()
     at.button(key="sidebar_nav_quote").click().run()

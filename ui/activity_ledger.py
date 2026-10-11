@@ -36,7 +36,7 @@ from agents.activity_report import (
 )
 from repositories.sqlite_customer_repository import SqliteCustomerRepository
 from ui.components.portal import render_portal_section_title, resume_draft_into_session
-from ui.navigation import PAGE_HOME, PAGE_QUOTE_CONTROL, PAGE_TECHNICAL_CASE, set_current_page
+from ui.navigation import PAGE_QUOTE_CONTROL, PAGE_TECHNICAL_CASE, set_current_page
 from ui.quote_persistence import get_quote_repository
 from ui.technical_case_persistence import get_technical_case_repository
 from ui.work_status import PROCESS_LABELS
@@ -62,9 +62,6 @@ SORT_LABELS = {
 
 def render_activity_ledger(texts: dict) -> None:
     page = texts.get("pages", {}).get("activity_ledger", {})
-    if st.button(texts.get("back_to_home", "トップへ戻る"), key="back_to_home", type="secondary"):
-        set_current_page(PAGE_HOME)
-        st.rerun()
     st.title(page.get("title", "履歴・活動台帳"))
     st.caption(page.get("description", "営業技術問い合わせ、見積、派生案件を時系列で確認します。"))
     case_repo = get_technical_case_repository()

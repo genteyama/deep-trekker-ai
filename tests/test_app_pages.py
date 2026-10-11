@@ -461,7 +461,7 @@ def test_quote_control_shows_sku_link_preview_and_manual_fields():
 def test_back_button_returns_to_home():
     at = _start_app()
     at.button(key="sidebar_nav_technical").click().run()
-    at.button(key="back_to_home").click().run()
+    at.button(key="sidebar_nav_home").click().run()
 
     assert at.title[0].value == "Deep Trekker 業務支援AI"
 
