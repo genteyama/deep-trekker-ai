@@ -47,6 +47,7 @@ PROJECT_CONTEXT とコードが矛盾した場合は、原則コード / Git を
 
 - Google OIDC Persistent Loginのcode supportを実装。Streamlit native auth、`ALLOWED_EMAILS`、12h absolute timeoutを使用し、DB migrationはない。
 - Production mode switchは未実施。`AUTH_MODE=google_oidc`を明示設定するまでProductionはlegacy Supabase password authを維持する。
+- Production rolloutではStreamlit 1.50.0をpinする。
 
 ### v1.2 Phase A: Manufacturer Online Price Master Sync
 
