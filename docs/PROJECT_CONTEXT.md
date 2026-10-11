@@ -71,9 +71,12 @@ PROJECT_CONTEXT とコードが矛盾した場合は、原則コード / Git を
 
 ### UX-2E
 
-- 開始。Internal pageのBrand Headerをcompact化する。
-- Main Workflowはread-only status overviewにする。Sidebarはdirect navigationのまま。
-- Compact header clipping hotfix: Streamlit toolbar（60px）の下へ compact header のみ下げ、26pxロゴを全面表示する。
+- COMPLETE
+- Internal page Brand Header compact化 COMPLETE。HOME full Brand Headerは維持。
+- Main Quote workflowと Main Technical workflowをread-only compact status overview化。Sidebarはdirect workflow navigationのまま。Prev / Next navigationは維持。
+- Production smoke PASS。Compact headerの3ブランドロゴ表示 PASS。初回確認時にロゴclipが見えたが、Streamlit reboot後に正常表示を確認。
+- 現在の compact header hotfixを Source of Truth とする。
+- 最終Production baseline: `bf25385ea5a22718cbef675bce629a9ec8c07f6f`
 
 ### v1.2 Phase A: Manufacturer Online Price Master Sync
 
