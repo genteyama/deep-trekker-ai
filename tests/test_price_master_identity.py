@@ -25,7 +25,7 @@ from tests.price_book_fixtures import (
     spaceone_master_book,
     valid_price_book,
 )
-from tests.test_price_master_ui import _open_quote_page, _texts, uploads  # noqa: F401  (fixture)
+from tests.test_price_master_ui import _open_price_master_page, _texts, uploads  # noqa: F401  (fixture)
 from ui.price_master import outcome_message
 
 LOCALE = json.loads((Path(__file__).resolve().parents[1] / "locales" / "ja.json").read_text(encoding="utf-8"))
@@ -252,7 +252,7 @@ def test_pt30_file_in_the_dt40_slot_is_refused_in_the_ui(uploads):  # noqa: F811
 
     current = import_price_master(PriceMasterType.DT40, "dt40.xlsx", _bytes(official_ihi_sku_snapshot_book)).record
     uploads["price_master_upload_DT40"] = _Upload("DT40 最新.xlsx", _bytes(official_pt30_style_book))
-    at = _open_quote_page()
+    at = _open_price_master_page()
     at.button(key="price_master_import_DT40").click().run()
 
     assert not at.exception

@@ -338,9 +338,9 @@ def test_effective_source_list_includes_future_source_without_persisting_it():
 
 
 def test_admin_ui_can_save_url_and_labels_spectra_as_future():
-    from tests.test_price_master_ui import _open_quote_page, _texts
+    from tests.test_price_master_ui import _open_price_master_page, _texts
 
-    at = _open_quote_page()
+    at = _open_price_master_page()
     assert "オンライン価格表設定" in _texts(at)
     assert "現在はExcel手動アップロードで価格マスターを運用しています。" in _texts(at)
     assert "現在の見積価格には使用しません。" in _texts(at)

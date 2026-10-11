@@ -7,6 +7,7 @@ PAGE_HOME = "home"
 PAGE_TECHNICAL_CASE = "technical_case"
 PAGE_QUOTE_CONTROL = "quote_control"
 PAGE_ACTIVITY_LEDGER = "activity_ledger"
+PAGE_PRICE_MASTER = "price_master"
 SESSION_CURRENT_PAGE = "current_page"
 SESSION_NAVIGATION_STASH = "navigation_state_stash"
 SESSION_NAVIGATION_RESTORE_PAGE = "navigation_restore_page"
@@ -48,12 +49,16 @@ _PAGE_TEXT_KEYS = {
     PAGE_TECHNICAL_CASE: "technical_case",
     PAGE_QUOTE_CONTROL: "quote_control",
     PAGE_ACTIVITY_LEDGER: "activity_ledger",
+    PAGE_PRICE_MASTER: "price_master",
 }
 _PAGE_NAV_KEYS = (
     (PAGE_HOME, "home", "HOME", "sidebar_nav_home"),
     (PAGE_TECHNICAL_CASE, "technical_case", "営業・技術問い合わせ", "sidebar_nav_technical"),
     (PAGE_QUOTE_CONTROL, "quote_control", "見積・価格管理", "sidebar_nav_quote"),
     (PAGE_ACTIVITY_LEDGER, "activity_ledger", "履歴・活動台帳", "sidebar_nav_activity"),
+)
+_ADMIN_NAV_KEYS = (
+    (PAGE_PRICE_MASTER, "price_master", "価格マスター管理", "sidebar_admin_price_master"),
 )
 
 
@@ -228,6 +233,16 @@ def render_dashboard_sidebar(texts: dict, current_page: str) -> None:
         st.caption(navigation.get("main_menu", "MAIN MENU"))
         with st.container(key="sidebar_main_menu", gap=None):
             for page, label_key, fallback, button_key in _PAGE_NAV_KEYS:
+                if st.button(
+                    labels.get(label_key, fallback),
+                    key=button_key,
+                    type="primary" if page == current_page else "secondary",
+                    use_container_width=True,
+                ):
+                    _request_page_navigation(texts, current_page, page)
+        st.caption(navigation.get("admin_menu", "管理"))
+        with st.container(key="sidebar_admin_menu", gap=None):
+            for page, label_key, fallback, button_key in _ADMIN_NAV_KEYS:
                 if st.button(
                     labels.get(label_key, fallback),
                     key=button_key,

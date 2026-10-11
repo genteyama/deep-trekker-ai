@@ -22,7 +22,7 @@ from models import (
 from parsers.spectra_gold_parser import parse_spectra_gold
 from repositories.sqlite_price_master_repository import SqlitePriceMasterRepository
 from tests.price_book_fixtures import build_workbook
-from tests.test_price_master_ui import _open_quote_page, _texts
+from tests.test_price_master_ui import _open_price_master_page, _texts
 from tests.test_price_source_safety import _policy
 
 
@@ -344,7 +344,7 @@ def test_active_spectra_master_flows_to_quote_with_provenance_and_no_inferred_sa
 
 
 def test_price_master_ui_shows_manual_spectra_section_and_paused_online_label():
-    at = _open_quote_page()
+    at = _open_price_master_page()
     texts = _texts(at)
 
     assert "SPECTRA GOLD（手動アップロード）" in texts

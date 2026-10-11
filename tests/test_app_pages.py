@@ -113,13 +113,31 @@ def test_home_opens_quote_control_page():
     assert any("3 顧客向け見積" in (button.label or "") for button in at.button)
     assert any("4 レビュー・承認" in (button.label or "") for button in at.button)
     assert any("5 帳票出力" in (button.label or "") for button in at.button)
+    assert "見積ドラフト作成" in [item.value for item in at.subheader] + visible_text
+    assert "最近の下書き" in " ".join(visible_text + caption_text)
+    assert any(button.label == "IHI PHOTON 見積ドラフト" for button in at.button)
+    assert any(button.label == "IHI MAG 見積ドラフト" for button in at.button)
+    assert not any(expander.label == "価格マスター管理" for expander in at.expander)
+    assert not any(expander.label == "詳細・開発情報" for expander in at.expander)
+
+
+def test_price_master_admin_page_holds_management_and_advanced_tools():
+    at = _start_app()
+    at.button(key="sidebar_admin_price_master").click().run()
+
+    visible_text = [item.value for item in at.text] + [item.value for item in at.markdown]
+    joined = " ".join(visible_text)
+
+    assert at.title[0].value == "価格マスター管理"
+    assert "見積で使用する価格マスター、価格ポリシー、関連管理情報を確認・更新" in joined
+    assert "価格マスター状態" in joined
+    assert any(expander.label == "価格マスター管理" for expander in at.expander)
     assert any(expander.label == "詳細・開発情報" for expander in at.expander)
     assert "価格表・SKU管理" in [item.value for item in at.subheader] + visible_text
     assert "Deep Trekker 更新情報" in [item.value for item in at.subheader] + visible_text
     assert "SpaceOneマスター照合" in [item.value for item in at.subheader] + visible_text
     assert "SpaceOne販売価格ポリシー" in [item.value for item in at.subheader] + visible_text
     assert "案件原価・粗利試算" in [item.value for item in at.subheader] + visible_text
-    assert "見積ドラフト作成" in [item.value for item in at.subheader] + visible_text
     assert "まだ価格表は読み込んでいません。" in [item.value for item in at.text]
     assert "現在は開発用の整理処理です" in [item.value for item in at.warning]
     assert any(button.label == "価格表を読み込む" for button in at.button)
@@ -127,8 +145,6 @@ def test_home_opens_quote_control_page():
     assert any(expander.label == "Golden Quote Cases（開発用）" for expander in at.expander)
     assert any(button.label == "IHI Supplier Quoteをメーカー価格マスターと照合" for button in at.button)
     assert any(button.label == "案件原価を試算" for button in at.button)
-    assert any(button.label == "IHI PHOTON 見積ドラフト" for button in at.button)
-    assert any(button.label == "IHI MAG 見積ドラフト" for button in at.button)
     assert "SKUリンク移行プレビュー" in " ".join([item.value for item in at.subheader] + visible_text + [item.value for item in at.markdown])
     assert any(button.label == "更新情報として整理" for button in at.button)
     assert not any("正式" in (button.label or "") and "反映" in (button.label or "") for button in at.button)
@@ -415,7 +431,10 @@ def test_quote_control_shows_import_and_diff_without_apply():
     from tests.price_book_fixtures import previous_master_book, valid_price_book
 
     at = _start_app()
-    at.button(key="sidebar_nav_quote").click().run()
+    at.button(key="sidebar_admin_price_master").click().run()
+    from tests.test_price_master_ui import _drop_stale_widgets
+
+    _drop_stale_widgets(at)
 
     incoming = import_price_book(valid_price_book(), source_price_book="DT40", version="2026-09")
     previous = import_price_book(previous_master_book(), source_price_book="previous")
@@ -439,7 +458,10 @@ def test_quote_control_shows_sku_link_preview_and_manual_fields():
     from tests.price_book_fixtures import manufacturer_books_for_reconciliation, spaceone_master_book
 
     at = _start_app()
-    at.button(key="sidebar_nav_quote").click().run()
+    at.button(key="sidebar_admin_price_master").click().run()
+    from tests.test_price_master_ui import _drop_stale_widgets
+
+    _drop_stale_widgets(at)
 
     dt40_file, pt30_file = manufacturer_books_for_reconciliation()
     dt40 = import_price_book(dt40_file, source_price_book="DT40")

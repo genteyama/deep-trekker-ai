@@ -309,9 +309,9 @@ def test_unconfigured_source_is_not_fetched(monkeypatch):
 def test_price_master_screen_can_check_and_shows_unconfigured_source(monkeypatch):
     monkeypatch.delenv("DT40_ONLINE_PRICE_SOURCE_URL", raising=False)
     monkeypatch.delenv("PT30_ONLINE_PRICE_SOURCE_URL", raising=False)
-    from tests.test_price_master_ui import _open_quote_page, _texts
+    from tests.test_price_master_ui import _open_price_master_page, _texts
 
-    at = _open_quote_page()
+    at = _open_price_master_page()
     assert any(item.label == "メーカー価格表を確認" for item in at.button)
     at.button(key="online_price_check_DT40").click().run()
 

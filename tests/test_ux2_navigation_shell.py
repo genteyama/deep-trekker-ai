@@ -6,6 +6,7 @@ from ui import navigation
 from ui.navigation import (
     PAGE_ACTIVITY_LEDGER,
     PAGE_HOME,
+    PAGE_PRICE_MASTER,
     PAGE_QUOTE_CONTROL,
     PAGE_TECHNICAL_CASE,
     SESSION_CURRENT_PAGE,
@@ -44,6 +45,7 @@ class _FakeStreamlit:
 def test_sidebar_compact_styles_are_scoped_to_sidebar():
     from ui.styles import APP_CSS
 
+    assert '[data-testid="stSidebar"] [class*="st-key-sidebar_admin_"]' in APP_CSS
     assert '[data-testid="stSidebar"] [class*="st-key-sidebar_nav_"]' in APP_CSS
     assert '[data-testid="stSidebar"] [class*="st-key-sidebar_quote_step_"]' in APP_CSS
     assert '[data-testid="stSidebar"] [class*="st-key-sidebar_technical_step_"]' in APP_CSS
@@ -78,6 +80,35 @@ def test_global_sidebar_opens_each_page_and_returns_home():
     at.button(key="sidebar_nav_technical").click().run()
     at.button(key="sidebar_nav_home").click().run()
     assert at.session_state[SESSION_CURRENT_PAGE] == PAGE_HOME
+
+
+def test_sidebar_admin_section_opens_price_master_page():
+    at = _start_app()
+    visible = _visible(at)
+    assert "管理" in visible
+    assert at.button(key="sidebar_admin_price_master").label == "価格マスター管理"
+    assert at.button(key="sidebar_admin_price_master").proto.type == "secondary"
+
+    at.button(key="sidebar_admin_price_master").click().run()
+    assert at.session_state[SESSION_CURRENT_PAGE] == PAGE_PRICE_MASTER
+    assert at.button(key="sidebar_admin_price_master").proto.type == "primary"
+    assert at.button(key="sidebar_nav_home").proto.type == "secondary"
+    location = _visible(at)
+    assert at.button(key="sidebar_breadcrumb_home").label == "HOME"
+    assert "› 価格マスター管理" in location
+    assert "見積工程" not in location
+    assert any(item.label == "価格マスター管理" for item in at.expander)
+    assert any(item.label == "詳細・開発情報" for item in at.expander)
+    assert "価格マスター状態" in location
+
+    from tests.test_price_master_ui import _drop_stale_widgets
+
+    _drop_stale_widgets(at)
+    at.button(key="sidebar_nav_quote").click().run()
+    assert at.session_state[SESSION_CURRENT_PAGE] == PAGE_QUOTE_CONTROL
+    assert not any(item.label == "価格マスター管理" for item in at.expander)
+    assert "最近の下書き" in _visible(at)
+    assert any(button.key == "sidebar_quote_step_5" for button in at.button)
 
 
 def test_old_back_to_home_buttons_are_removed():
@@ -208,6 +239,7 @@ def test_quote_save_error_and_conflict_block_navigation(monkeypatch):
         monkeypatch.setattr(navigation, "st", fake_st)
 
         navigation._request_page_navigation({}, PAGE_QUOTE_CONTROL, PAGE_HOME)
+        navigation._request_page_navigation({}, PAGE_QUOTE_CONTROL, PAGE_PRICE_MASTER)
 
         assert session[SESSION_CURRENT_PAGE] == PAGE_QUOTE_CONTROL
         assert fake_st.reruns == 0

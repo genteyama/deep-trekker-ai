@@ -2,7 +2,7 @@ import json
 
 from agents.manufacturer_price_source import SOURCE_SPECTRA_GOLD, save_source_setting
 from repositories.manufacturer_price_source_repository import ManufacturerPriceSourceRepository
-from tests.test_price_master_ui import _open_quote_page, _texts
+from tests.test_price_master_ui import _open_price_master_page, _open_quote_page, _texts
 from tests.test_spectra_quote_entry import _activate_quote_calc, _activate_spectra, _create
 from ui.warning_summary import format_warning_details, summarize_draft_warnings
 
@@ -28,7 +28,7 @@ def test_future_spectra_source_is_read_only_and_hides_previous_failure():
         expected_row_version=source.row_version,
     )
 
-    at = _open_quote_page()
+    at = _open_price_master_page()
     texts = _texts(at)
 
     assert "SPECTRA GOLD — オンライン連携保留" in texts

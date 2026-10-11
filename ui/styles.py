@@ -373,9 +373,11 @@ APP_CSS = """
         gap: 0.42rem !important;
     }
     [data-testid="stSidebar"] .st-key-sidebar_main_menu,
+    [data-testid="stSidebar"] .st-key-sidebar_admin_menu,
     [data-testid="stSidebar"] .st-key-sidebar_quote_workflow,
     [data-testid="stSidebar"] .st-key-sidebar_technical_workflow,
     [data-testid="stSidebar"] .st-key-sidebar_location_row,
+    [data-testid="stSidebar"] .st-key-sidebar_admin_menu [data-testid="stVerticalBlock"],
     [data-testid="stSidebar"] .st-key-sidebar_main_menu [data-testid="stVerticalBlock"],
     [data-testid="stSidebar"] .st-key-sidebar_quote_workflow [data-testid="stVerticalBlock"],
     [data-testid="stSidebar"] .st-key-sidebar_technical_workflow [data-testid="stVerticalBlock"],
@@ -415,6 +417,12 @@ APP_CSS = """
     }
     [data-testid="stSidebar"] hr {
         margin: 0.2rem 0 !important;
+    }
+    [data-testid="stSidebar"] [class*="st-key-sidebar_admin_"] button[kind] {
+        min-height: 38px !important;
+        padding: 0.22rem 0.7rem !important;
+        font-size: 0.9rem !important;
+        line-height: 1.2 !important;
     }
     [data-testid="stSidebar"] [class*="st-key-sidebar_nav_"] button[kind] {
         min-height: 38px !important;

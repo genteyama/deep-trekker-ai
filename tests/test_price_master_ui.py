@@ -56,6 +56,37 @@ def _open_quote_page() -> AppTest:
     return at
 
 
+def _drop_stale_widgets(at) -> None:
+    """Drop widgets left in the AppTest tree after a navigation rerun."""
+
+    def walk(block) -> None:
+        children = getattr(block, "children", None)
+        if not children:
+            return
+        stale = []
+        for idx, child in list(children.items()):
+            lookup = getattr(child, "key", None) or getattr(child, "id", None)
+            if lookup:
+                try:
+                    at.session_state[lookup]
+                except KeyError:
+                    stale.append(idx)
+                    continue
+            walk(child)
+        for idx in stale:
+            del children[idx]
+
+    walk(at._tree)
+
+
+def _open_price_master_page() -> AppTest:
+    at = AppTest.from_file(str(APP_PATH)).run()
+    at.button(key="sidebar_admin_price_master").click().run()
+    assert not at.exception
+    _drop_stale_widgets(at)
+    return at
+
+
 def _texts(at):
     return " ".join(
         [item.value for item in at.markdown]
@@ -67,8 +98,17 @@ def _texts(at):
     )
 
 
-def test_quote_page_shows_unset_master_status_outside_the_development_panel():
+def test_quote_page_hides_price_master_administration():
     at = _open_quote_page()
+
+    assert not any(item.label == "価格マスター管理" for item in at.expander)
+    assert not any(item.key == "price_master_import_DT40" for item in at.button)
+    assert any(item.key == "ihi_photon_draft" for item in at.button)
+    assert "最近の下書き" in _texts(at)
+
+
+def test_price_master_page_shows_unset_master_status():
+    at = _open_price_master_page()
 
     texts = _texts(at)
     assert "価格マスター状態" in texts
@@ -80,7 +120,7 @@ def test_quote_page_shows_unset_master_status_outside_the_development_panel():
 
 
 def test_import_without_choosing_a_file_asks_for_one():
-    at = _open_quote_page()
+    at = _open_price_master_page()
     at.button(key="price_master_import_DT40").click().run()
 
     assert "ファイルを選択してください。" in _texts(at)
@@ -88,7 +128,7 @@ def test_import_without_choosing_a_file_asks_for_one():
 
 def test_upload_import_activate_then_quote_uses_it_and_existing_drafts_stay(uploads):
     uploads["price_master_upload_DT40"] = _Upload("9月 DT40.xlsx", _photon_dt40_book(10434.6).getvalue())
-    at = _open_quote_page()
+    at = _open_price_master_page()
     at.button(key="price_master_import_DT40").click().run()
 
     assert not at.exception
@@ -96,6 +136,8 @@ def test_upload_import_activate_then_quote_uses_it_and_existing_drafts_stay(uplo
     assert "DT40（Deep Trekker 価格表）を取り込み、有効にしました（9月 DT40.xlsx）" in texts
     assert "DT40：有効 /" in texts and "取込" in texts
 
+    at.button(key="sidebar_nav_quote").click().run()
+    _drop_stale_widgets(at)
     at.button(key="ihi_photon_draft").click().run()
     first = at.session_state["quote_draft"]
     assert _line(first).manufacturer_price_snapshot.price_source_type == PriceSourceType.OFFICIAL_PRICE_BOOK
@@ -103,11 +145,15 @@ def test_upload_import_activate_then_quote_uses_it_and_existing_drafts_stay(uplo
     stored_before = SqliteQuoteRepository().get_draft(first.quote_draft_id).draft.model_dump(mode="json")
 
     uploads["price_master_upload_DT40"] = _Upload("10月 DT40.xlsx", _photon_dt40_book(11000.0).getvalue())
+    at.button(key="sidebar_admin_price_master").click().run()
+    _drop_stale_widgets(at)
     at.button(key="price_master_import_DT40").click().run()
     assert "（10月 DT40.xlsx）" in _texts(at)
     assert SqliteQuoteRepository().get_draft(first.quote_draft_id).draft.model_dump(mode="json") == stored_before
     assert _line(at.session_state["quote_draft"]).dealer_price_usd == 10434.6
 
+    at.button(key="sidebar_nav_quote").click().run()
+    _drop_stale_widgets(at)
     at.button(key="ihi_photon_draft").click().run()
     assert _line(at.session_state["quote_draft"]).dealer_price_usd == 11000.0
 
@@ -115,7 +161,7 @@ def test_upload_import_activate_then_quote_uses_it_and_existing_drafts_stay(uplo
 def test_invalid_upload_shows_a_plain_message_and_keeps_the_active_master(uploads):
     good = import_price_master(PriceMasterType.DT40, "good.xlsx", official_ihi_sku_snapshot_book().getvalue()).record
     uploads["price_master_upload_DT40"] = _Upload("wrong.xlsx", missing_columns_price_book().getvalue())
-    at = _open_quote_page()
+    at = _open_price_master_page()
     at.button(key="price_master_import_DT40").click().run()
 
     assert not at.exception

@@ -13,7 +13,8 @@
     "pages": {
       "technical_case": "Sales & Technical Inquiry AI",
       "quote_control": "Quote & Price Control AI",
-      "activity_ledger": "Activity Ledger"
+      "activity_ledger": "Activity Ledger",
+      "price_master": "Price Master Management"
     }
   },
   "navigation": {
@@ -21,12 +22,14 @@
     "main_menu": "MAIN MENU",
     "quote_workflow": "Quote workflow",
     "technical_workflow": "Workflow",
+    "admin_menu": "ADMIN",
     "save_blocked": "Navigation is blocked because saving failed. Review the current content.",
     "pages": {
       "home": "HOME",
       "technical_case": "Sales & Technical Inquiry",
       "quote_control": "Quote & Price Control",
-      "activity_ledger": "Activity Ledger"
+      "activity_ledger": "Activity Ledger",
+      "price_master": "Price Master Management"
     }
   },
   "portal": {
@@ -361,6 +364,10 @@
       "question_edit_label": "Question text",
       "fact_catalog_label": "Approved technical facts",
       "fact_catalog_note": "Internal review list. This is not the case knowledge snapshot."
+    },
+    "price_master": {
+      "title": "Price Master Management",
+      "description": "Review and update the price masters, pricing policy, and related administration used by quotes."
     },
     "quote_control": {
       "title": "Quote & Price Control Agent",

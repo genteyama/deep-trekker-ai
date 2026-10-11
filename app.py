@@ -11,6 +11,7 @@ from ui.conflict import render_conflict_banner
 from ui.home import render_home
 from ui.navigation import (
     PAGE_ACTIVITY_LEDGER,
+    PAGE_PRICE_MASTER,
     PAGE_QUOTE_CONTROL,
     PAGE_TECHNICAL_CASE,
     get_current_page,
@@ -18,7 +19,7 @@ from ui.navigation import (
     render_dashboard_sidebar,
     restore_navigation_state,
 )
-from ui.quote_control import render_quote_control
+from ui.quote_control import render_price_master_admin, render_quote_control
 from ui.technical_case import render_technical_case
 from ui.styles import page_icon_value
 from ui.theme import apply_light_theme, render_brand_header
@@ -61,6 +62,8 @@ def main() -> None:
         render_technical_case(texts)
     elif current_page == PAGE_QUOTE_CONTROL:
         render_quote_control(texts)
+    elif current_page == PAGE_PRICE_MASTER:
+        render_price_master_admin(texts)
     elif current_page == PAGE_ACTIVITY_LEDGER:
         render_activity_ledger(texts)
     else:

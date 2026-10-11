@@ -13,7 +13,8 @@
     "pages": {
       "technical_case": "営業・技術問い合わせAI",
       "quote_control": "見積・価格管理AI",
-      "activity_ledger": "履歴・活動台帳"
+      "activity_ledger": "履歴・活動台帳",
+      "price_master": "価格マスター管理"
     }
   },
   "navigation": {
@@ -21,12 +22,14 @@
     "main_menu": "MAIN MENU",
     "quote_workflow": "見積工程",
     "technical_workflow": "工程",
+    "admin_menu": "管理",
     "save_blocked": "保存に問題があるため移動できません。内容を確認してください。",
     "pages": {
       "home": "HOME",
       "technical_case": "営業・技術問い合わせ",
       "quote_control": "見積・価格管理",
-      "activity_ledger": "履歴・活動台帳"
+      "activity_ledger": "履歴・活動台帳",
+      "price_master": "価格マスター管理"
     }
   },
   "portal": {
@@ -361,6 +364,10 @@
       "question_edit_label": "質問文",
       "fact_catalog_label": "確認済み技術情報一覧",
       "fact_catalog_note": "社内確認用です。案件で使ったKnowledge Snapshotではありません。"
+    },
+    "price_master": {
+      "title": "価格マスター管理",
+      "description": "見積で使用する価格マスター、価格ポリシー、関連管理情報を確認・更新"
     },
     "quote_control": {
       "title": "見積・価格管理AI",

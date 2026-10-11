@@ -109,9 +109,6 @@ def render_quote_control(texts: dict) -> None:
     st.title(page["title"])
     st.caption(page["internal_name"])
     st.write(page["description"])
-    render_price_master_summary(page)
-    render_price_master_management(page)
-    st.divider()
 
     render_quote_workspace(
         page,
@@ -127,6 +124,15 @@ def render_quote_control(texts: dict) -> None:
         },
     )
 
+
+def render_price_master_admin(texts: dict) -> None:
+    page = texts["pages"]["quote_control"]
+    admin = texts.get("pages", {}).get("price_master", {})
+    _ensure_official_master()
+    st.title(admin.get("title", "価格マスター管理"))
+    st.write(admin.get("description", "見積で使用する価格マスター、価格ポリシー、関連管理情報を確認・更新"))
+    render_price_master_summary(page)
+    render_price_master_management(page)
     with st.expander(page["workspace"]["advanced_debug_label"], expanded=False):
         render_quote_debug_details(page)
         st.divider()
