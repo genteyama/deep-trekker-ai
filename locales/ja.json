@@ -2,7 +2,7 @@
   "app_title": "Deep Trekker 業務支援AI",
   "app_description": "Deep Trekker / PipeTrekkerの営業・技術・見積業務を支援します。",
   "hero_english": "Sales, Technical & Quote Management",
-  "menu_label": "業務メニュー",
+  "menu_label": "機能メニュー",
   "open_label": "開く",
   "coming_soon": "準備中",
   "back_to_home": "トップへ戻る",
@@ -17,6 +17,8 @@
     }
   },
   "portal": {
+    "work_summary_label": "進行中の業務",
+    "work_summary_total": "進行中 合計",
     "recent_work_label": "進行中の案件",
     "recent_work_empty": "進行中の案件はまだありません。",
     "kind_technical": "営業・技術",

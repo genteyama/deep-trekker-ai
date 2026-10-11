@@ -171,6 +171,11 @@ APP_CSS = """
         flex-direction: column;
         box-sizing: border-box;
     }
+    .portal-card.is-compact { min-height: 176px; padding: 12px 14px; }
+    .portal-card.is-compact .portal-card-thumb,
+    .portal-card.is-compact .portal-card-thumb-spacer { height: 42px; margin-bottom: 7px; }
+    .portal-card.is-compact .portal-card-title { font-size: 17px; }
+    .portal-card.is-compact .portal-card-en { margin: 2px 0 5px 0; }
     .portal-card:hover, .portal-draft-card:hover { border-color: var(--dt-accent); }
     .portal-card-title, .dt-card-title, .portal-draft-title {
         color: var(--dt-navy);

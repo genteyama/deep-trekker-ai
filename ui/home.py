@@ -30,72 +30,19 @@ def render_home(texts: dict) -> None:
         texts["app_description"],
         texts.get("hero_english", ""),
     )
-    render_portal_section_title(texts["menu_label"])
 
     tech_open, quote_open = _open_counts()
-    count_label = portal.get("open_cases_label", "進行中")
-    count_unit = portal.get("count_unit", "件")
-    left_column, middle_column, right_column = st.columns(3)
-    with left_column:
-        render_menu_card(
-            technical_case["name"],
-            technical_case.get("english", "Technical Support"),
-            technical_case["description"],
-            product_key="PIPETREKKER",
-            count=tech_open,
-            count_label=count_label,
-            count_unit=count_unit,
-        )
-        if st.button(
-            texts.get("open_label", "開く"),
-            key="open_technical_case",
-            use_container_width=True,
-            type="primary",
-        ):
-            set_current_page(PAGE_TECHNICAL_CASE)
-            st.rerun()
-
-    with middle_column:
-        render_menu_card(
-            quote_control["name"],
-            quote_control.get("english", "Quote & Price Control"),
-            quote_control["description"],
-            product_key="PHOTON",
-            count=quote_open,
-            count_label=count_label,
-            count_unit=count_unit,
-        )
-        if st.button(
-            texts.get("open_label", "開く"),
-            key="open_quote_control",
-            use_container_width=True,
-            type="primary",
-        ):
-            set_current_page(PAGE_QUOTE_CONTROL)
-            st.rerun()
-
-    with right_column:
-        activity = texts.get("agents", {}).get("activity_ledger", {})
-        render_menu_card(
-            activity.get("name", "履歴・活動台帳"),
-            activity.get("english", "Activity Ledger"),
-            activity.get("description", "営業技術問い合わせ、見積、派生案件を時系列で確認"),
-        )
-        if st.button(
-            texts.get("open_label", "開く"),
-            key="open_activity_ledger",
-            use_container_width=True,
-            type="primary",
-        ):
-            set_current_page(PAGE_ACTIVITY_LEDGER)
-            st.rerun()
+    render_portal_section_title(portal.get("work_summary_label", "進行中の業務"))
+    columns = st.columns(3)
+    for column, (label, value) in zip(columns, _work_summary_items(portal, tech_open, quote_open)):
+        with column:
+            st.metric(label, value)
 
     render_portal_section_title(portal.get("recent_work_label", "進行中の案件"))
     view = render_home_filter(texts)
     items = _recent_work_items(view)
     if not items:
         st.caption(portal.get("recent_work_empty", "進行中の案件はまだありません。"))
-        return
     for item in items:
         kind_label = portal.get("kind_technical", "営業・技術") if item["kind"] == KIND_TECHNICAL else portal.get("kind_quote", "見積")
         completed, total, review_required = _user_progress(item)
@@ -143,6 +90,80 @@ def render_home(texts: dict) -> None:
                 type="primary",
             ):
                 _resume_quote_from_home(quote_page, item["id"], item["version"])
+
+    render_portal_section_title(texts["menu_label"])
+    count_label = portal.get("open_cases_label", "進行中")
+    count_unit = portal.get("count_unit", "件")
+    left_column, middle_column, right_column = st.columns(3)
+    with left_column:
+        render_menu_card(
+            technical_case["name"],
+            technical_case.get("english", "Technical Support"),
+            technical_case["description"],
+            product_key="PIPETREKKER",
+            count=tech_open,
+            count_label=count_label,
+            count_unit=count_unit,
+            compact=True,
+        )
+        if st.button(
+            texts.get("open_label", "開く"),
+            key="open_technical_case",
+            use_container_width=True,
+            type="primary",
+        ):
+            set_current_page(PAGE_TECHNICAL_CASE)
+            st.rerun()
+
+    with middle_column:
+        render_menu_card(
+            quote_control["name"],
+            quote_control.get("english", "Quote & Price Control"),
+            quote_control["description"],
+            product_key="PHOTON",
+            count=quote_open,
+            count_label=count_label,
+            count_unit=count_unit,
+            compact=True,
+        )
+        if st.button(
+            texts.get("open_label", "開く"),
+            key="open_quote_control",
+            use_container_width=True,
+            type="primary",
+        ):
+            set_current_page(PAGE_QUOTE_CONTROL)
+            st.rerun()
+
+    with right_column:
+        activity = texts.get("agents", {}).get("activity_ledger", {})
+        render_menu_card(
+            activity.get("name", "履歴・活動台帳"),
+            activity.get("english", "Activity Ledger"),
+            activity.get("description", "営業技術問い合わせ、見積、派生案件を時系列で確認"),
+            compact=True,
+        )
+        if st.button(
+            texts.get("open_label", "開く"),
+            key="open_activity_ledger",
+            use_container_width=True,
+            type="primary",
+        ):
+            set_current_page(PAGE_ACTIVITY_LEDGER)
+            st.rerun()
+
+
+def _work_summary_items(portal: dict, tech_open: int, quote_open: int) -> list[tuple[str, str]]:
+    unit = portal.get("count_unit", "件")
+
+    def count_value(count: int) -> str:
+        return f"{count} {unit}".strip()
+
+    return [
+        (portal.get("kind_technical", "営業・技術"), count_value(tech_open)),
+        (portal.get("kind_quote", "見積"), count_value(quote_open)),
+        (portal.get("work_summary_total", "進行中 合計"), count_value(tech_open + quote_open)),
+    ]
 
 
 def _open_counts() -> tuple[int, int]:

@@ -2,7 +2,7 @@
   "app_title": "Deep Trekker Operations Support AI",
   "app_description": "Supports sales, technical, and quoting work for Deep Trekker / PipeTrekker.",
   "hero_english": "Sales, Technical & Quote Management",
-  "menu_label": "Work menu",
+  "menu_label": "Feature menu",
   "open_label": "Open",
   "coming_soon": "Coming soon",
   "back_to_home": "Back to home",
@@ -17,6 +17,8 @@
     }
   },
   "portal": {
+    "work_summary_label": "Current workload",
+    "work_summary_total": "Total in progress",
     "recent_work_label": "In-progress work",
     "recent_work_empty": "No in-progress cases yet.",
     "kind_technical": "Sales / Technical",

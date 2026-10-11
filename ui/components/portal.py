@@ -38,16 +38,18 @@ def render_menu_card(
     count: Optional[int] = None,
     count_label: str = "進行中",
     count_unit: str = "件",
+    compact: bool = False,
 ) -> None:
     image = product_image_html(product_key, css_class="portal-card-thumb")
     thumb = image or "<div class='portal-card-thumb-spacer' aria-hidden='true'></div>"
+    card_class = "portal-card is-compact" if compact else "portal-card"
     count_html = ""
     if count is not None:
         count_html = (
             f"<span class='portal-card-count'>（{escape(count_label)}：{count}{escape(count_unit)}）</span>"
         )
     st.markdown(
-        f"<div class='portal-card'>"
+        f"<div class='{card_class}'>"
         f"{thumb}"
         f"<div class='portal-card-title'>{escape(title)}{count_html}</div>"
         f"<div class='portal-card-en'>{escape(english)}</div>"
