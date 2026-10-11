@@ -73,6 +73,73 @@ def _open_ledger(tmp_path):
     return at, parent, child, rows
 
 
+def _summary_values(at) -> list[str]:
+    summary = next(value for value in _markdown(at) if "<div class='activity-summary-grid'>" in value)
+    return [part.split("<", 1)[0] for part in summary.split("activity-summary-value'>")[1:]]
+
+
+def _shown_label(at) -> str:
+    return next(value for value in _markdown(at) if "<div class='activity-selection-bar'>" in value)
+
+
+def _titles(at) -> list[str]:
+    return [value for value in _markdown(at) if "<div class='activity-td activity-td-title'>" in value]
+
+
+def _open_varied_ledger(tmp_path):
+    database = tmp_path / "activity-filter.sqlite3"
+    case_repo = SqliteTechnicalCaseRepository(database)
+    quote_repo = SqliteQuoteRepository(database)
+    alpha = _saved_case(case_repo, title="アルファ案件", customer="アルファ社", end_user="現場A")
+    beta = _saved_case(case_repo, title="ベータ案件", customer="ベータ社", end_user="現場B")
+    append_activity_event(
+        get_activity_repository(database),
+        event_type="CASE_UPDATED",
+        entity_kind="case",
+        entity_id=alpha.case_id,
+        occurred_at="2026-12-01T01:00:00+00:00",
+    )
+    at = AppTest.from_file(str(APP_PATH))
+    at.session_state["technical_case_repository"] = case_repo
+    at.session_state["quote_repository"] = quote_repo
+    at.run()
+    at.button(key="sidebar_nav_activity").click().run()
+    return at, alpha, beta
+
+
+def test_widget_filter_and_sort_apply_on_the_same_run(tmp_path):
+    at, _alpha, _beta = _open_varied_ledger(tmp_path)
+    assert "表示 2件" in _shown_label(at)
+    assert _summary_values(at) == ["2", "0", "0", "0", "2"]
+    assert "アルファ案件" in _titles(at)[0]
+
+    at.text_input(key="activity_filter_keyword").set_value("アルファ案件").run()
+    assert "表示 1件" in _shown_label(at)
+    assert _summary_values(at) == ["1", "0", "0", "0", "1"]
+    assert any("アルファ案件" in value for value in _titles(at))
+    assert not any("ベータ案件" in value for value in _titles(at))
+
+    at.button(key="activity_reset_filters").click().run()
+    assert at.text_input(key="activity_filter_keyword").value == ""
+    assert at.selectbox(key="activity_sort_field").value == "last_activity_at"
+    assert at.radio(key="activity_sort_dir").value is True
+    assert "表示 2件" in _shown_label(at)
+    assert any("アルファ案件" in value for value in _titles(at))
+    assert any("ベータ案件" in value for value in _titles(at))
+
+    at.multiselect(key="activity_filter_customers").set_value(["ベータ社"]).run()
+    assert "表示 1件" in _shown_label(at)
+    assert _summary_values(at)[0] == "1"
+    assert any("ベータ案件" in value for value in _titles(at))
+    assert not any("アルファ案件" in value for value in _titles(at))
+
+    at.button(key="activity_reset_filters").click().run()
+    at.selectbox(key="activity_sort_field").set_value("title").run()
+    assert at.selectbox(key="activity_sort_field").value == "title"
+    assert "ベータ案件" in _titles(at)[0]
+    assert "アルファ案件" in _titles(at)[1]
+
+
 def test_summary_is_compact_and_filters_stay_split(tmp_path):
     at, _parent, _child, _rows = _open_ledger(tmp_path)
     summary = next(value for value in _markdown(at) if "<div class='activity-summary-grid'>" in value)

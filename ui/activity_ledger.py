@@ -69,8 +69,8 @@ def render_activity_ledger(texts: dict) -> None:
     activity_repo = get_activity_repository(getattr(case_repo, "path", None))
     customer_repo = SqliteCustomerRepository(getattr(case_repo, "path", None))
     rows = load_activity_rows(case_repo, quote_repo, activity_repo)
-    filt = _current_filter()
-    sort = _current_sort()
+    filt = _effective_filter(_current_filter())
+    sort = _effective_sort(_current_sort())
     filtered = sort_activity_rows(apply_activity_filter(rows, filt), sort)
     _render_dashboard(page, filtered)
     _render_filters(page, rows, filt, sort)
@@ -99,6 +99,57 @@ def _current_sort() -> ActivitySort:
     stored = reset_activity_sort()
     st.session_state[SESSION_SORT] = stored
     return stored
+
+
+def _session_or(key: str, fallback):
+    if key not in st.session_state:
+        return fallback
+    return st.session_state[key]
+
+
+def _choice_or(key: str, fallback: tuple[str, ...]) -> tuple[str, ...]:
+    if key not in st.session_state:
+        return fallback
+    value = st.session_state[key]
+    if isinstance(value, (list, tuple)):
+        return tuple(value)
+    return fallback
+
+
+def _text_or_none(key: str, fallback: str | None) -> str | None:
+    if key not in st.session_state:
+        return fallback
+    value = st.session_state[key]
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _effective_filter(stored: ActivityFilter) -> ActivityFilter:
+    keyword = _session_or("activity_filter_keyword", stored.keyword)
+    include_archived = _session_or("activity_include_archived", stored.include_archived)
+    return ActivityFilter(
+        date_from=_text_or_none("activity_date_from", stored.date_from),
+        date_to=_text_or_none("activity_date_to", stored.date_to),
+        customers=_choice_or("activity_filter_customers", stored.customers),
+        end_users=_choice_or("activity_filter_end_users", stored.end_users),
+        products=_choice_or("activity_filter_products", stored.products),
+        categories=_choice_or("activity_filter_categories", stored.categories),
+        statuses=_choice_or("activity_filter_statuses", stored.statuses),
+        keyword="" if keyword is None else str(keyword),
+        include_archived=bool(include_archived),
+    )
+
+
+def _effective_sort(stored: ActivitySort) -> ActivitySort:
+    field = stored.field if stored.field in SORT_FIELDS else "last_activity_at"
+    if "activity_sort_field" in st.session_state and st.session_state["activity_sort_field"] in SORT_FIELDS:
+        field = st.session_state["activity_sort_field"]
+    descending = bool(stored.descending)
+    if "activity_sort_dir" in st.session_state:
+        descending = bool(st.session_state["activity_sort_dir"])
+    return ActivitySort(field=field, descending=descending)
 
 
 def _current_selection() -> ActivitySelection:
