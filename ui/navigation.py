@@ -1,3 +1,4 @@
+from html import escape
 from typing import Optional
 
 import streamlit as st
@@ -130,16 +131,32 @@ def _request_page_navigation(texts: dict, current_page: str, target_page: str) -
     st.rerun()
 
 
+def _step_button_label(step: int, label: str) -> str:
+    # Button labels are Markdown. A literal "1. " would render as a list marker.
+    return f"{step}\\. {label}"
+
+
+def _location_line(separator: str, line: str) -> None:
+    st.markdown(
+        f"<p class='sidebar-location-line'>{escape(separator)} {escape(line)}</p>",
+        unsafe_allow_html=True,
+    )
+
+
 def _render_current_location(texts: dict, current_page: str) -> None:
     location = texts.get("location", {})
     lines = current_location_lines(texts, current_page)
+    separator = location.get("separator", "›")
     st.caption(location.get("label", "現在地"))
     if current_page == PAGE_HOME:
-        st.markdown(lines[0])
-    elif st.button(lines[0], key="sidebar_breadcrumb_home", type="secondary", use_container_width=True):
-        _request_page_navigation(texts, current_page, PAGE_HOME)
-    for line in lines[1:]:
-        st.markdown(f"{location.get('separator', '›')} {line}")
+        st.markdown(f"<p class='sidebar-location-line'>{escape(lines[0])}</p>", unsafe_allow_html=True)
+        return
+    with st.container(horizontal=True, gap=None, vertical_alignment="center", key="sidebar_location_row"):
+        if st.button(lines[0], key="sidebar_breadcrumb_home", type="secondary"):
+            _request_page_navigation(texts, current_page, PAGE_HOME)
+        _location_line(separator, lines[1])
+    for line in lines[2:]:
+        _location_line(separator, line)
 
 
 def _request_workflow_step(texts: dict, current_page: str, session_key: str, step: int) -> None:
@@ -152,14 +169,21 @@ def _request_workflow_step(texts: dict, current_page: str, session_key: str, ste
 
 
 def _render_quote_workflow(texts: dict, current_page: str) -> None:
-    from ui.quote_steps import QUOTE_STEP_IDS, SESSION_QUOTE_STEP, STEP_KEYS, normalize_quote_step
+    from ui.quote_steps import SESSION_QUOTE_STEP, normalize_quote_step
 
     navigation = texts.get("navigation", {})
     workspace = texts.get("pages", {}).get("quote_control", {}).get("workspace", {})
     current = normalize_quote_step(st.session_state.get(SESSION_QUOTE_STEP, 1))
-    st.caption(navigation.get("quote_workflow", "見積工程"))
+    with st.container(key="sidebar_quote_workflow", gap=None):
+        st.caption(navigation.get("quote_workflow", "見積工程"))
+        _render_quote_step_buttons(texts, current_page, workspace, current)
+
+
+def _render_quote_step_buttons(texts: dict, current_page: str, workspace: dict, current: int) -> None:
+    from ui.quote_steps import QUOTE_STEP_IDS, SESSION_QUOTE_STEP, STEP_KEYS
+
     for step in QUOTE_STEP_IDS:
-        label = f"{step}. {workspace.get(f'step_{STEP_KEYS[step]}', STEP_KEYS[step])}"
+        label = _step_button_label(step, workspace.get(f"step_{STEP_KEYS[step]}", STEP_KEYS[step]))
         if st.button(
             label,
             key=f"sidebar_quote_step_{step}",
@@ -171,20 +195,22 @@ def _render_quote_workflow(texts: dict, current_page: str) -> None:
 
 
 def _render_technical_workflow(texts: dict, current_page: str) -> None:
-    from ui.technical_case_steps import (
-        SESSION_CASE_STEP,
-        TECHNICAL_STEP_IDS,
-        normalize_case_step,
-        step_title,
-    )
+    from ui.technical_case_steps import SESSION_CASE_STEP, normalize_case_step
 
     navigation = texts.get("navigation", {})
     labels = texts.get("pages", {}).get("technical_case", {}).get("workflow", {})
     current = normalize_case_step(st.session_state.get(SESSION_CASE_STEP, 1))
-    st.caption(navigation.get("technical_workflow", "工程"))
+    with st.container(key="sidebar_technical_workflow", gap=None):
+        st.caption(navigation.get("technical_workflow", "工程"))
+        _render_technical_step_buttons(texts, current_page, labels, current)
+
+
+def _render_technical_step_buttons(texts: dict, current_page: str, labels: dict, current: int) -> None:
+    from ui.technical_case_steps import SESSION_CASE_STEP, TECHNICAL_STEP_IDS, step_title
+
     for step in TECHNICAL_STEP_IDS:
         if st.button(
-            f"{step}. {step_title(step, labels)}",
+            _step_button_label(step, step_title(step, labels)),
             key=f"sidebar_technical_step_{step}",
             type="primary" if step == current else "secondary",
             use_container_width=True,
@@ -197,22 +223,21 @@ def render_dashboard_sidebar(texts: dict, current_page: str) -> None:
     navigation = texts.get("navigation", {})
     labels = navigation.get("pages", {})
     with st.sidebar:
-        st.markdown(f"### {navigation.get('title', 'Deep Trekker AI')}")
+        title = navigation.get("title", "Deep Trekker AI")
+        st.markdown(f"<p class='sidebar-brand'>{escape(title)}</p>", unsafe_allow_html=True)
         st.caption(navigation.get("main_menu", "MAIN MENU"))
-        for page, label_key, fallback, button_key in _PAGE_NAV_KEYS:
-            if st.button(
-                labels.get(label_key, fallback),
-                key=button_key,
-                type="primary" if page == current_page else "secondary",
-                use_container_width=True,
-            ):
-                _request_page_navigation(texts, current_page, page)
-        st.divider()
+        with st.container(key="sidebar_main_menu", gap=None):
+            for page, label_key, fallback, button_key in _PAGE_NAV_KEYS:
+                if st.button(
+                    labels.get(label_key, fallback),
+                    key=button_key,
+                    type="primary" if page == current_page else "secondary",
+                    use_container_width=True,
+                ):
+                    _request_page_navigation(texts, current_page, page)
         _render_current_location(texts, current_page)
         if current_page == PAGE_QUOTE_CONTROL:
-            st.divider()
             _render_quote_workflow(texts, current_page)
         elif current_page == PAGE_TECHNICAL_CASE:
-            st.divider()
             _render_technical_workflow(texts, current_page)
         st.divider()

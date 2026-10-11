@@ -41,6 +41,15 @@ class _FakeStreamlit:
         self.reruns += 1
 
 
+def test_sidebar_compact_styles_are_scoped_to_sidebar():
+    from ui.styles import APP_CSS
+
+    assert '[data-testid="stSidebar"] [class*="st-key-sidebar_nav_"]' in APP_CSS
+    assert '[data-testid="stSidebar"] [class*="st-key-sidebar_quote_step_"]' in APP_CSS
+    assert '[data-testid="stSidebar"] [class*="st-key-sidebar_technical_step_"]' in APP_CSS
+    assert "div.stButton > button" in APP_CSS
+
+
 def test_global_sidebar_has_four_items_and_active_home():
     at = _start_app()
     keys = (

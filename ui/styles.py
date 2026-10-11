@@ -369,6 +369,80 @@ APP_CSS = """
     .activity-td-status { color: var(--dt-navy); font-weight: 650; }
     .save-status { font-size: 13px; color: var(--dt-accent); }
     .save-error { font-size: 13px; color: var(--dt-danger); }
+    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
+        gap: 0.42rem !important;
+    }
+    [data-testid="stSidebar"] .st-key-sidebar_main_menu,
+    [data-testid="stSidebar"] .st-key-sidebar_quote_workflow,
+    [data-testid="stSidebar"] .st-key-sidebar_technical_workflow,
+    [data-testid="stSidebar"] .st-key-sidebar_location_row,
+    [data-testid="stSidebar"] .st-key-sidebar_main_menu [data-testid="stVerticalBlock"],
+    [data-testid="stSidebar"] .st-key-sidebar_quote_workflow [data-testid="stVerticalBlock"],
+    [data-testid="stSidebar"] .st-key-sidebar_technical_workflow [data-testid="stVerticalBlock"],
+    [data-testid="stSidebar"] .st-key-sidebar_location_row [data-testid="stVerticalBlock"] {
+        gap: 0.2rem !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stElementContainer"]:has(.sidebar-brand) {
+        height: auto !important;
+        min-height: 1.45rem !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stElementContainer"]:has(.sidebar-location-line) {
+        height: auto !important;
+        min-height: 1.35rem !important;
+    }
+    [data-testid="stSidebar"] .sidebar-brand,
+    [data-testid="stSidebar"] .sidebar-location-line {
+        margin: 0;
+        line-height: 1.3;
+    }
+    [data-testid="stSidebar"] .sidebar-brand {
+        color: var(--dt-navy);
+        font-size: 1.02rem;
+        font-weight: 700;
+        margin-bottom: 0.15rem;
+    }
+    [data-testid="stSidebar"] .sidebar-location-line {
+        color: var(--dt-text);
+        font-size: 0.84rem;
+    }
+    [data-testid="stSidebar"] [data-testid="stCaptionContainer"] {
+        margin: 0;
+    }
+    [data-testid="stSidebar"] [data-testid="stCaptionContainer"] p {
+        margin: 0;
+        font-size: 0.78rem;
+        line-height: 1.25;
+    }
+    [data-testid="stSidebar"] hr {
+        margin: 0.2rem 0 !important;
+    }
+    [data-testid="stSidebar"] [class*="st-key-sidebar_nav_"] button[kind] {
+        min-height: 38px !important;
+        padding: 0.22rem 0.7rem !important;
+        font-size: 0.9rem !important;
+        line-height: 1.2 !important;
+    }
+    [data-testid="stSidebar"] [class*="st-key-sidebar_breadcrumb_home"] {
+        width: auto !important;
+        flex: 0 0 auto !important;
+    }
+    [data-testid="stSidebar"] [class*="st-key-sidebar_breadcrumb_home"] button[kind] {
+        width: auto !important;
+        min-height: 32px !important;
+        height: 32px !important;
+        white-space: nowrap !important;
+        padding: 0.1rem 0.55rem !important;
+        font-size: 0.84rem !important;
+        line-height: 1.2 !important;
+    }
+    [data-testid="stSidebar"] [class*="st-key-sidebar_quote_step_"] button[kind],
+    [data-testid="stSidebar"] [class*="st-key-sidebar_technical_step_"] button[kind],
+    [data-testid="stSidebar"] [class*="st-key-auth_logout"] button[kind] {
+        min-height: 34px !important;
+        padding: 0.14rem 0.65rem !important;
+        font-size: 0.84rem !important;
+        line-height: 1.2 !important;
+    }
 </style>
 """
 
