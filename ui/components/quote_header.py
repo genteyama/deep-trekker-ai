@@ -39,7 +39,7 @@ def render_quote_header(page: dict, draft, snapshot) -> None:
                 (workspace["header_margin"], display_percent(summary["gross_margin"], None)),
                 (
                     workspace["header_warnings"],
-                    f"{summary['warning_count']}{workspace['header_warning_unit']}",
+                    f"{work.review_required}{workspace['header_warning_unit']}",
                 ),
             ],
             unset_label=workspace.get("unset_label", "未設定"),

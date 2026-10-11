@@ -1,10 +1,19 @@
+import json
+from pathlib import Path
+
+from streamlit.testing.v1 import AppTest
+
 import ui.quote_control as quote_control
+from agents.general_quote_entry import create_general_quote_draft
 from agents.price_master import PriceMasterType, import_price_master
 from tests.price_book_fixtures import build_workbook, quote_calc_formula_book
 from tests.test_price_master_ui import _drop_stale_widgets, _open_quote_page, _texts
 from tests.test_spectra_price_master import spectra_workbook
+from ui.components.status import progress_text
 from ui.navigation import PAGE_QUOTE_CONTROL, restore_navigation_state, stash_navigation_state
-from ui.quote_steps import SESSION_QUOTE_STEP
+from ui.quote_steps import SESSION_QUOTE_STEP, build_header_summary, unresolved_required_lines, warning_count
+from ui.warning_summary import summarize_draft_warnings
+from ui.work_status import summarize_quote
 
 
 def _activate():
@@ -174,3 +183,63 @@ def test_ihi_samples_stay_collapsed_and_spectra_entry_stays_separate(monkeypatch
     assert draft.configuration_name == "SPECTRA"
     assert draft.configuration_lines[0].manufacturer_sku == "SPECTRA0001"
     assert draft.case_id is None
+
+
+HEADER_REVIEW_DRAFT = None
+
+
+def _render_header_review_draft():
+    import json
+    from pathlib import Path
+
+    from tests.test_quote_general_ui import HEADER_REVIEW_DRAFT
+    from ui.components.quote_header import render_quote_header
+
+    page = json.loads(Path("locales/ja.json").read_text(encoding="utf-8"))["pages"]["quote_control"]
+    render_quote_header(page, HEADER_REVIEW_DRAFT, None)
+
+
+def test_general_quote_header_uses_one_review_count():
+    _activate()
+    draft = create_general_quote_draft(
+        customer="一般顧客",
+        title="一般案件",
+        lines=[{"sku": "DT-100", "quantity": 1}],
+        exchange_rate=160,
+        international_shipping_usd=None,
+        domestic_shipping_jpy=None,
+        sales_candidates=[],
+    )
+    work = summarize_quote(draft)
+    classified = summarize_draft_warnings(draft)
+    kinds = dict(classified["lines"])
+    page = json.loads((Path("locales/ja.json")).read_text(encoding="utf-8"))["pages"]["quote_control"]
+    workspace = page["workspace"]
+
+    assert work.review_required == 7
+    assert kinds["international_shipping"] == 1
+    assert kinds["domestic_shipping"] == 1
+    assert kinds["lead_time"] == 1
+    assert work.review_required == classified["count"]
+    assert draft.lead_time_text in (None, "")
+    with_lead_time = draft.model_copy(update={"lead_time_text": "4週間"})
+    assert summarize_quote(with_lead_time).review_required == 6
+    raw_count = (
+        len(draft.warnings)
+        + sum(len(line.warnings) for line in draft.configuration_lines)
+        + len(unresolved_required_lines(draft))
+    )
+    assert warning_count(draft) == raw_count
+    assert build_header_summary(draft)["warning_count"] == raw_count
+    assert warning_count(draft) != work.review_required
+
+    global HEADER_REVIEW_DRAFT
+    HEADER_REVIEW_DRAFT = draft
+    at = AppTest.from_function(_render_header_review_draft).run()
+    html = " ".join(item.value for item in at.markdown)
+    progress = progress_text(work, workspace)
+    card = f"<div class='label'>要確認</div><div class='value'>{work.review_required}件</div>"
+
+    assert progress in html
+    assert "要確認：7件" in progress
+    assert card in html

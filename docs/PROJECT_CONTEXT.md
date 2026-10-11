@@ -118,6 +118,8 @@ PROJECT_CONTEXT とコードが矛盾した場合は、原則コード / Git を
 - メーカー価格が無いSKUは fail closed。
 - `case_id` は次Phase用の任意引数。UIからは渡さない。
 - DB変更なし。
+- Production smoke PASS。
+- Header review count consistency fix completed。進捗と Summary Card の要確認件数は WorkSummary.review_required に統一。
 - Next: QUOTE-1B Technical Case → General Quote handoff。
 
 ### v1.2 Phase A: Manufacturer Online Price Master Sync
