@@ -128,7 +128,6 @@ def render_technical_case(texts: dict) -> None:
         _render_case_actions(page)
         if get_active_provider_name() == "mock":
             st.warning(page["mock_warning"])
-    _render_business_lifecycle(texts, page, record)
 
     main, rail = st.columns([3, 1])
     with main:
@@ -146,6 +145,7 @@ def render_technical_case(texts: dict) -> None:
             _render_step_nav(page, selected)
     with rail:
         _render_record_context(texts, page, record)
+        _render_business_lifecycle(texts, page, record)
         if not closed:
             with st.expander(
                 page.get("dev_settings_label", page.get("provider_status_label", "AI Provider")),
@@ -566,8 +566,15 @@ def _render_business_lifecycle(texts: dict, page: dict, record) -> None:
                     "reopen",
                 )
         return
+    form_open = bool(st.session_state.get("technical_case_close_form"))
+    with st.expander(labels.get("record_manage_label", "案件管理"), expanded=form_open):
+        _render_close_case_form(labels, repo, record)
+
+
+def _render_close_case_form(labels: dict, repo, record) -> None:
     if st.button(labels.get("close_case", "案件を終了"), key="start_close_technical_case", type="secondary"):
         st.session_state["technical_case_close_form"] = True
+        st.rerun()
     if not st.session_state.get("technical_case_close_form"):
         return
     options = [None, *list(CaseCloseReason)]

@@ -20,6 +20,22 @@ def _header(at) -> str:
     return ""
 
 
+def _column_of(at, key: str):
+    def walk(block, column=None):
+        if getattr(block, "type", None) == "column":
+            column = block
+        if getattr(block, "key", None) == key:
+            return column
+        children = getattr(block, "children", None) or {}
+        for child in children.values():
+            found = walk(child, column)
+            if found is not None:
+                return found
+        return None
+
+    return walk(at._tree)
+
+
 def _open_case(at, case_id: str):
     at.button(key="sidebar_nav_technical").click().run()
     at.session_state["technical_case_saved_id"] = case_id
@@ -91,6 +107,13 @@ def test_saved_case_rail_shows_context_and_step_four_work_panel():
     assert "PIPE TREKKER" in visible
     assert "2026/10/11" in visible
     assert "関連見積：0件" in visible
+    manage = next(item for item in at.expander if item.label == "案件管理")
+    assert manage.proto.expanded is False
+    close_column = _column_of(at, "start_close_technical_case")
+    work_column = _column_of(at, "technical_case_step_next")
+    assert close_column is not None
+    assert work_column is not None
+    assert close_column is not work_column
 
     _open_case_step(at, 4)
     assert "4. メーカー確認" in _visible(at)
@@ -145,8 +168,11 @@ def test_closed_case_reopens_and_archive_restores():
     )
     at = _open_case(_start_app(), case_id)
     assert "案件終了済み" in _header(at)
+    assert "案件終了済み" in _visible(at)
     assert not any(button.key == "save_technical_case" for button in at.button)
     assert not any(button.key == "analyze_inquiry" for button in at.button)
+    assert not any(button.key == "technical_case_step_next" for button in at.button)
+    assert _column_of(at, "reopen_technical_case") is not None
     at.button(key="reopen_technical_case").click().run()
     assert SqliteTechnicalCaseRepository().get_case(case_id).case_lifecycle_status == CaseLifecycleStatus.ACTIVE
 

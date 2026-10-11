@@ -80,6 +80,7 @@ def test_close_form_validates_other_then_closes_and_reopens():
     at.text_area(key="technical_case_close_memo").set_value("Lost to competitor").run()
     at.button(key="confirm_close_technical_case").click().run()
 
+    _drop_stale_widgets(at)
     texts = _texts(at)
     assert "案件終了済み" in texts
     assert "終了理由：失注" in texts

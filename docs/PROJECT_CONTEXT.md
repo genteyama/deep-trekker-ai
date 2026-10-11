@@ -83,6 +83,7 @@ PROJECT_CONTEXT とコードが矛盾した場合は、原則コード / Git を
 - 開始。Technical CaseをCRM-style Record Workspaceにする。
 - Record identity header。Main active work area。Right-side record context。
 - Related quotesは常時表示。DB / business logicは変更しない。
+- Production polish: Business lifecycle controls moved to Record Right Rail。
 - 次：UX-2G Activity Ledger density。
 
 ### v1.2 Phase A: Manufacturer Online Price Master Sync
