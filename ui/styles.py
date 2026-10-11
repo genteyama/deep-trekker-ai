@@ -237,6 +237,23 @@ APP_CSS = """
     .portal-draft-title { font-size: 16px; }
     .portal-draft-subject { color: var(--dt-text); font-size: 14px; margin-bottom: 8px; }
     .portal-draft-meta { color: var(--dt-muted); font-size: 13px; }
+    .home-summary-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+        margin: 6px 0 12px 0;
+    }
+    .home-summary-card {
+        border: 1px solid var(--dt-border);
+        border-radius: 8px;
+        background: var(--dt-white);
+        padding: 9px 12px;
+    }
+    .home-summary-label { color: var(--dt-muted); font-size: 12px; margin-bottom: 2px; }
+    .home-summary-value { color: var(--dt-navy); font-size: 19px; font-weight: 700; line-height: 1.25; }
+    @media (max-width: 700px) {
+        .home-summary-grid { grid-template-columns: 1fr; }
+    }
     .summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 8px 0 14px 0; }
     .summary-card { min-height: 72px; padding: 10px 12px; }
     .summary-card .label { font-size: 13px; color: var(--dt-muted); margin-bottom: 4px; }

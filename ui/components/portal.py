@@ -29,6 +29,17 @@ def render_portal_section_title(label: str) -> None:
     st.markdown(f"<h3 class='portal-section-title'>{escape(label)}</h3>", unsafe_allow_html=True)
 
 
+def render_home_work_summary(items: list[tuple[str, str]]) -> None:
+    cards = "".join(
+        f"<div class='home-summary-card'>"
+        f"<div class='home-summary-label'>{escape(label)}</div>"
+        f"<div class='home-summary-value'>{escape(value)}</div>"
+        f"</div>"
+        for label, value in items
+    )
+    st.markdown(f"<div class='home-summary-grid'>{cards}</div>", unsafe_allow_html=True)
+
+
 def render_menu_card(
     title: str,
     english: str,

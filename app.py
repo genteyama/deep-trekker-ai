@@ -15,7 +15,8 @@ from ui.navigation import (
     PAGE_TECHNICAL_CASE,
     get_current_page,
     init_navigation,
-    render_current_location,
+    render_dashboard_sidebar,
+    restore_navigation_state,
 )
 from ui.quote_control import render_quote_control
 from ui.technical_case import render_technical_case
@@ -50,13 +51,12 @@ def main() -> None:
     apply_light_theme()
     if not require_login():
         return
-    render_identity()
-    render_brand_header()
     init_navigation()
-    render_current_location(texts)
+    current_page = get_current_page()
+    restore_navigation_state(st.session_state, current_page)
+    render_brand_header()
     render_conflict_banner()
 
-    current_page = get_current_page()
     if current_page == PAGE_TECHNICAL_CASE:
         render_technical_case(texts)
     elif current_page == PAGE_QUOTE_CONTROL:
@@ -65,6 +65,8 @@ def main() -> None:
         render_activity_ledger(texts)
     else:
         render_home(texts)
+    render_dashboard_sidebar(texts, current_page)
+    render_identity()
 
 
 if __name__ == "__main__":

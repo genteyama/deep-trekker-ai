@@ -16,6 +16,19 @@
       "activity_ledger": "履歴・活動台帳"
     }
   },
+  "navigation": {
+    "title": "Deep Trekker AI",
+    "main_menu": "MAIN MENU",
+    "quote_workflow": "見積工程",
+    "technical_workflow": "工程",
+    "save_blocked": "保存に問題があるため移動できません。内容を確認してください。",
+    "pages": {
+      "home": "HOME",
+      "technical_case": "営業・技術問い合わせ",
+      "quote_control": "見積・価格管理",
+      "activity_ledger": "履歴・活動台帳"
+    }
+  },
   "portal": {
     "work_summary_label": "進行中の業務",
     "work_summary_total": "進行中 合計",

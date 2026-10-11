@@ -56,7 +56,7 @@ def test_quick_view_toggle_labels_and_independent_case_state():
     assert at.session_state["home_quick_technical_CASE-A_open"] is False
 
 
-def test_sidebar_current_location_is_read_only():
+def test_sidebar_current_location_remains_visible_and_home_is_clickable():
     at = _start_app()
     home = _visible(at)
     assert "現在地" in home
@@ -64,24 +64,26 @@ def test_sidebar_current_location_is_read_only():
     assert "› 営業・技術問い合わせAI" not in home
     assert at.session_state["current_page"] == PAGE_HOME
 
-    at.button(key="open_technical_case").click().run()
+    at.button(key="sidebar_nav_technical").click().run()
     technical = _visible(at)
     assert "現在地" in technical
-    assert "HOME" in technical
+    assert at.button(key="sidebar_breadcrumb_home").label == "HOME"
     assert "› 営業・技術問い合わせAI" in technical
+    assert "› 1. 受付" in technical
     assert at.session_state["current_page"] == PAGE_TECHNICAL_CASE
 
-    at.button(key="back_to_home").click().run()
-    # AppTest can keep the previous sidebar node until the settled rerun.
-    at.run()
+    at.button(key="sidebar_breadcrumb_home").click().run()
     assert at.session_state["current_page"] == PAGE_HOME
-    assert "› 営業・技術問い合わせAI" not in _visible(at)
 
-    at.button(key="open_quote_control").click().run()
+
+def test_sidebar_location_for_quote_and_activity():
+    at = _start_app()
+    at.button(key="sidebar_nav_quote").click().run()
     assert "› 見積・価格管理AI" in _visible(at)
+    assert "› 1. 構成確認" in _visible(at)
     assert at.session_state["current_page"] == PAGE_QUOTE_CONTROL
 
-    at.button(key="back_to_home").click().run()
-    at.button(key="open_activity_ledger").click().run()
+    at = _start_app()
+    at.button(key="sidebar_nav_activity").click().run()
     assert "› 履歴・活動台帳" in _visible(at)
     assert at.session_state["current_page"] == PAGE_ACTIVITY_LEDGER

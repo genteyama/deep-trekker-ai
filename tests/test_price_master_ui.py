@@ -51,7 +51,7 @@ def uploads(monkeypatch):
 
 def _open_quote_page() -> AppTest:
     at = AppTest.from_file(str(APP_PATH)).run()
-    at.button(key="open_quote_control").click().run()
+    at.button(key="sidebar_nav_quote").click().run()
     assert not at.exception
     return at
 

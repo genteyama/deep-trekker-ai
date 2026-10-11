@@ -33,7 +33,7 @@ PROJECT_CONTEXT とコードが矛盾した場合は、原則コード / Git を
 - 現在 Phase: **Phase B — Business Case Close / Reopen + Status Quick View**
 - v1.1.0 Online Multi-device MVP: **完成済み**。main baseline `1512f22112deff7f6d4b2512c273e5a2dac24ff9`（tag `v1.1.0`）
 - 旧記載の HEAD `e746ca9` はそれ以前の checkpoint。この文書とコードが矛盾する場合は Git / current code を優先
-- full pytest: 839 passed（`pytest -q`、2026-10-11 UX-2B）
+- full pytest: 850 passed（`pytest -q`、2026-10-11 UX-2C）
 - Price Master Data Quality: **DQ-5 COMPLETE**（Live SO Master修正、fresh export監査、Production activation、Pricing regressionまでPASS。→ 12章 / 15章）
 
 ### UX-1
@@ -54,6 +54,11 @@ PROJECT_CONTEXT とコードが矛盾した場合は、原則コード / Git を
 ### UX-2B
 
 - HOME Command Centerを開始。HOMEをlauncher-firstからwork-firstへ変更し、DB / business logicは変更しない。
+
+### UX-2C
+
+- UX-2B Production feedbackを反映し、Persistent Dashboard Shell、Global Sidebar Navigation、Deep Current Location、Quote / Technical direct workflow navigationを追加。
+- HOMEはcompact summaryと進行案件3-column tileに集約し、重複feature menuを削除。Navigation時のuser inputを保護し、DB / business logicは変更しない。
 
 ### v1.2 Phase A: Manufacturer Online Price Master Sync
 

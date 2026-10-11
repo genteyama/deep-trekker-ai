@@ -68,7 +68,7 @@ def _import(master_type, factory, name):
 
 def _create_ihi_photon_draft():
     at = AppTest.from_file(str(APP_PATH)).run()
-    at.button(key="open_quote_control").click().run()
+    at.button(key="sidebar_nav_quote").click().run()
     at.button(key="ihi_photon_draft").click().run()
     assert not at.exception
     return at, at.session_state["quote_draft"]

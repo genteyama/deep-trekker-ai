@@ -264,7 +264,7 @@ def test_ihi_button_without_official_price_books_shows_reference_only(tmp_path, 
     assert all(get_active_master(master_type) is None for master_type in PriceMasterType)
 
     at = AppTest.from_file(str(APP_PATH)).run()
-    at.button(key="open_quote_control").click().run()
+    at.button(key="sidebar_nav_quote").click().run()
     at.button(key="ihi_photon_draft").click().run()
 
     assert not at.exception

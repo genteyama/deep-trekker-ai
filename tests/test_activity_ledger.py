@@ -414,7 +414,7 @@ def test_quote_create_and_approve_events(tmp_path):
 
 def test_activity_ledger_page_opens():
     at = AppTest.from_file(str(APP_PATH)).run()
-    at.button(key="open_activity_ledger").click().run()
+    at.button(key="sidebar_nav_activity").click().run()
     visible = " ".join(
         [getattr(item, "value", "") for item in at.text]
         + [getattr(item, "value", "") for item in at.markdown]

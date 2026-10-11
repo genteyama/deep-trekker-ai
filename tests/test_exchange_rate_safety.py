@@ -45,7 +45,7 @@ def _no_official_files(tmp_path, monkeypatch):
 
 def _open_quote_page() -> AppTest:
     at = AppTest.from_file(str(APP_PATH)).run()
-    at.button(key="open_quote_control").click().run()
+    at.button(key="sidebar_nav_quote").click().run()
     return at
 
 

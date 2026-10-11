@@ -23,27 +23,28 @@ def test_home_dashboard_shows_both_work_kinds():
         + [item.value for item in at.markdown]
         + [item.value for item in at.caption]
     )
+    assert "進行中の業務" in visible
     assert "進行中の案件" in visible
-    assert "営業・技術受付" in visible
-    assert "見積・価格管理" in visible
-    assert "履歴・活動台帳" in visible
+    assert "営業・技術" in visible
+    assert "見積" in visible
     assert "営業・技術受付AI" not in visible
-    assert "（進行中：" in visible
-    assert at.button(key="open_activity_ledger").disabled is False
+    assert "home-summary-grid" in visible
+    assert "（進行中：" not in visible
+    assert at.button(key="sidebar_nav_activity").disabled is False
     filter_labels = []
     for radio in at.radio:
         filter_labels.extend(getattr(radio, "options", None) or [])
         if getattr(radio, "label", None):
             filter_labels.append(radio.label)
     assert any("進行中" in str(label) for label in filter_labels) or at.radio
-    assert at.button(key="open_technical_case").disabled is False
-    assert at.button(key="open_quote_control").disabled is False
+    assert at.button(key="sidebar_nav_technical").disabled is False
+    assert at.button(key="sidebar_nav_quote").disabled is False
     assert "入力不足のため次へ進めません" not in visible
 
 
 def test_incomplete_technical_case_does_not_block_actions():
     at = _start_app()
-    at.button(key="open_technical_case").click().run()
+    at.button(key="sidebar_nav_technical").click().run()
     visible = " ".join(
         [item.value for item in at.text]
         + [item.value for item in at.markdown]
@@ -68,7 +69,7 @@ def test_incomplete_technical_case_does_not_block_actions():
 def test_home_opens_technical_case_page():
     at = _start_app()
 
-    at.button(key="open_technical_case").click().run()
+    at.button(key="sidebar_nav_technical").click().run()
 
     assert at.title[0].value == "営業・技術受付AI"
     assert "Technical Case Agent" in [caption.value for caption in at.caption]
@@ -81,7 +82,7 @@ def test_home_opens_technical_case_page():
 
 def test_technical_case_stepper_navigates_incomplete_steps():
     at = _start_app()
-    at.button(key="open_technical_case").click().run()
+    at.button(key="sidebar_nav_technical").click().run()
     for step in range(1, 8):
         _open_case_step(at, step)
         assert not at.exception
@@ -97,7 +98,7 @@ def test_technical_case_stepper_navigates_incomplete_steps():
 
 def test_home_opens_quote_control_page():
     at = _start_app()
-    quote_button = at.button(key="open_quote_control")
+    quote_button = at.button(key="sidebar_nav_quote")
 
     assert quote_button.disabled is False
     quote_button.click().run()
@@ -136,7 +137,7 @@ def test_home_opens_quote_control_page():
 
 def test_analyze_button_shows_mock_results():
     at = _start_app()
-    at.button(key="open_technical_case").click().run()
+    at.button(key="sidebar_nav_technical").click().run()
 
     at.text_input(key="input_case_name").set_value("PipeTrekker 管内点検")
     at.text_input(key="input_customer_name").set_value("サンプル株式会社")
@@ -161,7 +162,7 @@ def test_analyze_button_shows_mock_results():
 
 def test_mag_inquiry_shows_retrieved_approved_facts():
     at = _start_app()
-    at.button(key="open_technical_case").click().run()
+    at.button(key="sidebar_nav_technical").click().run()
     at.text_area(key="input_customer_inquiry").set_value(
         "MAG Utility Crawlerで鋼製円筒タンクの水中肉厚測定を検討。側面と底面。測定した場所を把握したい。"
     )
@@ -191,7 +192,7 @@ def test_app_starts_without_claude_api_key(monkeypatch):
     at = _start_app()
     assert not at.exception
 
-    at.button(key="open_technical_case").click().run()
+    at.button(key="sidebar_nav_technical").click().run()
     assert not at.exception
 
     visible_text = " ".join(
@@ -220,7 +221,7 @@ def test_claude_connection_test_without_key_does_not_send_customer_data(monkeypa
     monkeypatch.setenv("ANTHROPIC_API_KEY", "")
 
     at = _start_app()
-    at.button(key="open_technical_case").click().run()
+    at.button(key="sidebar_nav_technical").click().run()
     at.text_input(key="input_case_name").set_value("機密案件A")
     at.text_input(key="input_customer_name").set_value("秘密顧客")
     at.text_area(key="input_customer_inquiry").set_value("顧客の生メール全文")
@@ -243,7 +244,7 @@ def test_app_starts_with_ollama_provider_without_api_key(monkeypatch):
     at = _start_app()
     assert not at.exception
 
-    at.button(key="open_technical_case").click().run()
+    at.button(key="sidebar_nav_technical").click().run()
     assert not at.exception
 
     visible_text = " ".join(
@@ -268,7 +269,7 @@ def test_app_starts_with_gemini_provider_without_api_key(monkeypatch):
     at = _start_app()
     assert not at.exception
 
-    at.button(key="open_technical_case").click().run()
+    at.button(key="sidebar_nav_technical").click().run()
     assert not at.exception
 
     visible_text = " ".join(
@@ -300,7 +301,7 @@ def test_gemini_connection_test_without_key_does_not_send_customer_data(monkeypa
     monkeypatch.setenv("GEMINI_API_KEY", "")
 
     at = _start_app()
-    at.button(key="open_technical_case").click().run()
+    at.button(key="sidebar_nav_technical").click().run()
     at.text_input(key="input_case_name").set_value("機密案件A")
     at.text_input(key="input_customer_name").set_value("秘密顧客")
     at.text_area(key="input_customer_inquiry").set_value("顧客の生メール全文")
@@ -317,7 +318,7 @@ def test_gemini_connection_test_without_key_does_not_send_customer_data(monkeypa
 
 def test_saved_technical_case_can_resume_after_new_case():
     at = _start_app()
-    at.button(key="open_technical_case").click().run()
+    at.button(key="sidebar_nav_technical").click().run()
     at.text_input(key="input_case_name").set_value("再開確認案件")
     at.text_input(key="input_customer_name").set_value("再開株式会社")
     at.text_area(key="input_customer_inquiry").set_value("直径300mmの管を点検したい。")
@@ -334,7 +335,7 @@ def test_saved_technical_case_can_resume_after_new_case():
 
 def test_manufacturer_response_button_shows_mock_matches():
     at = _start_app()
-    at.button(key="open_technical_case").click().run()
+    at.button(key="sidebar_nav_technical").click().run()
 
     at.text_input(key="input_case_name").set_value("PipeTrekker 管内点検")
     at.text_input(key="input_customer_name").set_value("サンプル株式会社")
@@ -361,7 +362,7 @@ def test_manufacturer_response_button_shows_mock_matches():
 
 def test_apply_button_marks_manufacturer_question_applied():
     at = _start_app()
-    at.button(key="open_technical_case").click().run()
+    at.button(key="sidebar_nav_technical").click().run()
     at.text_area(key="input_customer_inquiry").set_value("管内点検の相談です。")
     at.button(key="analyze_inquiry").click().run()
     _open_case_step(at, 5)
@@ -384,7 +385,7 @@ def test_apply_button_marks_manufacturer_question_applied():
 
 def test_human_can_register_technical_fact_from_applied_answer():
     at = _start_app()
-    at.button(key="open_technical_case").click().run()
+    at.button(key="sidebar_nav_technical").click().run()
     at.text_area(key="input_customer_inquiry").set_value("管内点検の相談です。")
     at.button(key="analyze_inquiry").click().run()
     _open_case_step(at, 5)
@@ -414,7 +415,7 @@ def test_quote_control_shows_import_and_diff_without_apply():
     from tests.price_book_fixtures import previous_master_book, valid_price_book
 
     at = _start_app()
-    at.button(key="open_quote_control").click().run()
+    at.button(key="sidebar_nav_quote").click().run()
 
     incoming = import_price_book(valid_price_book(), source_price_book="DT40", version="2026-09")
     previous = import_price_book(previous_master_book(), source_price_book="previous")
@@ -438,7 +439,7 @@ def test_quote_control_shows_sku_link_preview_and_manual_fields():
     from tests.price_book_fixtures import manufacturer_books_for_reconciliation, spaceone_master_book
 
     at = _start_app()
-    at.button(key="open_quote_control").click().run()
+    at.button(key="sidebar_nav_quote").click().run()
 
     dt40_file, pt30_file = manufacturer_books_for_reconciliation()
     dt40 = import_price_book(dt40_file, source_price_book="DT40")
@@ -459,7 +460,7 @@ def test_quote_control_shows_sku_link_preview_and_manual_fields():
 
 def test_back_button_returns_to_home():
     at = _start_app()
-    at.button(key="open_technical_case").click().run()
+    at.button(key="sidebar_nav_technical").click().run()
     at.button(key="back_to_home").click().run()
 
     assert at.title[0].value == "Deep Trekker 業務支援AI"
@@ -479,7 +480,7 @@ def test_quote_date_widgets_do_not_raise_and_follow_auto_rule():
     from tests.test_quote_builder import _photon_draft
 
     at = _start_app()
-    at.button(key="open_quote_control").click().run()
+    at.button(key="sidebar_nav_quote").click().run()
 
     draft = _photon_draft()
     keys = date_widget_keys(draft.quote_draft_id)
@@ -522,7 +523,7 @@ def test_quote_date_human_final_button_does_not_raise_after_widgets():
     from tests.test_quote_builder import _photon_draft
 
     at = _start_app()
-    at.button(key="open_quote_control").click().run()
+    at.button(key="sidebar_nav_quote").click().run()
     draft = _photon_draft()
     keys = date_widget_keys(draft.quote_draft_id)
     at.session_state["quote_draft"] = draft
@@ -544,7 +545,7 @@ def test_quote_workspace_shows_only_selected_step_and_keeps_draft():
     from tests.test_quote_builder import _photon_draft
 
     at = _start_app()
-    at.button(key="open_quote_control").click().run()
+    at.button(key="sidebar_nav_quote").click().run()
     draft = _photon_draft()
     draft_id = draft.quote_draft_id
     keys = date_widget_keys(draft_id)
@@ -628,7 +629,7 @@ def test_saved_draft_can_be_resumed_after_session_is_cleared():
     )
 
     at = _start_app()
-    at.button(key="open_quote_control").click().run()
+    at.button(key="sidebar_nav_quote").click().run()
     resume = next((button for button in at.button if button.label == "作業を再開"), None)
     assert resume is not None
     resume.click().run()
@@ -649,7 +650,7 @@ def test_new_quote_buttons_remain_after_draft_is_created():
     from tests.test_quote_builder import _photon_draft
 
     at = _start_app()
-    at.button(key="open_quote_control").click().run()
+    at.button(key="sidebar_nav_quote").click().run()
     at.session_state["quote_draft"] = _photon_draft()
     at.session_state["quote_workspace_step"] = 1
     at.run()
@@ -683,7 +684,7 @@ def test_pending_form_values_resume_without_applying_or_widget_exception():
     keys = date_widget_keys(draft.quote_draft_id)
 
     at = _start_app()
-    at.button(key="open_quote_control").click().run()
+    at.button(key="sidebar_nav_quote").click().run()
     at.session_state["quote_draft"] = draft
     at.session_state["quote_workspace_step"] = 2
     at.run()
@@ -715,7 +716,7 @@ def test_pending_form_values_resume_without_applying_or_widget_exception():
     ).description == official_description
 
     resumed = _start_app()
-    resumed.button(key="open_quote_control").click().run()
+    resumed.button(key="sidebar_nav_quote").click().run()
     resume = next((button for button in resumed.button if button.label == "作業を再開"), None)
     assert resume is not None
     resume.click().run()
@@ -759,7 +760,7 @@ def test_export_inputs_resume_without_changing_snapshot():
     )
 
     at = _start_app()
-    at.button(key="open_quote_control").click().run()
+    at.button(key="sidebar_nav_quote").click().run()
     resume = next((button for button in at.button if button.label == "作業を再開"), None)
     assert resume is not None
     resume.click().run()

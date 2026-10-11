@@ -6,13 +6,13 @@ from repositories.sqlite_activity_repository import SqliteActivityRepository
 from ui.components.portal import (
     format_portal_datetime,
     render_home_hero,
-    render_menu_card,
+    render_home_work_summary,
     render_portal_section_title,
     resume_draft_into_session,
 )
 from ui.components.lifecycle import render_home_filter
 from ui.components.status import render_recent_case_card
-from ui.navigation import PAGE_ACTIVITY_LEDGER, PAGE_QUOTE_CONTROL, PAGE_TECHNICAL_CASE, set_current_page
+from ui.navigation import PAGE_QUOTE_CONTROL, PAGE_TECHNICAL_CASE, set_current_page
 from ui.quote_persistence import get_quote_repository
 from ui.technical_case_persistence import get_technical_case_repository, resume_case_into_session
 from ui.technical_case_steps import build_technical_workflow
@@ -20,8 +20,6 @@ from ui.work_status import KIND_QUOTE, KIND_TECHNICAL, summarize_quote, summariz
 
 
 def render_home(texts: dict) -> None:
-    technical_case = texts["agents"]["technical_case"]
-    quote_control = texts["agents"]["quote_control"]
     portal = texts.get("portal", {})
     quote_page = texts["pages"]["quote_control"]
 
@@ -33,124 +31,18 @@ def render_home(texts: dict) -> None:
 
     tech_open, quote_open = _open_counts()
     render_portal_section_title(portal.get("work_summary_label", "進行中の業務"))
-    columns = st.columns(3)
-    for column, (label, value) in zip(columns, _work_summary_items(portal, tech_open, quote_open)):
-        with column:
-            st.metric(label, value)
+    render_home_work_summary(_work_summary_items(portal, tech_open, quote_open))
 
     render_portal_section_title(portal.get("recent_work_label", "進行中の案件"))
     view = render_home_filter(texts)
     items = _recent_work_items(view)
     if not items:
         st.caption(portal.get("recent_work_empty", "進行中の案件はまだありません。"))
-    for item in items:
-        kind_label = portal.get("kind_technical", "営業・技術") if item["kind"] == KIND_TECHNICAL else portal.get("kind_quote", "見積")
-        completed, total, review_required = _user_progress(item)
-        render_recent_case_card(
-            kind_label=kind_label,
-            customer=item["customer"],
-            title=item["title"],
-            process_label=item["process"],
-            progress=f"{portal.get('progress_label', '進捗')}：{completed} / {total}",
-            review_label=f"{portal.get('review_label', '要確認')}：{review_required}{portal.get('review_unit', '件')}",
-            updated_at=item["updated_at"],
-            updated_prefix=quote_page["workspace"].get("updated_at_label", "最終更新"),
-        )
-        if item["kind"] == KIND_TECHNICAL:
-            quick_key = f"home_quick_technical_{item['id']}"
-            quick_open = bool(st.session_state.get(f"{quick_key}_open", False))
-            quick_label = (
-                portal.get("quick_view_button_close", "ステータスを閉じる ▲")
-                if quick_open
-                else portal.get("quick_view_button_open", "ステータスを確認 ▼")
-            )
-            if st.button(
-                quick_label,
-                key=quick_key,
-                type="secondary",
-            ):
-                st.session_state[f"{quick_key}_open"] = not st.session_state.get(f"{quick_key}_open", False)
-                st.rerun()
-            if st.session_state.get(f"{quick_key}_open"):
-                _render_technical_quick_view(item, portal, texts["pages"]["technical_case"])
-            if st.button(
-                portal.get("open_case_label", "案件を開く"),
-                key=f"home_resume_technical_{item['id']}",
-                type="primary",
-            ):
-                loaded = get_technical_case_repository().get_case(item["id"])
-                if loaded is not None:
-                    resume_case_into_session(loaded, st.session_state)
-                    set_current_page(PAGE_TECHNICAL_CASE)
-                    st.rerun()
-        else:
-            if st.button(
-                quote_page["workspace"].get("resume_draft_button", "作業を再開"),
-                key=f"home_resume_draft_{item['id']}_{item['version']}",
-                type="primary",
-            ):
-                _resume_quote_from_home(quote_page, item["id"], item["version"])
-
-    render_portal_section_title(texts["menu_label"])
-    count_label = portal.get("open_cases_label", "進行中")
-    count_unit = portal.get("count_unit", "件")
-    left_column, middle_column, right_column = st.columns(3)
-    with left_column:
-        render_menu_card(
-            technical_case["name"],
-            technical_case.get("english", "Technical Support"),
-            technical_case["description"],
-            product_key="PIPETREKKER",
-            count=tech_open,
-            count_label=count_label,
-            count_unit=count_unit,
-            compact=True,
-        )
-        if st.button(
-            texts.get("open_label", "開く"),
-            key="open_technical_case",
-            use_container_width=True,
-            type="primary",
-        ):
-            set_current_page(PAGE_TECHNICAL_CASE)
-            st.rerun()
-
-    with middle_column:
-        render_menu_card(
-            quote_control["name"],
-            quote_control.get("english", "Quote & Price Control"),
-            quote_control["description"],
-            product_key="PHOTON",
-            count=quote_open,
-            count_label=count_label,
-            count_unit=count_unit,
-            compact=True,
-        )
-        if st.button(
-            texts.get("open_label", "開く"),
-            key="open_quote_control",
-            use_container_width=True,
-            type="primary",
-        ):
-            set_current_page(PAGE_QUOTE_CONTROL)
-            st.rerun()
-
-    with right_column:
-        activity = texts.get("agents", {}).get("activity_ledger", {})
-        render_menu_card(
-            activity.get("name", "履歴・活動台帳"),
-            activity.get("english", "Activity Ledger"),
-            activity.get("description", "営業技術問い合わせ、見積、派生案件を時系列で確認"),
-            compact=True,
-        )
-        if st.button(
-            texts.get("open_label", "開く"),
-            key="open_activity_ledger",
-            use_container_width=True,
-            type="primary",
-        ):
-            set_current_page(PAGE_ACTIVITY_LEDGER)
-            st.rerun()
+    for row in chunk_items(items, 3):
+        columns = st.columns(3)
+        for column, item in zip(columns, row):
+            with column:
+                _render_recent_work_item(item, portal, quote_page, texts)
 
 
 def _work_summary_items(portal: dict, tech_open: int, quote_open: int) -> list[tuple[str, str]]:
@@ -164,6 +56,62 @@ def _work_summary_items(portal: dict, tech_open: int, quote_open: int) -> list[t
         (portal.get("kind_quote", "見積"), count_value(quote_open)),
         (portal.get("work_summary_total", "進行中 合計"), count_value(tech_open + quote_open)),
     ]
+
+
+def chunk_items(items: list, size: int) -> list[list]:
+    if size < 1:
+        raise ValueError("size must be positive")
+    return [items[index : index + size] for index in range(0, len(items), size)]
+
+
+def _render_recent_work_item(item: dict, portal: dict, quote_page: dict, texts: dict) -> None:
+    kind_label = (
+        portal.get("kind_technical", "営業・技術")
+        if item["kind"] == KIND_TECHNICAL
+        else portal.get("kind_quote", "見積")
+    )
+    completed, total, review_required = _user_progress(item)
+    render_recent_case_card(
+        kind_label=kind_label,
+        customer=item["customer"],
+        title=item["title"],
+        process_label=item["process"],
+        progress=f"{portal.get('progress_label', '進捗')}：{completed} / {total}",
+        review_label=f"{portal.get('review_label', '要確認')}：{review_required}{portal.get('review_unit', '件')}",
+        updated_at=item["updated_at"],
+        updated_prefix=quote_page["workspace"].get("updated_at_label", "最終更新"),
+    )
+    if item["kind"] == KIND_TECHNICAL:
+        quick_key = f"home_quick_technical_{item['id']}"
+        quick_open = bool(st.session_state.get(f"{quick_key}_open", False))
+        quick_label = (
+            portal.get("quick_view_button_close", "ステータスを閉じる ▲")
+            if quick_open
+            else portal.get("quick_view_button_open", "ステータスを確認 ▼")
+        )
+        if st.button(quick_label, key=quick_key, type="secondary", use_container_width=True):
+            st.session_state[f"{quick_key}_open"] = not quick_open
+            st.rerun()
+        if st.session_state.get(f"{quick_key}_open"):
+            _render_technical_quick_view(item, portal, texts["pages"]["technical_case"])
+        if st.button(
+            portal.get("open_case_label", "案件を開く"),
+            key=f"home_resume_technical_{item['id']}",
+            type="primary",
+            use_container_width=True,
+        ):
+            loaded = get_technical_case_repository().get_case(item["id"])
+            if loaded is not None:
+                resume_case_into_session(loaded, st.session_state)
+                set_current_page(PAGE_TECHNICAL_CASE)
+                st.rerun()
+    elif st.button(
+        quote_page["workspace"].get("resume_draft_button", "作業を再開"),
+        key=f"home_resume_draft_{item['id']}_{item['version']}",
+        type="primary",
+        use_container_width=True,
+    ):
+        _resume_quote_from_home(quote_page, item["id"], item["version"])
 
 
 def _open_counts() -> tuple[int, int]:

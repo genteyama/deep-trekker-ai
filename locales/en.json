@@ -16,6 +16,19 @@
       "activity_ledger": "Activity Ledger"
     }
   },
+  "navigation": {
+    "title": "Deep Trekker AI",
+    "main_menu": "MAIN MENU",
+    "quote_workflow": "Quote workflow",
+    "technical_workflow": "Workflow",
+    "save_blocked": "Navigation is blocked because saving failed. Review the current content.",
+    "pages": {
+      "home": "HOME",
+      "technical_case": "Sales & Technical Inquiry",
+      "quote_control": "Quote & Price Control",
+      "activity_ledger": "Activity Ledger"
+    }
+  },
   "portal": {
     "work_summary_label": "Current workload",
     "work_summary_total": "Total in progress",
