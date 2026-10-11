@@ -33,7 +33,7 @@ PROJECT_CONTEXT とコードが矛盾した場合は、原則コード / Git を
 - 現在 Phase: **Phase B — Business Case Close / Reopen + Status Quick View**
 - v1.1.0 Online Multi-device MVP: **完成済み**。main baseline `1512f22112deff7f6d4b2512c273e5a2dac24ff9`（tag `v1.1.0`）
 - 旧記載の HEAD `e746ca9` はそれ以前の checkpoint。この文書とコードが矛盾する場合は Git / current code を優先
-- full pytest: 855 passed（`pytest -q`、2026-10-11 UX-2D）
+- full pytest: 857 passed（`pytest -q`、2026-10-11 UX-2E）
 - Price Master Data Quality: **DQ-5 COMPLETE**（Live SO Master修正、fresh export監査、Production activation、Pricing regressionまでPASS。→ 12章 / 15章）
 
 ### UX-1
@@ -65,8 +65,14 @@ PROJECT_CONTEXT とコードが矛盾した場合は、原則コード / Git を
 
 ### UX-2D
 
-- 開始。日常のQuote Workspaceと価格マスター管理を分離する。
-- DB / pricing business logicは変更しない。
+- COMPLETE
+- 日常のQuote Workspaceと価格マスター管理を分離。DB / pricing business logicは変更しない。
+- Production smoke: Quote daily workspace separation PASS。Price Master Admin separation PASS。
+
+### UX-2E
+
+- 開始。Internal pageのBrand Headerをcompact化する。
+- Main Workflowはread-only status overviewにする。Sidebarはdirect navigationのまま。
 
 ### v1.2 Phase A: Manufacturer Online Price Master Sync
 

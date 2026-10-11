@@ -11,6 +11,7 @@ from ui.conflict import render_conflict_banner
 from ui.home import render_home
 from ui.navigation import (
     PAGE_ACTIVITY_LEDGER,
+    PAGE_HOME,
     PAGE_PRICE_MASTER,
     PAGE_QUOTE_CONTROL,
     PAGE_TECHNICAL_CASE,
@@ -55,7 +56,7 @@ def main() -> None:
     init_navigation()
     current_page = get_current_page()
     restore_navigation_state(st.session_state, current_page)
-    render_brand_header()
+    render_brand_header(compact=current_page != PAGE_HOME)
     render_conflict_banner()
 
     if current_page == PAGE_TECHNICAL_CASE:

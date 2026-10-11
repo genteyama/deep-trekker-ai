@@ -75,7 +75,11 @@ def _resume(at, draft_id):
 
 
 def _go_to_step(at, step):
-    at.button(key=f"quote_step_{step}").click().run()
+    from tests.test_price_master_ui import _drop_stale_widgets
+
+    _drop_stale_widgets(at)
+    at.button(key=f"sidebar_quote_step_{step}").click().run()
+    _drop_stale_widgets(at)
     assert not at.exception
     assert at.session_state[SESSION_QUOTE_STEP] == step
 

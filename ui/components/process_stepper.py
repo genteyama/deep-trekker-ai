@@ -39,6 +39,8 @@ def render_process_stepper(
     button_key_fn: Callable[[int], str],
     current_label: str = "現在",
     row_sizes: Optional[tuple[int, ...]] = None,
+    interactive: bool = True,
+    compact: bool = False,
 ) -> int:
     chosen = selected
     sizes = list(row_sizes or (len(steps),))
@@ -51,7 +53,9 @@ def render_process_stepper(
             view = steps[index]
             index += 1
             with column:
-                _render_step_card(view, current_label)
+                _render_step_card(view, current_label, compact=compact)
+                if not interactive:
+                    continue
                 label = view.button_label or f"{view.step} {view.title}"
                 if st.button(
                     label,
@@ -63,8 +67,10 @@ def render_process_stepper(
     return chosen
 
 
-def _render_step_card(view: ProcessStepView, current_label: str) -> None:
+def _render_step_card(view: ProcessStepView, current_label: str, compact: bool = False) -> None:
     classes = ["dt-step-card"]
+    if compact:
+        classes.append("is-compact")
     if view.is_current:
         classes.append("is-current")
     current_html = (

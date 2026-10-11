@@ -47,4 +47,6 @@ def render_quote_stepper(page: dict, current: int, draft, snapshot, validation) 
         selected=selected,
         button_key_fn=step_button_key,
         current_label=workspace.get("step_current", "現在"),
+        interactive=False,
+        compact=True,
     )

@@ -143,7 +143,7 @@ def render_technical_case(texts: dict) -> None:
             status=item.status,
             status_label=item.badge_label(STEP_STATUS_LABELS, workflow_labels.get("review_unit", "件")),
             review_count=item.review_count,
-            is_current=item.step == workflow.current_step,
+            is_current=item.step == selected,
         )
         for item in workflow.steps
     ]
@@ -153,6 +153,8 @@ def render_technical_case(texts: dict) -> None:
         button_key_fn=step_button_key,
         current_label=workflow_labels.get("current_label", "現在"),
         row_sizes=(4, 3),
+        interactive=False,
+        compact=True,
     )
     if clicked != selected:
         st.session_state[SESSION_CASE_STEP] = clicked

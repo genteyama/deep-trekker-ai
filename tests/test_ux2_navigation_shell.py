@@ -47,6 +47,9 @@ def test_sidebar_compact_styles_are_scoped_to_sidebar():
 
     assert '[data-testid="stSidebar"] [class*="st-key-sidebar_admin_"]' in APP_CSS
     assert '[data-testid="stSidebar"] [class*="st-key-sidebar_nav_"]' in APP_CSS
+    assert ".brand-header.is-compact" in APP_CSS
+    assert ".dt-step-card.is-compact" in APP_CSS
+    assert "min-height: 88px" in APP_CSS
     assert '[data-testid="stSidebar"] [class*="st-key-sidebar_quote_step_"]' in APP_CSS
     assert '[data-testid="stSidebar"] [class*="st-key-sidebar_technical_step_"]' in APP_CSS
     assert "div.stButton > button" in APP_CSS
@@ -145,6 +148,66 @@ def test_technical_deep_location_and_direct_step_navigation():
     at.button(key="sidebar_technical_step_4").click().run()
     assert at.session_state[SESSION_CASE_STEP] == 4
     assert "› 4. メーカー確認" in _visible(at)
+
+
+def _cards(at) -> str:
+    return " ".join(item.value for item in at.markdown)
+
+
+def test_home_keeps_full_brand_header_and_internal_pages_are_compact():
+    home = _cards(_start_app())
+    assert "class='brand-header'" in home
+    assert "brand-header is-compact" not in home
+    assert "height='36'" in home
+
+    for button_key in (
+        "sidebar_nav_technical",
+        "sidebar_nav_quote",
+        "sidebar_nav_activity",
+        "sidebar_admin_price_master",
+    ):
+        at = _start_app()
+        at.button(key=button_key).click().run()
+        html = _cards(at)
+        assert "brand-header is-compact" in html
+        assert "height='26'" in html
+
+
+def test_main_workflow_overview_follows_sidebar_and_keeps_prev_next():
+    at = _start_app()
+    at.button(key="sidebar_nav_quote").click().run()
+    assert _cards(at).count("dt-step-card is-compact") == 5
+    assert not any(
+        (button.key or "").startswith("quote_step_") and (button.key or "")[-1].isdigit()
+        for button in at.button
+    )
+    at.button(key="sidebar_quote_step_2").click().run()
+    assert at.session_state[SESSION_QUOTE_STEP] == 2
+    assert "2 原価・標準売価" in _cards(at).rsplit("dt-step-card is-compact is-current", 1)[-1][:200]
+    from tests.test_price_master_ui import _drop_stale_widgets
+
+    _drop_stale_widgets(at)
+    at.button(key="quote_step_next").click().run()
+    assert at.session_state[SESSION_QUOTE_STEP] == 3
+    assert at.button(key="sidebar_quote_step_3").proto.type == "primary"
+
+    at = _start_app()
+    at.button(key="sidebar_nav_technical").click().run()
+    assert _cards(at).count("dt-step-card is-compact") == 7
+    assert not any(
+        (button.key or "").startswith("technical_case_step_") and (button.key or "")[-1].isdigit()
+        for button in at.button
+    )
+    assert any(button.key == "technical_case_step_next" for button in at.button)
+    at.button(key="sidebar_technical_step_4").click().run()
+    assert at.session_state[SESSION_CASE_STEP] == 4
+    _drop_stale_widgets(at)
+    at.run()
+    assert "4 メーカー確認" in _cards(at).rsplit("dt-step-card is-compact is-current", 1)[-1][:200]
+    _drop_stale_widgets(at)
+    at.button(key="technical_case_step_prev").click().run()
+    assert at.session_state[SESSION_CASE_STEP] == 3
+    assert at.button(key="sidebar_technical_step_3").proto.type == "primary"
 
 
 def test_technical_navigation_stash_restores_inputs_without_database_write():

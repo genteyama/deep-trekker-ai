@@ -12,7 +12,20 @@ def _start_app() -> AppTest:
 
 
 def _open_case_step(at: AppTest, step: int) -> AppTest:
-    at.button(key=f"technical_case_step_{step}").click().run()
+    from tests.test_price_master_ui import _drop_stale_widgets
+
+    _drop_stale_widgets(at)
+    at.button(key=f"sidebar_technical_step_{step}").click().run()
+    _drop_stale_widgets(at)
+    return at
+
+
+def _open_quote_step(at: AppTest, step: int) -> AppTest:
+    from tests.test_price_master_ui import _drop_stale_widgets
+
+    _drop_stale_widgets(at)
+    at.button(key=f"sidebar_quote_step_{step}").click().run()
+    _drop_stale_widgets(at)
     return at
 
 
@@ -74,9 +87,12 @@ def test_home_opens_technical_case_page():
     assert at.title[0].value == "営業・技術受付AI"
     assert "Technical Case Agent" in [caption.value for caption in at.caption]
     assert "まだ解析結果はありません" in [text.value for text in at.text]
-    assert any(button.key == "technical_case_step_1" for button in at.button)
-    assert any(button.key == "technical_case_step_7" for button in at.button)
-    assert any("1 受付" in (button.label or "") for button in at.button)
+    assert not any(button.key == "technical_case_step_1" for button in at.button)
+    assert not any(button.key == "technical_case_step_7" for button in at.button)
+    assert any(button.key == "sidebar_technical_step_1" for button in at.button)
+    assert any(button.key == "sidebar_technical_step_7" for button in at.button)
+    assert any(button.key == "technical_case_step_next" for button in at.button)
+    assert "1 受付" in " ".join(item.value for item in at.markdown)
     assert any("AI Provider" in (expander.label or "") for expander in at.expander)
 
 
@@ -108,11 +124,17 @@ def test_home_opens_quote_control_page():
 
     assert at.title[0].value == "見積・価格管理AI"
     assert "Quote & Price Control Agent" in caption_text
-    assert any("1 構成確認" in (button.label or "") for button in at.button)
-    assert any("2 原価・標準売価" in (button.label or "") for button in at.button)
-    assert any("3 顧客向け見積" in (button.label or "") for button in at.button)
-    assert any("4 レビュー・承認" in (button.label or "") for button in at.button)
-    assert any("5 帳票出力" in (button.label or "") for button in at.button)
+    joined = " ".join(visible_text)
+    assert "1 構成確認" in joined
+    assert "2 原価・標準売価" in joined
+    assert "3 顧客向け見積" in joined
+    assert "4 レビュー・承認" in joined
+    assert "5 帳票出力" in joined
+    assert "dt-step-card is-compact" in joined
+    assert not any((button.key or "").startswith("quote_step_") and (button.key or "")[-1].isdigit() for button in at.button)
+    assert any(button.key == "sidebar_quote_step_1" for button in at.button)
+    assert any(button.key == "sidebar_quote_step_5" for button in at.button)
+    assert any(button.key == "quote_step_next" for button in at.button)
     assert "見積ドラフト作成" in [item.value for item in at.subheader] + visible_text
     assert "最近の下書き" in " ".join(visible_text + caption_text)
     assert any(button.label == "IHI PHOTON 見積ドラフト" for button in at.button)
@@ -580,14 +602,14 @@ def test_quote_workspace_shows_only_selected_step_and_keeps_draft():
     assert not any(getattr(item, "key", None) == "export_spaceone_xlsx" for item in at.button)
     assert not any(getattr(item, "key", None) == "approve_quote_snapshot" for item in at.button)
 
-    at.button(key="quote_step_3").click().run()
+    _open_quote_step(at, 3)
     assert at.session_state["quote_workspace_step"] == 3
     assert at.session_state["quote_draft"].quote_draft_id == draft_id
     visible = " ".join([item.value for item in at.text] + [item.value for item in at.markdown])
     assert "PHOTON" in visible or "DeepTrekker" in visible
     assert not any(getattr(item, "key", None) == keys["issue"] for item in at.date_input)
 
-    at.button(key="quote_step_4").click().run()
+    _open_quote_step(at, 4)
     at.checkbox(key="confirm_configuration").set_value(True).run()
     at.session_state[keys["issue"]]  # widget exists
     assert at.session_state["confirm_configuration"] is True
@@ -597,11 +619,11 @@ def test_quote_workspace_shows_only_selected_step_and_keeps_draft():
     apply_ihi_photon_human_final_fixture(at.session_state["quote_draft"])
     at.session_state[keys["pending"]] = True
     at.run()
-    at.button(key="quote_step_1").click().run()
+    _open_quote_step(at, 1)
     assert at.session_state["quote_draft"].issue_date == "2026-09-26"
     assert at.session_state["quote_draft"].total_jpy == 7876000
     assert at.session_state["quote_persist_confirm_configuration"] is True
-    at.button(key="quote_step_4").click().run()
+    _open_quote_step(at, 4)
     assert at.session_state["quote_draft"].issue_date == "2026-09-26"
     assert at.session_state["confirm_configuration"] is True
     assert at.session_state[keys["issue"]].isoformat() == "2026-09-26"
@@ -713,10 +735,10 @@ def test_pending_form_values_resume_without_applying_or_widget_exception():
     assert not at.exception
     at.text_input(key=manual_price_widget_key(base.line_id)).set_value("3540000").run()
     at.text_input(key="input_draft_shipping_price").set_value("870000").run()
-    at.button(key="quote_step_3").click().run()
+    _open_quote_step(at, 3)
     at.text_input(key="input_draft_tax_rate").set_value("0.10").run()
     at.text_area(key=customer_description_widget_key(customer.customer_quote_line_id)).set_value("途中の説明").run()
-    at.button(key="quote_step_4").click().run()
+    _open_quote_step(at, 4)
     at.multiselect(key="input_selected_remarks").set_value([remark]).run()
     at.date_input(key=keys["issue"]).set_value(date(2026, 9, 27)).run()
     at.checkbox(key=keys["auto"]).set_value(True).run()
@@ -744,16 +766,16 @@ def test_pending_form_values_resume_without_applying_or_widget_exception():
     resume.click().run()
     assert not resumed.exception
     assert resumed.session_state["quote_draft"].quote_draft_id == draft.quote_draft_id
-    resumed.button(key="quote_step_2").click().run()
+    _open_quote_step(resumed, 2)
     assert not resumed.exception
     assert resumed.session_state[manual_price_widget_key(base.line_id)] == "3540000"
     assert resumed.session_state["input_draft_shipping_price"] == "870000"
     assert resumed.session_state["quote_draft"].configuration_lines[0].final_sales_price_jpy == official_base
-    resumed.button(key="quote_step_3").click().run()
+    _open_quote_step(resumed, 3)
     assert not resumed.exception
     assert resumed.session_state["input_draft_tax_rate"] == "0.10"
     assert resumed.session_state[customer_description_widget_key(customer.customer_quote_line_id)] == "途中の説明"
-    resumed.button(key="quote_step_4").click().run()
+    _open_quote_step(resumed, 4)
     assert not resumed.exception
     assert remark in resumed.session_state["input_selected_remarks"]
     assert resumed.session_state[keys["issue"]] == date(2026, 9, 27)
@@ -788,7 +810,7 @@ def test_export_inputs_resume_without_changing_snapshot():
     resume.click().run()
     assert not at.exception
     if at.session_state["quote_workspace_step"] != 5:
-        at.button(key="quote_step_5").click().run()
+        _open_quote_step(at, 5)
     assert not at.exception
     assert at.session_state["input_official_quote_number"] == "8195"
     assert at.session_state["input_export_generated_by"] == "Gen Oteyama"

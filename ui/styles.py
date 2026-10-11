@@ -118,6 +118,21 @@ APP_CSS = """
         display: block;
         flex-shrink: 0;
     }
+    .brand-header.is-compact {
+        gap: 12px 16px;
+        min-height: 52px;
+        padding: 10px 16px;
+        margin-bottom: 6px;
+    }
+    .brand-header.is-compact .brand-logos-left,
+    .brand-header.is-compact .brand-logos-right {
+        gap: 14px;
+        min-height: 26px;
+    }
+    .brand-header.is-compact img {
+        height: 26px;
+        max-height: 26px;
+    }
     [data-testid="stMarkdownContainer"]:has(.brand-header),
     [data-testid="stMarkdownContainer"]:has(.brand-header) p,
     [data-testid="stElementContainer"]:has(.brand-header),
@@ -284,6 +299,14 @@ APP_CSS = """
     .dt-step-card.is-current {
         border: 2px solid var(--dt-navy);
         background: var(--dt-bg-soft);
+    }
+    .dt-step-card.is-compact {
+        min-height: 68px;
+        padding: 6px 10px;
+        margin-bottom: 4px;
+    }
+    .dt-step-card.is-compact .dt-step-card-top {
+        margin-bottom: 4px;
     }
     .dt-step-card-top {
         display: flex;
