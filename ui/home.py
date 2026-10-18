@@ -40,7 +40,9 @@ def render_home(texts: dict) -> None:
         summary_items=_hero_summary_items(portal, tech_open, quote_open, in_progress),
     )
 
-    work_column, side_column = st.columns([2, 1], gap="medium")
+    # Keyed wrappers let the CSS stack the side panels under the list on narrower screens.
+    with st.container(key="home_layout"):
+        work_column, side_column = st.columns([2, 1], gap="medium")
     with work_column:
         with st.container(border=True, key="home_work_panel"):
             render_portal_section_title(portal.get("recent_work_label", "進行中の案件"))
@@ -51,8 +53,9 @@ def render_home(texts: dict) -> None:
             for item in items:
                 _render_recent_work_item(item, portal, quote_page, texts)
     with side_column:
-        _render_next_actions(in_progress, portal, quote_page)
-        _render_price_master_status(portal, texts)
+        with st.container(key="home_side"):
+            _render_next_actions(in_progress, portal, quote_page)
+            _render_price_master_status(portal, texts)
 
 
 def _work_summary_items(portal: dict, tech_open: int, quote_open: int) -> list[tuple[str, str]]:

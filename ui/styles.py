@@ -340,6 +340,8 @@ APP_CSS = """
         flex-wrap: wrap;
         align-items: center;
         gap: 12px 20px;
+        max-width: 100%;
+        box-sizing: border-box;
         background: var(--dt-white);
         border-radius: 12px;
         padding: 10px 18px;
@@ -439,6 +441,30 @@ APP_CSS = """
     }
     .home-master-state.is-unset { color: var(--dt-yellow-text); font-weight: 700; }
     .home-master-state.is-unset::before { background: var(--dt-yellow); }
+    .home-row-stage span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    @media (max-width: 1280px) {
+        .st-key-home_layout > * > [data-testid="stHorizontalBlock"] { flex-wrap: wrap; }
+        .st-key-home_layout > * > [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
+            flex: 1 1 100% !important;
+            width: 100% !important;
+            min-width: 100% !important;
+        }
+        .st-key-home_side {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 16px;
+            align-items: start;
+        }
+    }
+    @media (max-width: 1000px) {
+        [class*="st-key-home_row_"] [data-testid="stHorizontalBlock"] { flex-wrap: wrap; row-gap: 8px; }
+        [class*="st-key-home_row_"] [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:nth-child(1) { flex: 1 1 55% !important; min-width: 0 !important; }
+        [class*="st-key-home_row_"] [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:nth-child(3) { flex: 1 1 35% !important; min-width: 160px !important; }
+        [class*="st-key-home_row_"] [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:nth-child(2) { order: 3; flex: 1 1 100% !important; }
+        .home-hero-logos { gap: 10px 14px; padding: 10px 14px; }
+        .home-hero-logos img { height: 15px !important; }
+        [class*="st-key-home_row_"] .home-row-status { margin-top: 10px; }
+    }
     .summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 8px 0 14px 0; }
     .summary-card { min-height: 72px; padding: 10px 12px; }
     .summary-card .label { font-size: 13px; color: var(--dt-muted); margin-bottom: 4px; }
