@@ -101,6 +101,9 @@ logger = logging.getLogger(__name__)
 
 
 def render_quote_workspace(page: dict, helpers: dict) -> None:
+    from ui.quote_handoff import apply_pending_quote_handoff
+
+    apply_pending_quote_handoff(st.session_state)
     restore_review_widget_state(st.session_state)
     restore_pending_form_widgets(st.session_state, st.session_state.get("quote_draft"))
     draft = st.session_state.get("quote_draft")
@@ -259,6 +262,7 @@ def _render_general_quote_entry(page: dict, helpers: dict) -> None:
     with st.container(border=True):
         st.markdown(f"**{workspace['general_entry_title']}**")
         st.caption(workspace["general_entry_caption"])
+        _render_case_handoff_banner(workspace)
         customer = st.text_input(workspace["general_customer_label"], key="generic_quote_customer")
         title = st.text_input(workspace["general_title_label"], key="generic_quote_title")
         st.markdown(f"**{workspace['general_lines_label']}**")
@@ -317,6 +321,11 @@ def _render_general_quote_entry(page: dict, helpers: dict) -> None:
                 international_shipping_usd=international,
                 domestic_shipping_jpy=domestic,
             )
+        if st.session_state.pop("_clear_quote_handoff", False):
+            from ui.quote_handoff import clear_quote_handoff_source
+
+            clear_quote_handoff_source(st.session_state)
+            st.rerun()
 
 
 def _create_general_draft(page: dict, helpers: dict, **inputs) -> None:
@@ -333,12 +342,39 @@ def _create_general_draft(page: dict, helpers: dict, **inputs) -> None:
         logger.exception("general_quote_entry_failed")
         st.error(workspace["general_errors"]["UNEXPECTED"])
         return
+    from ui.quote_handoff import clear_quote_handoff_source
+
     st.session_state["quote_draft"] = draft
     helpers["init_date_widgets"](draft, overwrite=True)
     st.session_state[SESSION_QUOTE_STEP] = 1
     reset_pending_form(st.session_state, 1)
     _save_draft(page, draft, manual=True, from_widgets=False)
+    if not st.session_state.get(SESSION_SAVE_ERROR):
+        clear_quote_handoff_source(st.session_state)
     st.rerun()
+
+
+def _render_case_handoff_banner(workspace: dict) -> None:
+    from ui.quote_handoff import SOURCE_CASE_ID, SOURCE_PRODUCTS
+
+    case_id = st.session_state.get(SOURCE_CASE_ID)
+    if not case_id:
+        return
+    products = [str(item) for item in (st.session_state.get(SOURCE_PRODUCTS) or []) if str(item).strip()]
+    st.markdown(f"**{workspace.get('handoff_heading', '営業・技術案件から引き継ぎ')}**")
+    st.write(workspace.get("handoff_case_id", "案件ID：{case_id}").format(case_id=case_id))
+    if products:
+        st.write(workspace.get("handoff_products_label", "対象製品："))
+        for item in products:
+            st.write(f"- {item}")
+    st.caption(
+        workspace.get(
+            "handoff_products_caption",
+            "対象製品は営業・技術案件から引き継いだ参考情報です。正式SKUは価格マスターを確認して入力してください。",
+        )
+    )
+    if st.button(workspace.get("handoff_clear_button", "引き継ぎを解除"), key="clear_technical_case_quote_handoff"):
+        st.session_state["_clear_quote_handoff"] = True
 
 
 def _render_spectra_quote_entry(page: dict, helpers: dict) -> None:

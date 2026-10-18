@@ -301,6 +301,10 @@
       "gemini_missing_api_key": "Gemini APIキーが設定されていません",
       "provider_status_label": "AI Provider（開発・管理）",
       "dev_settings_label": "開発・管理設定（AI Provider）",
+      "quote_handoff_heading": "見積作成",
+      "quote_handoff_button": "この案件から見積を作成",
+      "quote_handoff_unsaved": "案件を保存すると見積を作成できます",
+      "quote_handoff_saved_caption": "保存済みの案件情報を見積へ引き継ぎます。",
       "workflow": {
         "step_intake": "受付",
         "step_requirements": "要件整理",
@@ -898,6 +902,11 @@
         "general_international_shipping_label": "国際送料（USD・未確定なら空欄）",
         "general_domestic_shipping_label": "国内送料（円・未確定なら空欄）",
         "general_create_button": "一般見積ドラフトを作成",
+        "handoff_heading": "営業・技術案件から引き継ぎ",
+        "handoff_case_id": "案件ID：{case_id}",
+        "handoff_products_label": "対象製品：",
+        "handoff_products_caption": "対象製品は営業・技術案件から引き継いだ参考情報です。正式SKUは価格マスターを確認して入力してください。",
+        "handoff_clear_button": "引き継ぎを解除",
         "golden_samples_label": "検証用・固定サンプル",
         "general_errors": {
           "CUSTOMER_REQUIRED": "顧客名を入力してください。",

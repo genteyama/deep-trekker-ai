@@ -301,6 +301,10 @@
       "gemini_missing_api_key": "Gemini API key is not configured",
       "provider_status_label": "AI Provider (development)",
       "dev_settings_label": "Development settings (AI Provider)",
+      "quote_handoff_heading": "Create quote",
+      "quote_handoff_button": "Create a quote from this case",
+      "quote_handoff_unsaved": "Save the case to create a quote",
+      "quote_handoff_saved_caption": "The saved case is carried into the quote.",
       "workflow": {
         "step_intake": "Intake",
         "step_requirements": "Requirements",
@@ -898,6 +902,11 @@
         "general_international_shipping_label": "International shipping (USD; leave blank if pending)",
         "general_domestic_shipping_label": "Domestic shipping (JPY; leave blank if pending)",
         "general_create_button": "Create general quote draft",
+        "handoff_heading": "Carried from a technical case",
+        "handoff_case_id": "Case ID: {case_id}",
+        "handoff_products_label": "Requested products:",
+        "handoff_products_caption": "Requested products are reference information from the technical case. Enter an official SKU from the price master.",
+        "handoff_clear_button": "Clear handoff",
         "golden_samples_label": "Fixed samples for verification",
         "general_errors": {
           "CUSTOMER_REQUIRED": "Enter a customer name.",

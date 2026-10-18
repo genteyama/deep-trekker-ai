@@ -356,6 +356,35 @@ def _related_quote_label(draft) -> str:
     return name
 
 
+def _render_quote_handoff(_texts: dict, page: dict, record) -> None:
+    from ui.navigation import (
+        PAGE_QUOTE_CONTROL,
+        PAGE_TECHNICAL_CASE,
+        SESSION_NAVIGATION_RESTORE_PAGE,
+        set_current_page,
+        stash_navigation_state,
+    )
+    from ui.quote_handoff import handoff_allowed, stage_quote_handoff
+
+    if record is None:
+        st.markdown(f"**{page.get('quote_handoff_heading', '見積作成')}**")
+        st.caption(page.get("quote_handoff_unsaved", "案件を保存すると見積を作成できます"))
+        return
+    if not handoff_allowed(record):
+        return
+    st.markdown(f"**{page.get('quote_handoff_heading', '見積作成')}**")
+    st.caption(page.get("quote_handoff_saved_caption", "保存済みの案件情報を見積へ引き継ぎます。"))
+    if st.button(
+        page.get("quote_handoff_button", "この案件から見積を作成"),
+        key="create_quote_from_technical_case",
+    ):
+        stage_quote_handoff(st.session_state, record)
+        stash_navigation_state(st.session_state, PAGE_TECHNICAL_CASE)
+        st.session_state[SESSION_NAVIGATION_RESTORE_PAGE] = PAGE_QUOTE_CONTROL
+        set_current_page(PAGE_QUOTE_CONTROL)
+        st.rerun()
+
+
 def _render_related_quotes(page: dict, record) -> None:
     if record is None:
         return
@@ -495,6 +524,7 @@ def _render_record_context(texts: dict, page: dict, record) -> None:
         rows.append(parent_row)
     render_side_card("案件情報", rows)
     _render_related_quotes(page, record)
+    _render_quote_handoff(texts, page, record)
     if record is None:
         return
     parent = get_technical_case_repository().get_case(record.parent_case_id) if record.parent_case_id else None

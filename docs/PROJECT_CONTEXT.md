@@ -139,9 +139,17 @@ PROJECT_CONTEXT とコードが矛盾した場合は、原則コード / Git を
 
 ### QUOTE-1B
 
-- Next。Technical Case → General Quote handoff。
-- Technical Case の「この案件から見積を作成」で General Quote Entry へ遷移する。
-- customer、case title、case_id、requested product information を安全に引き継ぐ。
+- 開始。Technical Case → General Quote handoff。
+- 保存済み ACTIVE 案件だけが引き継ぎ対象。
+- customer を prefill する。
+- title を prefill する。
+- case_id を relation として保持する。
+- requested_products は参考表示のみ。
+- SKU の自動推測はしない。
+- Navigation だけでは DB へ書き込まない。
+- General Quote の exact SKU validation が Source of Truth。
+- 関連見積は既存の case_id relation で表示する。
+- schema は変更しない。
 
 ### v1.2 Phase A: Manufacturer Online Price Master Sync
 

@@ -1302,6 +1302,8 @@ def _build_general_draft_from_ui(
                 version=active.record.import_id,
             )
         )
+    from ui.quote_handoff import source_case_id
+
     return create_general_quote_draft(
         customer=customer,
         title=title,
@@ -1312,6 +1314,7 @@ def _build_general_draft_from_ui(
         sales_candidates=_sales_candidates_for_rate(rate, books=books),
         exchange_rate_source=new_quote_exchange_rate_source(st.session_state),
         tax_rate=_optional_float(st.session_state.get("input_draft_tax_rate")),
+        case_id=source_case_id(st.session_state),
     )
 
 

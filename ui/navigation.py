@@ -34,6 +34,8 @@ _QUOTE_PRE_DRAFT_STASH_KEYS = (
     "generic_quote_lines",
     "generic_quote_international_shipping",
     "generic_quote_domestic_shipping",
+    "generic_quote_source_case_id",
+    "generic_quote_source_products",
 )
 
 
