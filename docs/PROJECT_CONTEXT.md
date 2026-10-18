@@ -139,17 +139,46 @@ PROJECT_CONTEXT とコードが矛盾した場合は、原則コード / Git を
 
 ### QUOTE-1B
 
-- 開始。Technical Case → General Quote handoff。
-- 保存済み ACTIVE 案件だけが引き継ぎ対象。
-- customer を prefill する。
-- title を prefill する。
-- case_id を relation として保持する。
+- COMPLETE
+- Technical Case → General Quote handoff 完成。
+- 保存済み ACTIVE 案件のみ対象。
+- customer prefill。
+- case title prefill。
+- case_id relation を保持。
 - requested_products は参考表示のみ。
-- SKU の自動推測はしない。
-- Navigation だけでは DB へ書き込まない。
-- General Quote の exact SKU validation が Source of Truth。
-- 関連見積は既存の case_id relation で表示する。
-- schema は変更しない。
+- SKU 自動推測なし。
+- fuzzy matching なし。
+- AI 補完なし。
+- General Quote Exact SKU validation を維持。
+- Navigation のみでは DB write なし。
+- failed create でも handoff state を維持。
+- handoff 解除可能。
+- temporary staging state は消費後に cleanup。
+- CLOSED / archive / trash safety を維持。
+- DB / schema / relation table は変更しない。
+- standalone General Quote を維持。
+- SPECTRA を維持。
+- IHI Golden Case を維持。
+- Production smoke PASS。
+  - 保存済み ACTIVE Technical Case に「この案件から見積を作成」を表示。
+  - Quote page へ正常遷移。
+  - customer: `TEST CUSTOMER`。
+  - title: `Persistence動作確認`。
+  - source case: `CASE-CBEF9BFE0061`。
+  - requested_products: `PipeTrekker`。
+  - SKU 欄は空欄。requested_products から SKU を自動入力しない。
+  - `NOT-A-SKU` は `SKU_NOT_FOUND` で fail closed PASS。
+  - failed create 後も customer / title / handoff / SKU 入力を維持。
+  - SKU `2500-1` exact match PASS。DT40 official manufacturer snapshot 取得。General Quote Draft 作成 PASS。
+  - Technical Case へ戻ると関連見積 1件、`Persistence動作確認 v1` を確認。
+  - case_id relation Production PASS。
+- 最終Production baseline: `0a7d44927687aad46a900fad395127ab558c675a`
+
+Next:
+
+- 次 Phase はまだ実装開始しない。
+- 問い合わせ受付 → 技術整理 → メーカー確認 → 顧客回答 → 見積作成 → 価格確認 → 顧客向け見積 → 承認 → 履歴、が一本化されている。
+- 次の開発テーマは業務削減効果を基準に再評価して決める。
 
 ### v1.2 Phase A: Manufacturer Online Price Master Sync
 
