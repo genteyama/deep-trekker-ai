@@ -153,7 +153,7 @@ def apply_quote_lifecycle(draft, action: str, *, relation_type: Optional[str] = 
     return draft
 
 
-def render_case_actions_menu(page: dict, texts: dict, record) -> Optional[str]:
+def render_case_actions_menu(page: dict, texts: dict, record, *, layout: str = "horizontal") -> Optional[str]:
     labels = lifecycle_texts(texts)
     if record is None:
         st.caption(labels.get("save_first", "保存済み案件に対して複製・アーカイブできます。"))
@@ -172,15 +172,15 @@ def render_case_actions_menu(page: dict, texts: dict, record) -> Optional[str]:
         if result == "cancel":
             st.session_state["case_lifecycle_confirm"] = None
             return None
-    cols = st.columns(4)
-    if cols[0].button(labels.get("duplicate", "複製"), key="duplicate_technical_case", type="secondary"):
+    hosts = [st] * 4 if layout == "vertical" else list(st.columns(4))
+    if hosts[0].button(labels.get("duplicate", "複製"), key="duplicate_technical_case", type="secondary"):
         return "duplicate"
-    if cols[1].button(labels.get("derive_case", "派生案件を作成"), key="derive_technical_case", type="secondary"):
+    if hosts[1].button(labels.get("derive_case", "派生案件を作成"), key="derive_technical_case", type="secondary"):
         st.session_state["case_lifecycle_derive"] = True
-    if cols[2].button(labels.get("archive", "アーカイブ"), key="archive_technical_case", type="secondary"):
+    if hosts[2].button(labels.get("archive", "アーカイブ"), key="archive_technical_case", type="secondary"):
         st.session_state["case_lifecycle_confirm"] = "archive"
         st.rerun()
-    if cols[3].button(labels.get("trash", "ゴミ箱へ移動"), key="trash_technical_case", type="secondary"):
+    if hosts[3].button(labels.get("trash", "ゴミ箱へ移動"), key="trash_technical_case", type="secondary"):
         st.session_state["case_lifecycle_confirm"] = "trash"
         st.rerun()
     if record.archived_at or record.deleted_at:

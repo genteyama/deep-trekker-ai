@@ -345,7 +345,6 @@ def _render_step_complete(texts: dict, page: dict, summary, workflow) -> None:
         )
         st.session_state[SESSION_CASE_STEP] = 7
         st.rerun()
-    _render_case_lifecycle(texts, page)
 
 
 def _related_quote_label(draft) -> str:
@@ -599,6 +598,7 @@ def _render_business_lifecycle(texts: dict, page: dict, record) -> None:
     form_open = bool(st.session_state.get("technical_case_close_form"))
     with st.expander(labels.get("record_manage_label", "案件管理"), expanded=form_open):
         _render_close_case_form(labels, repo, record)
+        _render_case_lifecycle(texts, page, layout="vertical")
 
 
 def _render_close_case_form(labels: dict, repo, record) -> None:
@@ -670,10 +670,10 @@ def _current_record():
     return get_technical_case_repository().get_case(saved_id)
 
 
-def _render_case_lifecycle(texts: dict, page: dict) -> None:
+def _render_case_lifecycle(texts: dict, page: dict, *, layout: str = "horizontal") -> None:
     repo = get_technical_case_repository()
     record = _current_record()
-    action = render_case_actions_menu(page, texts, record)
+    action = render_case_actions_menu(page, texts, record, layout=layout)
     if action and record is not None:
         relation = st.session_state.pop("case_derive_relation", None)
         updated = apply_case_lifecycle(record, repo, action, relation_type=relation)

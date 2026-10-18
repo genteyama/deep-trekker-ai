@@ -180,6 +180,14 @@ Next:
 - 問い合わせ受付 → 技術整理 → メーカー確認 → 顧客回答 → 見積作成 → 価格確認 → 顧客向け見積 → 承認 → 履歴、が一本化されている。
 - 次の開発テーマは業務削減効果を基準に再評価して決める。
 
+### PILOT-0A
+
+- Pilot preparation中に発見した Technical Case ACTIVE lifecycle action regression を修正。
+- 保存済み ACTIVE 案件の Right Rail「案件管理」から、案件終了、複製、派生案件、アーカイブ、ゴミ箱へ移動を再び使える。
+- 案件終了とゴミ箱へ移動は別操作。ACTIVE のまま soft-delete できる。
+- CLOSED の終了情報と再開、archive / trash 後の復元は維持。
+- Quote lifecycle と QUOTE-1B の COMPLETE 状態は変更しない。
+
 ### v1.2 Phase A: Manufacturer Online Price Master Sync
 
 オンラインのメーカー価格表は、見積計算に直接使わない。
