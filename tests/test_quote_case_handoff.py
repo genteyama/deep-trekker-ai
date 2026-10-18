@@ -6,11 +6,25 @@ from tests.test_price_master_ui import _drop_stale_widgets, _open_quote_page
 from tests.test_quote_general_ui import _activate, _line_id
 from ui.navigation import PAGE_QUOTE_CONTROL, restore_navigation_state, stash_navigation_state
 from ui.quote_handoff import (
+    SESSION_QUOTE_HANDOFF_CASE_ID,
+    SESSION_QUOTE_HANDOFF_CUSTOMER,
+    SESSION_QUOTE_HANDOFF_PENDING,
+    SESSION_QUOTE_HANDOFF_PRODUCTS,
+    SESSION_QUOTE_HANDOFF_TITLE,
     SOURCE_CASE_ID,
     SOURCE_PRODUCTS,
     apply_pending_quote_handoff,
+    clear_quote_handoff_source,
     handoff_allowed,
     stage_quote_handoff,
+)
+
+_STAGED_HANDOFF_KEYS = (
+    SESSION_QUOTE_HANDOFF_PENDING,
+    SESSION_QUOTE_HANDOFF_CASE_ID,
+    SESSION_QUOTE_HANDOFF_CUSTOMER,
+    SESSION_QUOTE_HANDOFF_TITLE,
+    SESSION_QUOTE_HANDOFF_PRODUCTS,
 )
 
 
@@ -180,7 +194,29 @@ def test_apply_pending_handoff_runs_after_navigation_restore():
     assert session[SOURCE_PRODUCTS] == ["MAG", "PipeTrekker"]
     assert session["generic_quote_lines"][0]["sku"] == ""
     assert "quote_draft" not in session
-    assert "quote_handoff_pending" not in session
+    assert all(key not in session for key in _STAGED_HANDOFF_KEYS)
+
+
+def test_clearing_the_source_also_drops_staged_handoff_keys():
+    session = {
+        "generic_quote_customer": "株式会社ABC",
+        "generic_quote_title": "設備調査",
+        SOURCE_CASE_ID: "CASE-UNIT",
+        SOURCE_PRODUCTS: ["MAG"],
+        SESSION_QUOTE_HANDOFF_PENDING: True,
+        SESSION_QUOTE_HANDOFF_CASE_ID: "CASE-UNIT",
+        SESSION_QUOTE_HANDOFF_CUSTOMER: "株式会社ABC",
+        SESSION_QUOTE_HANDOFF_TITLE: "設備調査",
+        SESSION_QUOTE_HANDOFF_PRODUCTS: ["MAG"],
+    }
+
+    clear_quote_handoff_source(session)
+
+    assert SOURCE_CASE_ID not in session
+    assert SOURCE_PRODUCTS not in session
+    assert all(key not in session for key in _STAGED_HANDOFF_KEYS)
+    assert session["generic_quote_customer"] == "株式会社ABC"
+    assert session["generic_quote_title"] == "設備調査"
 
 
 def test_user_can_edit_customer_and_title_while_case_id_stays():
@@ -201,6 +237,7 @@ def test_user_can_edit_customer_and_title_while_case_id_stays():
     stored = at.session_state["quote_repository"].get_draft(draft.quote_draft_id)
     assert stored.draft.case_id == "CASE-100"
     assert SOURCE_CASE_ID not in at.session_state
+    assert all(key not in at.session_state for key in _STAGED_HANDOFF_KEYS)
 
     from agents.activity_catalog import load_related_quotes
 
@@ -255,6 +292,8 @@ def test_clearing_handoff_drops_case_id_and_keeps_the_inputs():
     _keep_latest_widgets(at)
 
     assert SOURCE_CASE_ID not in at.session_state
+    assert SOURCE_PRODUCTS not in at.session_state
+    assert all(key not in at.session_state for key in _STAGED_HANDOFF_KEYS)
     assert "営業・技術案件から引き継ぎ" not in _visible(at)
     assert at.text_input(key="generic_quote_customer").value == "株式会社ABC"
     assert at.text_input(key="generic_quote_title").value == "設備調査"

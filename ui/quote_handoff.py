@@ -57,16 +57,25 @@ def apply_pending_quote_handoff(session) -> None:
     if isinstance(conflict, dict) and conflict.get("kind") == "quote":
         session.pop("edit_conflict", None)
     session[SESSION_QUOTE_STEP] = 1
-    session.pop(SESSION_QUOTE_HANDOFF_PENDING, None)
+    _clear_staged_handoff(session)
 
 
 def clear_quote_handoff_source(session) -> None:
     """Drop the case relation. Customer and title inputs stay as entered."""
     session.pop(SOURCE_CASE_ID, None)
     session.pop(SOURCE_PRODUCTS, None)
-    session.pop(SESSION_QUOTE_HANDOFF_PENDING, None)
-    session.pop(SESSION_QUOTE_HANDOFF_CASE_ID, None)
-    session.pop(SESSION_QUOTE_HANDOFF_PRODUCTS, None)
+    _clear_staged_handoff(session)
+
+
+def _clear_staged_handoff(session) -> None:
+    for key in (
+        SESSION_QUOTE_HANDOFF_PENDING,
+        SESSION_QUOTE_HANDOFF_CASE_ID,
+        SESSION_QUOTE_HANDOFF_CUSTOMER,
+        SESSION_QUOTE_HANDOFF_TITLE,
+        SESSION_QUOTE_HANDOFF_PRODUCTS,
+    ):
+        session.pop(key, None)
 
 
 def source_case_id(session):
