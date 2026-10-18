@@ -785,6 +785,30 @@ def test_pending_form_values_resume_without_applying_or_widget_exception():
     assert resumed.session_state[persist_key] == resumed.session_state["input_selected_remarks"]
 
 
+def test_generated_export_files_offer_browser_download(tmp_path):
+    from tests.test_quote_approval import _approve, _ready_photon
+
+    pdf = tmp_path / "8238_spaceone_quote.pdf"
+    pdf.write_bytes(b"%PDF-1.4 test")
+    missing = tmp_path / "gone_spaceone_quote.xlsx"
+    draft = _ready_photon()
+    _, snapshot = _approve(draft)
+
+    at = _start_app()
+    at.button(key="sidebar_nav_quote").click().run()
+    at.session_state["quote_draft"] = draft
+    at.session_state["approved_quote_snapshot"] = snapshot
+    at.session_state["quote_export_files"] = [str(pdf), str(pdf), str(missing)]
+    at.session_state["quote_workspace_step"] = 5
+    at.run()
+
+    assert not at.exception
+    downloads = at.get("download_button")
+    assert len(downloads) == 1
+    assert "8238_spaceone_quote.pdf" in downloads[0].proto.label
+    assert any("gone_spaceone_quote.xlsx" in item.value for item in at.caption)
+
+
 def test_export_inputs_resume_without_changing_snapshot():
     from tests.test_quote_approval import _approve, _ready_photon
     from repositories.sqlite_quote_repository import SqliteQuoteRepository

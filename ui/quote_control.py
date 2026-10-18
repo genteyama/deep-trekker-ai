@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Optional
 
 import streamlit as st
@@ -1102,8 +1103,27 @@ def _render_file_export(page: dict, snapshot) -> None:
     if not saved:
         st.text(page["no_export_yet"])
         return
-    for item in saved:
-        st.write(f"{page['export_saved']}: {item}")
+    for index, item in enumerate(dict.fromkeys(saved)):
+        path = Path(item)
+        if not path.is_file():
+            st.caption(f"{page.get('export_file_missing', 'ファイルが見つかりません。再度生成してください')}: {path.name}")
+            continue
+        st.download_button(
+            f"{page.get('export_download_button', 'ダウンロード')}: {path.name}",
+            data=path.read_bytes(),
+            file_name=path.name,
+            mime=_EXPORT_MIME_TYPES.get(path.suffix.lower(), "application/octet-stream"),
+            key=f"export_download_{index}",
+            on_click="ignore",
+        )
+
+
+_EXPORT_MIME_TYPES = {
+    ".pdf": "application/pdf",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".csv": "text/csv",
+    ".tsv": "text/tab-separated-values",
+}
 
 
 def _record_formal_document(snapshot, document_type: str) -> None:

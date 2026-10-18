@@ -743,6 +743,8 @@
       "export_pdf_saved": "PDF generated",
       "export_generated_at_label": "Generated at",
       "no_export_yet": "No files have been generated yet.",
+      "export_download_button": "Download",
+      "export_file_missing": "File not found. Please generate it again",
       "presentation_modes": {
         "UNDECIDED": "Undecided",
         "SEPARATE_LINE": "Separate line",

@@ -743,6 +743,8 @@
       "export_pdf_saved": "✓ PDFを生成しました",
       "export_generated_at_label": "生成日時",
       "no_export_yet": "まだファイルは生成していません。",
+      "export_download_button": "ダウンロード",
+      "export_file_missing": "ファイルが見つかりません。再度生成してください",
       "presentation_modes": {
         "UNDECIDED": "未決定",
         "SEPARATE_LINE": "独立明細",
