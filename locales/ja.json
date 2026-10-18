@@ -55,6 +55,12 @@
     "quick_view_button": "ステータスを確認",
     "quick_view_button_open": "ステータスを確認 ▼",
     "quick_view_button_close": "ステータスを閉じる ▲",
+    "hero_eyebrow": "DEEP TREKKER · PIPETREKKER · SPACEONE",
+    "review_none": "要確認なし",
+    "next_actions_label": "次にやること",
+    "next_actions_empty": "要確認の案件はありません。",
+    "open_short_label": "開く",
+    "price_master_label": "価格マスター",
     "quick_view": {
       "title": "案件ステータス",
       "case_name": "案件名",

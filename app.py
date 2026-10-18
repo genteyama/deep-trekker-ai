@@ -56,7 +56,9 @@ def main() -> None:
     init_navigation()
     current_page = get_current_page()
     restore_navigation_state(st.session_state, current_page)
-    render_brand_header(compact=current_page != PAGE_HOME)
+    if current_page != PAGE_HOME:
+        # HOME shows the brand logos inside its hero instead.
+        render_brand_header(compact=True)
     render_conflict_banner()
 
     if current_page == PAGE_TECHNICAL_CASE:

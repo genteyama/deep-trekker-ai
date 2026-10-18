@@ -164,11 +164,12 @@ def _cards(at) -> str:
     return " ".join(item.value for item in at.markdown)
 
 
-def test_home_keeps_full_brand_header_and_internal_pages_are_compact():
+def test_home_shows_brand_logos_in_hero_and_internal_pages_are_compact():
     home = _cards(_start_app())
-    assert "class='brand-header'" in home
-    assert "brand-header is-compact" not in home
-    assert "height='36'" in home
+    assert "class='home-hero-logos'" in home
+    assert "brand-header" not in home.split("</style>", 1)[1]
+    for alt in ("DeepTrekker", "PipeTrekker", "SpaceOne"):
+        assert f"alt='{alt}' height='18'" in home
 
     for button_key in (
         "sidebar_nav_technical",

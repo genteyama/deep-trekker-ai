@@ -36,6 +36,10 @@ def _logo_img(path: Path, alt: str, height: int = BRAND_LOGO_HEIGHT) -> str:
     )
 
 
+def brand_logos_html(height: int) -> str:
+    return "".join(_logo_img(path, alt, height) for path, alt in BRAND_LOGOS)
+
+
 def render_brand_header(compact: bool = False) -> None:
     height = COMPACT_BRAND_LOGO_HEIGHT if compact else BRAND_LOGO_HEIGHT
     left = "".join(_logo_img(path, alt, height) for path, alt in BRAND_LOGOS_LEFT)

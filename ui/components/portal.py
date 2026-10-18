@@ -11,33 +11,47 @@ from ui.product_assets import product_image_html
 from ui.quote_persistence import apply_ui_state, get_quote_repository
 
 
-def render_home_hero(title: str, description: str, english: str) -> None:
-    st.title(title)
-    parts = [f"<p class='app-subtitle'>{escape(description)}</p>"]
-    if english:
-        parts.append(f"<p class='portal-hero-en'>{escape(english)}</p>")
-    strip = "".join(
-        product_image_html(key, css_class="portal-hero-product")
-        for key in ("PHOTON", "PIPETREKKER", "REVOLUTION")
+def render_home_hero(
+    *,
+    title: str,
+    description: str,
+    eyebrow: str,
+    logos_html: str,
+    summary_label: str,
+    summary_items: list[tuple[str, str, str]],
+) -> None:
+    # summary_items: (label, value, tone) where tone is "", "is-review" or "is-total".
+    cards = "".join(
+        f"<div class='home-summary-card {escape(tone)}'>"
+        f"<div class='home-summary-label'>{escape(label)}</div>"
+        f"<div class='home-summary-value'>{escape(value)}</div>"
+        f"</div>"
+        for label, value, tone in summary_items
     )
-    if strip:
-        parts.append(f"<div class='portal-hero-products'>{strip}</div>")
-    st.markdown(f"<div class='portal-hero'>{''.join(parts)}</div>", unsafe_allow_html=True)
+    sonar = (
+        "<svg class='home-hero-sonar' viewBox='0 0 420 420' fill='none' aria-hidden='true'>"
+        + "".join(f"<circle cx='210' cy='210' r='{radius}'/>" for radius in (60, 110, 160, 208))
+        + "</svg>"
+    )
+    st.markdown(
+        f"<section class='home-hero'>{sonar}"
+        f"<div class='home-hero-top'>"
+        f"<div class='home-hero-identity'>"
+        f"<div class='home-hero-eyebrow'>{escape(eyebrow)}</div>"
+        f"<h1 class='home-hero-title'>{escape(title)}</h1>"
+        f"<p class='home-hero-description'>{escape(description)}</p>"
+        f"</div>"
+        f"<div class='home-hero-logos'>{logos_html}</div>"
+        f"</div>"
+        f"<h3 class='portal-section-title is-on-dark'>{escape(summary_label)}</h3>"
+        f"<div class='home-summary-grid'>{cards}</div>"
+        f"</section>",
+        unsafe_allow_html=True,
+    )
 
 
 def render_portal_section_title(label: str) -> None:
     st.markdown(f"<h3 class='portal-section-title'>{escape(label)}</h3>", unsafe_allow_html=True)
-
-
-def render_home_work_summary(items: list[tuple[str, str]]) -> None:
-    cards = "".join(
-        f"<div class='home-summary-card'>"
-        f"<div class='home-summary-label'>{escape(label)}</div>"
-        f"<div class='home-summary-value'>{escape(value)}</div>"
-        f"</div>"
-        for label, value in items
-    )
-    st.markdown(f"<div class='home-summary-grid'>{cards}</div>", unsafe_allow_html=True)
 
 
 def render_menu_card(

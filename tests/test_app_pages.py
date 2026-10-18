@@ -507,7 +507,7 @@ def test_back_button_returns_to_home():
     at.button(key="sidebar_nav_technical").click().run()
     at.button(key="sidebar_nav_home").click().run()
 
-    assert at.title[0].value == "Deep Trekker 業務支援AI"
+    assert any("home-hero-title'>Deep Trekker 業務支援AI<" in item.value for item in at.markdown)
 
 
 def _quote_date_widget(elements, key):
