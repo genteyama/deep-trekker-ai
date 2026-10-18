@@ -108,19 +108,40 @@ PROJECT_CONTEXT とコードが矛盾した場合は、原則コード / Git を
 
 ### QUOTE-1A
 
-- 開始。General Deep Trekker / PipeTrekker Quote Entry。
+- COMPLETE
+- General Deep Trekker / PipeTrekker Quote Entry 完成。
 - 任意の顧客名 / 案件名。
 - 複数SKUを完全一致で1見積へ入れる。
 - DT40 / PT30 の Active Manufacturer Master のみ。
-- 既存 Pricing Policy。
+- exact SKU only。
+- unknown / conflict / obsolete / dealer price missing は fail closed。
+- `case_id` は任意。次Phaseの Technical Case 引き継ぎに使える。
+- Active QUOTE_CALC を使用。
+- SO_MASTER の Pricing Policy を使用。
+- shipping 未確定は推測せず review required。
 - 既存の5工程見積ワークフローへ接続。
-- fuzzy SKU は使わない。
-- メーカー価格が無いSKUは fail closed。
-- `case_id` は次Phase用の任意引数。UIからは渡さない。
-- DB変更なし。
+- autosave / approval / export は維持。
+- IHI Golden Case は維持。
+- SPECTRA Entry は維持。
+- Header の要確認件数は `WorkSummary.review_required` に統一。
+- DB / repository / QuoteDraft schema は変更しない。
 - Production smoke PASS。
-- Header review count consistency fix completed。進捗と Summary Card の要確認件数は WorkSummary.review_required に統一。
-- Next: QUOTE-1B Technical Case → General Quote handoff。
+  - General Quote Form 表示。
+  - customer / title 入力。
+  - SKU `9701-MAG-4K` exact match。Qty 1。
+  - DT40 official manufacturer price snapshot 取得。
+  - Step 1 configuration PASS。Step 2 costing PASS。
+  - 標準売価候補 ¥6,237,000。標準売価候補を案件売価へ適用 PASS。
+  - Step 3 customer quote PASS。internal cost / dealer price は customer view に出ない。
+  - Step 4 approval fail-closed PASS。unresolved shipping / tax / margin / lead time を明示。
+  - Header review count 6件と warning list 6件が一致。
+- 最終Production baseline: `8596f2af114f66be4f7f73936adcd53b64cc3586`
+
+### QUOTE-1B
+
+- Next。Technical Case → General Quote handoff。
+- Technical Case の「この案件から見積を作成」で General Quote Entry へ遷移する。
+- customer、case title、case_id、requested product information を安全に引き継ぐ。
 
 ### v1.2 Phase A: Manufacturer Online Price Master Sync
 
