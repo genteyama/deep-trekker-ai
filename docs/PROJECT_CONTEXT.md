@@ -28,9 +28,13 @@ Last updated: 2026-10-09（v1.1.0 baseline `1512f22`。Phase A〜A.4 の commit 
 PROJECT_CONTEXT とコードが矛盾した場合は、原則コード / Git を優先する。
 ただし業務上の安全要件・禁止事項（→ 14章）は別途確認する。
 
+Production code baseline: `71cbeede7ce966ac1187d51a3e3ef489bbdd514e`（tag `v1.5.1`）。
+Runtime configurationのSecrets値自体はGitへ保存しない。
+
 ## 3. Current Status
 
-- 現在 Phase: **Phase B — Business Case Close / Reopen + Status Quick View**
+- 現在: **v1.5.1 Production GO**。Deep Trekker AI Production MVP COMPLETE。Pilot operation開始可能。
+- Production code baseline: `71cbeede7ce966ac1187d51a3e3ef489bbdd514e`（tag `v1.5.1`）
 - v1.1.0 Online Multi-device MVP: **完成済み**。main baseline `1512f22112deff7f6d4b2512c273e5a2dac24ff9`（tag `v1.1.0`）
 - 旧記載の HEAD `e746ca9` はそれ以前の checkpoint。この文書とコードが矛盾する場合は Git / current code を優先
 - full pytest: 894 passed（`pytest -q`、2026-10-11 QUOTE-1A）
@@ -176,9 +180,9 @@ PROJECT_CONTEXT とコードが矛盾した場合は、原則コード / Git を
 
 Next:
 
-- 次 Phase はまだ実装開始しない。
+- v1.5.1 Production GO。今後は実業務で使用する。
 - 問い合わせ受付 → 技術整理 → メーカー確認 → 顧客回答 → 見積作成 → 価格確認 → 顧客向け見積 → 承認 → 履歴、が一本化されている。
-- 次の開発テーマは業務削減効果を基準に再評価して決める。
+- 新機能は先行開発しない。次Phaseは、実運用で発生した手戻り、操作負担、誤判定、不足機能、業務時間を基準に決める。
 
 ### PILOT-0A
 
@@ -187,6 +191,73 @@ Next:
 - 案件終了とゴミ箱へ移動は別操作。ACTIVE のまま soft-delete できる。
 - CLOSED の終了情報と再開、archive / trash 後の復元は維持。
 - Quote lifecycle と QUOTE-1B の COMPLETE 状態は変更しない。
+- Production PASS（v1.5.1 Production GO）。
+
+### v1.5.1 Production GO
+
+- Deep Trekker AI Production MVP COMPLETE。
+- Pilot operation開始可能。
+- Google OIDC Production PASS。
+- General Quote Production PASS。
+- Technical Case → Quote handoff Production PASS。
+- Activity Ledger Production PASS。
+- Price Master Production PASS。
+- PILOT-0A ACTIVE Technical Case lifecycle regression修正 PASS。
+- 判定: **GO**。今後は実業務で使用する。
+- 新機能は先行開発しない。次Phaseは、実運用で発生した手戻り、操作負担、誤判定、不足機能、業務時間を基準に決める。
+- Production code baseline: `71cbeede7ce966ac1187d51a3e3ef489bbdd514e`（tag `v1.5.1`）。
+- Runtime configurationのSecrets値はGitへ保存しない。
+
+#### Production cleanup
+
+Pilot前に不要なProduction test dataを整理した。物理削除はしていない。必要なGolden / regression dataは維持している。
+
+soft-deleteしたもの:
+
+- Persistence動作確認 Technical Case
+- Persistence動作確認 General Quote
+- QUOTE-1A Production Smoke
+
+残した検証用データ:
+
+- v1.2 Launch Smoke Test
+- IHI / MAG Golden-related data
+- IHI / PHOTON Golden-related data
+
+#### Gemini Production activation
+
+Production Secrets:
+
+- `TECHNICAL_CASE_PROVIDER` = `gemini`
+- `GEMINI_API_KEY` configured
+
+秘密値は記録しない。
+
+Production確認:
+
+- Provider: Gemini
+- Model: gemini-3.8-flash
+- Connection: connected
+- Connection test: PASS
+- HTTP 200
+
+#### Real case acceptance
+
+実案件でProduction acceptanceを実施した。
+
+- inquiry analysis PASS。
+- customer / case / End User保存 PASS。
+- requested products: PIPETREKKER / A200。
+- requirement extraction PASS。
+- technical knowledge step PASS。
+- manufacturer review item generated。
+- unknown compatibilityを推測で確定しない。
+- manufacturer confirmationとしてfail-safe。
+- Human Review / approval workflow正常。
+
+メーカー確認例:
+
+150mm配管内で、A200へリアカメラを装着した状態で走行・進入可能か。車体外寸、テーブル取り回し等の制約があるかを確認する。
 
 ### v1.2 Phase A: Manufacturer Online Price Master Sync
 
