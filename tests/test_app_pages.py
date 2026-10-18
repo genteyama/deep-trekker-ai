@@ -807,6 +807,9 @@ def test_generated_export_files_offer_browser_download(tmp_path):
     assert len(downloads) == 1
     assert "8238_spaceone_quote.pdf" in downloads[0].proto.label
     assert any("gone_spaceone_quote.xlsx" in item.value for item in at.caption)
+    preview = next(item for item in at.expander if "8238_spaceone_quote.pdf" in item.label)
+    assert any(child.type == "component_instance" for child in preview.children.values())
+    assert not any("gone_spaceone_quote.xlsx" in item.label for item in at.expander)
 
 
 def test_export_inputs_resume_without_changing_snapshot():

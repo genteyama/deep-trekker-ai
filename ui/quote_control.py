@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Optional
 
 import streamlit as st
+from streamlit.errors import StreamlitAPIException
 from openpyxl.utils.exceptions import InvalidFileException
 
 from agents.landed_cost import (
@@ -1116,6 +1117,12 @@ def _render_file_export(page: dict, snapshot) -> None:
             key=f"export_download_{index}",
             on_click="ignore",
         )
+        if path.suffix.lower() == ".pdf":
+            with st.expander(f"{page.get('export_preview_label', 'プレビュー')}: {path.name}"):
+                try:
+                    st.pdf(path.read_bytes(), height=800, key=f"export_preview_{index}")
+                except StreamlitAPIException:
+                    st.caption(page.get("export_preview_unavailable", "プレビューを表示できません。ダウンロードして確認してください"))
 
 
 _EXPORT_MIME_TYPES = {

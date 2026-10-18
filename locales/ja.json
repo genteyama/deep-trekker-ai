@@ -745,6 +745,8 @@
       "no_export_yet": "まだファイルは生成していません。",
       "export_download_button": "ダウンロード",
       "export_file_missing": "ファイルが見つかりません。再度生成してください",
+      "export_preview_label": "プレビュー",
+      "export_preview_unavailable": "プレビューを表示できません。ダウンロードして確認してください",
       "presentation_modes": {
         "UNDECIDED": "未決定",
         "SEPARATE_LINE": "独立明細",

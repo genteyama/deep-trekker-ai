@@ -745,6 +745,8 @@
       "no_export_yet": "No files have been generated yet.",
       "export_download_button": "Download",
       "export_file_missing": "File not found. Please generate it again",
+      "export_preview_label": "Preview",
+      "export_preview_unavailable": "Preview is unavailable. Please download the file",
       "presentation_modes": {
         "UNDECIDED": "Undecided",
         "SEPARATE_LINE": "Separate line",
