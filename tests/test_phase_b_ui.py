@@ -4,11 +4,9 @@ from repositories.sqlite_activity_repository import SqliteActivityRepository
 from repositories.sqlite_technical_case_repository import SqliteTechnicalCaseRepository
 from tests.test_app_pages import _start_app
 from tests.test_price_master_ui import _drop_stale_widgets
-from ui.components.portal import format_portal_datetime
 from ui.home import _user_progress
 from ui.technical_case import _display_timestamp
-from ui.technical_case_steps import build_technical_workflow
-from ui.work_status import summarize_technical_case
+from ui.technical_case_flow import SESSION_ANALYSIS
 
 
 def _texts(at):
@@ -33,7 +31,7 @@ def _save_case(case_id="CASE-UI"):
     return record
 
 
-def test_home_quick_view_is_deterministic_and_opens_case_without_ai():
+def test_technical_case_resume_from_advanced_menu_loads_saved_case_without_ai():
     _save_case()
     append_activity_event(
         SqliteActivityRepository(),
@@ -43,33 +41,25 @@ def test_home_quick_view_is_deterministic_and_opens_case_without_ai():
     )
     at = _start_app()
 
-    at.button(key="home_quick_technical_CASE-UI").click().run()
-    texts = _texts(at)
+    at.button(key="sidebar_nav_technical").click().run()
+    assert any(item.key == "resume_technical_case_CASE-UI" for item in at.button)
+    at.button(key="resume_technical_case_CASE-UI").click().run()
 
-    loaded = SqliteTechnicalCaseRepository().get_case("CASE-UI")
-    workflow = build_technical_workflow(summarize_technical_case(record=loaded))
-    assert "案件ステータス" in texts
-    assert "業務状態：進行中" in texts
-    assert "現在Phase：メーカー回答待ち" in texts
-    assert "現在の状況：メーカー回答待ち" in texts
-    assert "次にやること：メーカー回答を待つ" in texts
-    assert "最新更新内容：メーカー回答受領" in texts
-    assert f"進捗：{workflow.completed} / 7" in texts
-    assert f"要確認：{workflow.review_required}件" in texts
-    assert format_portal_datetime(loaded.updated_at) in texts
-    assert loaded.updated_at not in texts
-    assert "+00:00" not in texts
-    assert "T00:" not in texts
-
-    at.button(key="quick_open_technical_CASE-UI").click().run()
     assert at.title[0].value == "営業・技術受付AI"
     assert at.session_state["technical_case_saved_id"] == "CASE-UI"
+    assert at.session_state["input_customer_name"] == "Quick Customer"
+    assert at.session_state["input_case_name"] == "Quick Case"
+    assert at.session_state["input_customer_inquiry"] == "Question"
+    # Resuming restores the saved analysis as-is; no new AI analysis is produced.
+    loaded = SqliteTechnicalCaseRepository().get_case("CASE-UI")
+    assert at.session_state[SESSION_ANALYSIS] == loaded.analysis_json
 
 
 def test_close_form_validates_other_then_closes_and_reopens():
     _save_case()
     at = _start_app()
-    at.button(key="home_resume_technical_CASE-UI").click().run()
+    at.button(key="sidebar_nav_technical").click().run()
+    at.button(key="resume_technical_case_CASE-UI").click().run()
 
     at.button(key="start_close_technical_case").click().run()
     at.selectbox(key="technical_case_close_reason").select(CaseCloseReason.OTHER).run()
@@ -122,12 +112,11 @@ def test_closed_filter_separates_completed_and_closed_cases():
         closed_at="2026-10-09T10:00:00+00:00",
     )
     repository.save_case(closed)
-    at = _start_app()
 
-    at.radio(key="home_work_filter").set_value("closed").run()
-    texts = _texts(at)
+    closed_ids = {item.case_id for item in repository.list_recent_cases(view="closed")}
+    completed_ids = {item.case_id for item in repository.list_recent_cases(view="completed")}
 
-    assert "Business Closed" in texts
-    assert "Workflow Complete" not in texts
-    assert "業務状態：終了" not in texts  # Quick View remains collapsed.
-    assert any(item.key == "home_quick_technical_CLOSED-UI" for item in at.button)
+    assert "CLOSED-UI" in closed_ids
+    assert "COMPLETE-UI" not in closed_ids
+    assert "COMPLETE-UI" in completed_ids
+    assert "CLOSED-UI" not in completed_ids

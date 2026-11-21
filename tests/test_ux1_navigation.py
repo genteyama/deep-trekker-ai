@@ -29,31 +29,20 @@ def _save_case(case_id: str, title: str) -> None:
     )
 
 
-def test_quick_view_toggle_labels_and_independent_case_state():
+def test_technical_case_resumes_multiple_saved_cases_independently():
     _save_case("CASE-A", "Alpha Case")
     _save_case("CASE-B", "Beta Case")
     at = _start_app()
 
-    button_a = at.button(key="home_quick_technical_CASE-A")
-    button_b = at.button(key="home_quick_technical_CASE-B")
-    assert button_a.label == "ステータスを確認 ▼"
-    assert button_b.label == "ステータスを確認 ▼"
-    assert "案件ステータス" not in _visible(at)
+    at.button(key="sidebar_nav_technical").click().run()
+    assert any(item.key == "resume_technical_case_CASE-A" for item in at.button)
+    assert any(item.key == "resume_technical_case_CASE-B" for item in at.button)
 
-    button_a.click().run()
-    assert at.button(key="home_quick_technical_CASE-A").label == "ステータスを閉じる ▲"
-    assert at.button(key="home_quick_technical_CASE-B").label == "ステータスを確認 ▼"
-    visible = _visible(at)
-    assert "案件ステータス" in visible
-    assert "Alpha Case" in visible
-    assert "Beta Case" in visible
-    assert at.session_state["home_quick_technical_CASE-A_open"] is True
-    assert "home_quick_technical_CASE-B_open" not in at.session_state
+    at.button(key="resume_technical_case_CASE-A").click().run()
+    assert at.session_state["technical_case_saved_id"] == "CASE-A"
 
-    at.button(key="home_quick_technical_CASE-A").click().run()
-    assert at.button(key="home_quick_technical_CASE-A").label == "ステータスを確認 ▼"
-    assert "案件ステータス" not in _visible(at)
-    assert at.session_state["home_quick_technical_CASE-A_open"] is False
+    at.button(key="resume_technical_case_CASE-B").click().run()
+    assert at.session_state["technical_case_saved_id"] == "CASE-B"
 
 
 def test_sidebar_current_location_remains_visible_and_home_is_clickable():

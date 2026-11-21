@@ -713,3 +713,33 @@ v1.2.0 / v1.2.1はProduction Release済み。Phase B開始時のmain HEADは`3bd
 - Step / Phase ごとに checkpoint commit する。
 - Context が肥大化したら compact / new Session にする。
 - Git / current code を Source of Truth とする。
+
+### PORTAL-2 — Quote & Price Portal Re-scope
+
+実運用の結果、多機能化したポータルは日常業務の主目的が分かりにくく、操作負担が大きいと判断した。
+今後は「価格確認・見積作成・見積管理・MoneyForward発行」を中心とする業務ポータルへ再集約する。
+
+Manufacturer Price Source of Truth:
+
+- DT40
+- PT30
+- SPECTRA_GOLD
+
+PORTAL-2Aでは以下を実施する。
+
+- Active DT40 / PT30 / SPECTRA_GOLDを横断する「価格一覧」を追加。
+- SKU / 製品名 / Price Book / Source Sheet / 状態で一覧・検索できる。
+- MSRP / Dealer PriceはActive Manufacturer Masterを根拠とする。Live Google Sheetを直接参照しない。
+- SpaceOne参考売価は、既存Active SO_MASTER Pricing Policyと指定為替から安全に算出できる場合のみ表示する。未設定・競合・Manual Reviewは推測せず要確認とする。
+- HOMEを価格・見積中心のlauncherへ変更する。
+- Main Menuを HOME / 価格一覧 / 見積作成 / 見積一覧 に再編する。
+- Technical Case / Activity Ledgerは削除せず「詳細機能」へ退避する。
+- 見積一覧はQuoteのみを対象とし、顧客・件名・見積ID・構成・状態で検索でき、売上(税抜)・粗利・粗利率を確認して既存Quote Workspaceを開ける。
+- 価格マスター管理は管理メニューに維持する。
+- DB schema / Price Master schema / Pricing Policy / QuoteDraft / Approved Snapshot / Auth / Technical Case business logic / Activity semanticsは変更しない。
+
+Next:
+
+- PORTAL-2B: 見積作成UIの簡素化と価格一覧→見積作成の安全なhandoff。
+- PORTAL-2C: Deep Trekkerメーカー見積PDF取込 → SupplierQuote照合 → 自動試算。
+- PORTAL-2D: MoneyForward連携（現行契約/API/CSV仕様確認後に方式決定）。

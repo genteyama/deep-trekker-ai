@@ -29,29 +29,26 @@ def _open_quote_step(at: AppTest, step: int) -> AppTest:
     return at
 
 
-def test_home_dashboard_shows_both_work_kinds():
+def test_home_dashboard_is_price_and_quote_focused():
     at = _start_app()
     visible = " ".join(
         [item.value for item in at.text]
         + [item.value for item in at.markdown]
         + [item.value for item in at.caption]
     )
-    assert "進行中の業務" in visible
-    assert "進行中の案件" in visible
-    assert "営業・技術" in visible
-    assert "見積" in visible
-    assert "営業・技術受付AI" not in visible
+    assert "Deep Trekker / PipeTrekker Quote Portal" in visible
+    assert "メーカー価格のSource of Truth" in visible
+    assert "DT40" in visible
+    assert "PT30" in visible
+    assert "SPECTRA GOLD" in visible
     assert "home-summary-grid" in visible
-    assert "（進行中：" not in visible
-    assert at.button(key="sidebar_nav_activity").disabled is False
-    filter_labels = []
-    for radio in at.radio:
-        filter_labels.extend(getattr(radio, "options", None) or [])
-        if getattr(radio, "label", None):
-            filter_labels.append(radio.label)
-    assert any("進行中" in str(label) for label in filter_labels) or at.radio
-    assert at.button(key="sidebar_nav_technical").disabled is False
+    assert at.button(key="sidebar_nav_price_catalog").disabled is False
     assert at.button(key="sidebar_nav_quote").disabled is False
+    assert at.button(key="sidebar_nav_quote_list").disabled is False
+    assert at.button(key="home_supplier_pdf_pending").disabled is True
+    # Existing advanced functions remain reachable, but are no longer the primary HOME content.
+    assert at.button(key="sidebar_nav_activity").disabled is False
+    assert at.button(key="sidebar_nav_technical").disabled is False
     assert "入力不足のため次へ進めません" not in visible
 
 
@@ -507,7 +504,7 @@ def test_back_button_returns_to_home():
     at.button(key="sidebar_nav_technical").click().run()
     at.button(key="sidebar_nav_home").click().run()
 
-    assert any("home-hero-title'>Deep Trekker 業務支援AI<" in item.value for item in at.markdown)
+    assert any("home-hero-title'>Deep Trekker / PipeTrekker Quote Portal<" in item.value for item in at.markdown)
 
 
 def _quote_date_widget(elements, key):

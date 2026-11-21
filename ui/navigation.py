@@ -5,7 +5,9 @@ import streamlit as st
 
 PAGE_HOME = "home"
 PAGE_TECHNICAL_CASE = "technical_case"
+PAGE_PRICE_CATALOG = "price_catalog"
 PAGE_QUOTE_CONTROL = "quote_control"
+PAGE_QUOTE_LIST = "quote_list"
 PAGE_ACTIVITY_LEDGER = "activity_ledger"
 PAGE_PRICE_MASTER = "price_master"
 SESSION_CURRENT_PAGE = "current_page"
@@ -54,14 +56,28 @@ def set_current_page(page: str) -> None:
 
 _PAGE_TEXT_KEYS = {
     PAGE_TECHNICAL_CASE: "technical_case",
+    PAGE_PRICE_CATALOG: "price_catalog",
     PAGE_QUOTE_CONTROL: "quote_control",
+    PAGE_QUOTE_LIST: "quote_list",
     PAGE_ACTIVITY_LEDGER: "activity_ledger",
     PAGE_PRICE_MASTER: "price_master",
 }
+_PAGE_FALLBACK_TITLES = {
+    PAGE_TECHNICAL_CASE: "営業・技術問い合わせ",
+    PAGE_PRICE_CATALOG: "価格一覧",
+    PAGE_QUOTE_CONTROL: "見積作成",
+    PAGE_QUOTE_LIST: "見積一覧",
+    PAGE_ACTIVITY_LEDGER: "履歴・活動台帳",
+    PAGE_PRICE_MASTER: "価格マスター管理",
+}
 _PAGE_NAV_KEYS = (
     (PAGE_HOME, "home", "HOME", "sidebar_nav_home"),
+    (PAGE_PRICE_CATALOG, "price_catalog", "価格一覧", "sidebar_nav_price_catalog"),
+    (PAGE_QUOTE_CONTROL, "quote_control", "見積作成", "sidebar_nav_quote"),
+    (PAGE_QUOTE_LIST, "quote_list", "見積一覧", "sidebar_nav_quote_list"),
+)
+_SECONDARY_NAV_KEYS = (
     (PAGE_TECHNICAL_CASE, "technical_case", "営業・技術問い合わせ", "sidebar_nav_technical"),
-    (PAGE_QUOTE_CONTROL, "quote_control", "見積・価格管理", "sidebar_nav_quote"),
     (PAGE_ACTIVITY_LEDGER, "activity_ledger", "履歴・活動台帳", "sidebar_nav_activity"),
 )
 _ADMIN_NAV_KEYS = (
@@ -108,7 +124,7 @@ def current_location_lines(texts: dict, page: Optional[str] = None) -> list[str]
     page_key = _PAGE_TEXT_KEYS.get(current_page)
     if page_key is None:
         return [home]
-    title = location.get("pages", {}).get(page_key) or page_key
+    title = location.get("pages", {}).get(page_key) or _PAGE_FALLBACK_TITLES.get(current_page, page_key)
     lines = [home, title]
     if current_page == PAGE_QUOTE_CONTROL:
         from ui.quote_steps import SESSION_QUOTE_STEP, STEP_KEYS, normalize_quote_step
@@ -144,7 +160,6 @@ def _request_page_navigation(texts: dict, current_page: str, target_page: str) -
 
 
 def _step_button_label(step: int, label: str) -> str:
-    # Button labels are Markdown. A literal "1. " would render as a list marker.
     return f"{step}\\. {label}"
 
 
@@ -240,6 +255,15 @@ def render_dashboard_sidebar(texts: dict, current_page: str) -> None:
         st.caption(navigation.get("main_menu", "MAIN MENU"))
         with st.container(key="sidebar_main_menu", gap=None):
             for page, label_key, fallback, button_key in _PAGE_NAV_KEYS:
+                if st.button(
+                    labels.get(label_key, fallback),
+                    key=button_key,
+                    type="primary" if page == current_page else "secondary",
+                    use_container_width=True,
+                ):
+                    _request_page_navigation(texts, current_page, page)
+        with st.expander("詳細機能", expanded=False):
+            for page, label_key, fallback, button_key in _SECONDARY_NAV_KEYS:
                 if st.button(
                     labels.get(label_key, fallback),
                     key=button_key,

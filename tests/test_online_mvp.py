@@ -24,7 +24,7 @@ from tests.test_technical_case_persistence import _analyze
 
 ROOT = Path(__file__).resolve().parents[1]
 APP_PATH = ROOT / "app.py"
-BUSINESS_TEXT = "進行中の案件"
+BUSINESS_TEXT = "Deep Trekker / PipeTrekker Quote Portal"
 
 
 @pytest.fixture(autouse=True)
