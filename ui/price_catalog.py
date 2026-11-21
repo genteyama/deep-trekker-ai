@@ -131,7 +131,7 @@ def display_price_catalog_rows(rows: Iterable[dict]) -> list[dict]:
 
 
 def _reference_sales_candidates(books, exchange_rate: float):
-    from agents.master_reconciliation import build_sku_link_preview
+    from agents.sku_link import build_sku_link_preview
     from agents.price_master import load_active_spaceone_master
     from agents.pricing_policy import build_exchange_rate_scenario, extract_pricing_policies, simulate_sales_price_candidates
 

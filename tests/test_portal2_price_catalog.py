@@ -9,6 +9,7 @@ from ui.price_catalog import (
     build_price_catalog_rows,
     build_reference_sales_map,
     filter_price_catalog_rows,
+    _reference_sales_candidates,
 )
 
 
@@ -99,3 +100,11 @@ def test_reference_sales_map_rounds_msrp_policy_and_fails_closed_on_ambiguity():
         is_customer_price_unit=thousand,
     )
     assert ambiguous["SKU-X"] is None
+
+
+def test_reference_sales_candidates_runtime_imports_resolve(monkeypatch):
+    import agents.price_master
+
+    monkeypatch.setattr(agents.price_master, "load_active_spaceone_master", lambda *args, **kwargs: None)
+
+    assert _reference_sales_candidates([], 160) == []
