@@ -130,6 +130,100 @@ def display_price_catalog_rows(rows: Iterable[dict]) -> list[dict]:
     return [{key: value for key, value in row.items() if not key.startswith("_") and key != "Import ID"} for row in rows]
 
 
+PRIMARY_TAB_LABEL = "主要機体・パッケージ"
+ALL_PRODUCTS_TAB_LABEL = "全商品・オプション"
+PRIMARY_MISSING_WARNING = "主要機体・パッケージの一部が現在のActive Masterに見つかりません。価格マスターを確認してください。"
+PRIMARY_MISSING_REASON_ABSENT = "Active Masterに無し"
+PRIMARY_MISSING_REASON_AMBIGUOUS = "複数行一致（一意に特定不可）"
+
+# Explicit sales allowlist: (製品 Group, Price Book, SKU) in fixed business order.
+# Matching is exact on Price Book + SKU only; nothing is inferred from prefixes or descriptions.
+PRIMARY_PACKAGE_GROUPS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    ("DTG3", "DT40", ("7340-BASE-4K",)),
+    ("PHOTON", "DT40", ("9680-BASE", "9680-EXPERT", "9680-SAR")),
+    ("PIVOT", "DT40", ("8530-SMART", "8530-EXPERT", "8530-NAV", "8530-RECON", "8530-SAR")),
+    ("REVOLUTION", "DT40", ("7511-DC-BASE", "7511-DC-NAV", "7511-DC-RECON", "7511-DC-SAR")),
+    ("Utility Crawler", "DT40", ("9701-MAG-4K", "9701-VAC-4K", "9701-MAX-4K")),
+    ("A-150", "PT30", ("11000S", "11000X")),
+    ("A-200", "PT30", ("10800S", "10800X", "10800PRO")),
+)
+PRIMARY_PACKAGE_SKUS: tuple[tuple[str, str, str], ...] = tuple(
+    (group, price_book, sku) for group, price_book, skus in PRIMARY_PACKAGE_GROUPS for sku in skus
+)
+PRIMARY_GROUP_ORDER: tuple[str, ...] = tuple(group for group, _book, _skus in PRIMARY_PACKAGE_GROUPS)
+PRIMARY_COLUMN_ORDER = [
+    "製品",
+    "SKU",
+    "製品名",
+    "Price Book",
+    "MSRP USD",
+    "Dealer USD",
+    "SpaceOne参考売価 JPY",
+    "メーカー価格状態",
+    "参考売価状態",
+]
+
+
+def _primary_matches(rows: Iterable[dict]) -> dict[tuple[str, str], list[dict]]:
+    wanted = {(price_book, sku) for _group, price_book, sku in PRIMARY_PACKAGE_SKUS}
+    matches: dict[tuple[str, str], list[dict]] = {key: [] for key in wanted}
+    for row in rows:
+        key = (row.get("Price Book"), row.get("SKU"))
+        if key in matches:
+            matches[key].append(row)
+    return matches
+
+
+def build_primary_package_rows(rows: Iterable[dict]) -> list[dict]:
+    """Return allowlisted rows in fixed order. Only exactly one matching row is adopted."""
+    matches = _primary_matches(rows)
+    result = []
+    for group, price_book, sku in PRIMARY_PACKAGE_SKUS:
+        found = matches[(price_book, sku)]
+        if len(found) != 1:
+            continue
+        row = dict(found[0])
+        row["製品"] = group
+        row["_primary_search"] = " ".join((group, sku, str(row.get("製品名") or ""))).casefold()
+        result.append(row)
+    return result
+
+
+def missing_primary_package_skus(rows: Iterable[dict]) -> list[dict]:
+    """Allowlisted SKUs that are absent or not uniquely identifiable in the Active Master."""
+    matches = _primary_matches(rows)
+    missing = []
+    for group, price_book, sku in PRIMARY_PACKAGE_SKUS:
+        count = len(matches[(price_book, sku)])
+        if count == 1:
+            continue
+        reason = PRIMARY_MISSING_REASON_ABSENT if count == 0 else PRIMARY_MISSING_REASON_AMBIGUOUS
+        missing.append({"製品": group, "Price Book": price_book, "SKU": sku, "理由": reason})
+    return missing
+
+
+def filter_primary_package_rows(
+    rows: Iterable[dict],
+    *,
+    keyword: str = "",
+    groups: Iterable[str] | None = None,
+) -> list[dict]:
+    keyword = (keyword or "").strip().casefold()
+    group_set = set(groups or [])
+    filtered = []
+    for row in rows:
+        if keyword and keyword not in row.get("_primary_search", ""):
+            continue
+        if group_set and row.get("製品") not in group_set:
+            continue
+        filtered.append(row)
+    return filtered
+
+
+def display_primary_package_rows(rows: Iterable[dict]) -> list[dict]:
+    return [{key: row.get(key) for key in PRIMARY_COLUMN_ORDER} for row in rows]
+
+
 def _reference_sales_candidates(books, exchange_rate: float):
     from agents.sku_link import build_sku_link_preview
     from agents.price_master import load_active_spaceone_master
@@ -174,40 +268,63 @@ def render_price_catalog(texts: dict) -> None:
     )
     rows = build_price_catalog_rows(books, reference_sales=reference_sales)
 
-    keyword = st.text_input("SKU・製品名を検索", placeholder="例：9701 / MAG / A-200 / C550d")
-    filter_columns = st.columns(3)
-    book_options = sorted({row["Price Book"] for row in rows})
-    sheet_options = sorted({part.strip() for row in rows for part in str(row["Source Sheet"]).split("/") if part.strip() and part.strip() != "-"})
-    status_options = [status for status in (STATUS_OFFICIAL, STATUS_REVIEW, STATUS_OBSOLETE) if any(row["メーカー価格状態"] == status for row in rows)]
-    with filter_columns[0]:
-        selected_books = st.multiselect("価格表", book_options)
-    with filter_columns[1]:
-        selected_sheets = st.multiselect("製品カテゴリ / Sheet", sheet_options)
-    with filter_columns[2]:
-        selected_statuses = st.multiselect("メーカー価格状態", status_options)
+    primary_tab, all_tab = st.tabs([PRIMARY_TAB_LABEL, ALL_PRODUCTS_TAB_LABEL])
 
-    filtered = filter_price_catalog_rows(
-        rows,
-        keyword=keyword,
-        price_books=selected_books,
-        source_sheets=selected_sheets,
-        statuses=selected_statuses,
-    )
-    st.caption(f"{len(filtered)} / {len(rows)} 件")
-    st.dataframe(
-        display_price_catalog_rows(filtered),
-        use_container_width=True,
-        hide_index=True,
-        column_order=[
-            "Price Book",
-            "Source Sheet",
-            "SKU",
-            "製品名",
-            "MSRP USD",
-            "Dealer USD",
-            "メーカー価格状態",
-            "SpaceOne参考売価 JPY",
-            "参考売価状態",
-            "Master更新",
-        ],
-    )
+    with primary_tab:
+        missing = missing_primary_package_skus(rows)
+        if missing:
+            st.warning(PRIMARY_MISSING_WARNING)
+            st.dataframe(missing, use_container_width=True, hide_index=True)
+        primary_rows = build_primary_package_rows(rows)
+        primary_columns = st.columns([2, 1])
+        with primary_columns[0]:
+            primary_keyword = st.text_input("製品・SKUを検索", placeholder="例：PHOTON / 9680 / NAV / A-200")
+        with primary_columns[1]:
+            selected_groups = st.multiselect("製品", list(PRIMARY_GROUP_ORDER))
+        primary_filtered = filter_primary_package_rows(primary_rows, keyword=primary_keyword, groups=selected_groups)
+        st.caption(f"{len(primary_filtered)} / {len(PRIMARY_PACKAGE_SKUS)} 件")
+        st.dataframe(
+            display_primary_package_rows(primary_filtered),
+            use_container_width=True,
+            hide_index=True,
+            column_order=PRIMARY_COLUMN_ORDER,
+        )
+
+    with all_tab:
+        keyword = st.text_input("SKU・製品名を検索", placeholder="例：9701 / MAG / A-200 / C550d")
+        filter_columns = st.columns(3)
+        book_options = sorted({row["Price Book"] for row in rows})
+        sheet_options = sorted({part.strip() for row in rows for part in str(row["Source Sheet"]).split("/") if part.strip() and part.strip() != "-"})
+        status_options = [status for status in (STATUS_OFFICIAL, STATUS_REVIEW, STATUS_OBSOLETE) if any(row["メーカー価格状態"] == status for row in rows)]
+        with filter_columns[0]:
+            selected_books = st.multiselect("価格表", book_options)
+        with filter_columns[1]:
+            selected_sheets = st.multiselect("製品カテゴリ / Sheet", sheet_options)
+        with filter_columns[2]:
+            selected_statuses = st.multiselect("メーカー価格状態", status_options)
+
+        filtered = filter_price_catalog_rows(
+            rows,
+            keyword=keyword,
+            price_books=selected_books,
+            source_sheets=selected_sheets,
+            statuses=selected_statuses,
+        )
+        st.caption(f"{len(filtered)} / {len(rows)} 件")
+        st.dataframe(
+            display_price_catalog_rows(filtered),
+            use_container_width=True,
+            hide_index=True,
+            column_order=[
+                "Price Book",
+                "Source Sheet",
+                "SKU",
+                "製品名",
+                "MSRP USD",
+                "Dealer USD",
+                "メーカー価格状態",
+                "SpaceOne参考売価 JPY",
+                "参考売価状態",
+                "Master更新",
+            ],
+        )

@@ -743,3 +743,13 @@ Next:
 - PORTAL-2B: 見積作成UIの簡素化と価格一覧→見積作成の安全なhandoff。
 - PORTAL-2C: Deep Trekkerメーカー見積PDF取込 → SupplierQuote照合 → 自動試算。
 - PORTAL-2D: MoneyForward連携（現行契約/API/CSV仕様確認後に方式決定）。
+
+### PORTAL-2A.1 — 主要機体・パッケージ優先表示
+
+- 価格一覧を2タブ化：初期タブ「主要機体・パッケージ」、2番目「全商品・オプション」。
+- 主要21 SKUは `ui/price_catalog.py` の explicit allowlist（製品Group / Price Book / SKU）。DTG3 → PHOTON → PIVOT → REVOLUTION → Utility Crawler → A-150 → A-200 の固定順。
+- 照合は Price Book + SKU の完全一致のみ。prefix / Description / Source Sheet / fuzzy からの推測なし。
+- Source of Truth は Active DT40 / PT30。SPECTRA GOLDは主要一覧へ追加せず、全商品タブで従来どおり確認。
+- Active Masterに無い、または複数行一致で一意に特定できない主要SKUは採用せず、warningと不足SKU一覧を表示（fail-safe）。
+- 全SKU一覧・検索・Filterは「全商品・オプション」タブで従来どおり維持。参考売価の為替は2タブ共通。
+- Pricing logic / rounding / Price Master / DB schema / Quote logic の変更なし。
