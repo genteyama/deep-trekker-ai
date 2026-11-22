@@ -8,8 +8,6 @@
 
 ALTER TABLE approved_quote_snapshots ADD COLUMN IF NOT EXISTS official_quote_number TEXT;
 
--- One official quote number belongs to exactly one approved snapshot. Existing rows stay NULL and
--- are not affected by the partial index.
-CREATE UNIQUE INDEX IF NOT EXISTS uq_approved_quote_snapshots_official_number
-    ON approved_quote_snapshots(official_quote_number)
-    WHERE official_quote_number IS NOT NULL;
+-- No uniqueness: the same official number may be used by several revisions or quotes
+-- (business rule: MoneyForward numbers are often kept on revision, or suffixed like xxxx-02).
+-- Versions are identified by quote_draft_id / version / parent_quote_id / source_quote_id.

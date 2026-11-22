@@ -11,7 +11,7 @@ from agents.quote_approval import (
     create_revision_draft,
     register_approval,
 )
-from agents.quote_builder import apply_tax_rate
+from agents.quote_builder import apply_official_quote_number, apply_tax_rate
 from agents.quote_export import (
     QuoteExportError,
     build_export_bundle,
@@ -25,12 +25,13 @@ from agents.formal_quote_document import build_formal_quote_document
 from agents.work_lifecycle import duplicate_quote
 from models import QuoteDraftStatus, QuoteLineageType
 from repositories.actor import LOCAL_ACTOR, acting_person, set_current_actor
-from repositories.quote_repository import DuplicateOfficialQuoteNumberError, QuoteRepositoryError
+from repositories.quote_repository import QuoteRepositoryError
 from repositories.sqlite_activity_repository import SqliteActivityRepository
 from repositories.sqlite_quote_repository import SqliteQuoteRepository
 from tests.test_app_pages import _open_quote_step, _start_app
 from tests.test_quote_approval import _ready_photon
 from ui.quote_list import quote_list_rows
+from ui.quote_workspace import official_number_widget_key
 
 
 @pytest.fixture(autouse=True)
@@ -160,7 +161,6 @@ def test_official_number_is_fixed_on_draft_and_snapshot_after_reload():
     assert snapshot.official_quote_number == "Q-2001"
     assert repo.get_draft(approved.quote_draft_id, approved.quote_version).draft.official_quote_number == "Q-2001"
     assert repo.get_snapshot_for_draft(approved.quote_draft_id, approved.quote_version).official_quote_number == "Q-2001"
-    assert repo.official_quote_number_in_use("Q-2001")
 
 
 def test_all_outputs_use_the_snapshot_number(tmp_path):
@@ -198,26 +198,32 @@ def test_outputs_cannot_replace_the_fixed_number(tmp_path):
     assert build_export_bundle(snapshot, official_quote_number="Q-3002").official_quote_number == "Q-3002"
 
 
-def test_duplicate_official_number_is_rejected_and_nothing_is_written():
-    _approve_and_record(_ready_photon(), "Q-4001")
+def test_same_number_is_allowed_for_unrelated_quotes_and_changes_nothing_else():
+    quote_a, _ = _approve_and_record(_ready_photon(), "Q-4001")
     other = duplicate_quote(_ready_photon())
     other.status = QuoteDraftStatus.READY_FOR_APPROVAL
 
-    with pytest.raises(DuplicateOfficialQuoteNumberError):
-        _approve_and_record(other, "Q-4001")
+    approved_other, _ = _approve_and_record(other, "Q-4001")
 
     repo = _fresh_repo()
-    assert repo.get_draft(other.quote_draft_id, other.quote_version).draft.status == QuoteDraftStatus.READY_FOR_APPROVAL
-    assert repo.get_snapshot_for_draft(other.quote_draft_id, other.quote_version) is None
+    assert _status(repo, approved_other.quote_draft_id, 1) == QuoteDraftStatus.APPROVED
+    assert _status(repo, quote_a.quote_draft_id, 1) == QuoteDraftStatus.APPROVED
+    assert repo.get_snapshot_for_draft(quote_a.quote_draft_id, 1).official_quote_number == "Q-4001"
+    assert repo.get_snapshot_for_draft(approved_other.quote_draft_id, 1).official_quote_number == "Q-4001"
 
 
-def test_db_unique_index_blocks_duplicate_numbers_even_without_the_precheck():
+def test_db_has_no_unique_rule_on_official_number():
     _, first = _approve_and_record(_ready_photon(), "Q-4002")
     repo = SqliteQuoteRepository()
     clone = first.model_copy(update={"approved_quote_snapshot_id": "aqs-other-v1", "quote_draft_id": "other"})
 
-    with pytest.raises(DuplicateOfficialQuoteNumberError):
-        repo.save_snapshot(clone)
+    assert repo.save_snapshot(clone) is True
+    indexes = [row[1] for row in repo._connection.execute("PRAGMA index_list(approved_quote_snapshots)").fetchall()]
+    assert "uq_approved_quote_snapshots_official_number" not in indexes
+    migration = open("deploy/migrations/20261122_quote_integrity.sql", encoding="utf-8").read()
+    schema = open("deploy/postgres_schema.sql", encoding="utf-8").read()
+    assert "UNIQUE INDEX" not in migration.upper().replace("NO UNIQUENESS", "")
+    assert "uq_approved_quote_snapshots_official_number" not in schema
 
 
 # ---- Revision lineage ---------------------------------------------------------------------------
@@ -349,11 +355,12 @@ def test_ui_requires_official_number_then_approves_as_logged_in_user():
     at.session_state["auth_email"] = "dana@example.com"
     at.run()
     assert not at.exception
-    assert any(item.key == "input_official_quote_number" for item in at.text_input)
+    key = official_number_widget_key(draft)
+    assert any(item.key == key for item in at.text_input)
     assert not any(getattr(item, "key", None) == "approve_quote_snapshot" for item in at.button)
     assert any("承認するには正式見積番号を入力してください。" in item.value for item in at.info)
 
-    at.text_input(key="input_official_quote_number").set_value("UI-0001").run()
+    at.text_input(key=key).set_value("UI-0001").run()
     at.button(key="approve_quote_snapshot").click().run()
 
     assert not at.exception
@@ -363,19 +370,33 @@ def test_ui_requires_official_number_then_approves_as_logged_in_user():
     assert at.session_state["quote_draft"].status == QuoteDraftStatus.APPROVED
     # Export step: the number is shown, not editable, and no free "generated by" input remains.
     assert at.session_state["quote_workspace_step"] == 5
-    assert not any(item.key in {"input_official_quote_number", "input_export_generated_by"} for item in at.text_input)
+    assert not any(
+        item.key in {"input_official_quote_number", "input_export_generated_by", key} for item in at.text_input
+    )
 
 
-def test_ui_duplicate_number_shows_error_and_keeps_draft_unapproved():
-    _approve_and_record(duplicate_quote(_ready_photon()).model_copy(update={"status": QuoteDraftStatus.READY_FOR_APPROVAL}), "UI-DUP")
+def test_ui_revision_starts_with_parent_number_and_can_change_it_before_approval():
     at, draft = _ui_ready_at_step_four()
-    at.text_input(key="input_official_quote_number").set_value("UI-DUP").run()
+    at.text_input(key=official_number_widget_key(draft)).set_value("UI-R-01").run()
     at.button(key="approve_quote_snapshot").click().run()
+    assert at.session_state["quote_draft"].status == QuoteDraftStatus.APPROVED
+
+    _open_quote_step(at, 4)
+    at.button(key="create_quote_revision").click().run()
+    revision = at.session_state["quote_draft"]
+    assert revision.quote_version == 2
+    assert revision.official_quote_number == "UI-R-01"
+
+    _open_quote_step(at, 4)
+    key = official_number_widget_key(revision)
+    assert at.text_input(key=key).value == "UI-R-01"
+    at.text_input(key=key).set_value("UI-R-01-02").run()
 
     assert not at.exception
-    assert any("既に別の承認済み見積で使用されています" in item.value for item in at.error)
-    assert at.session_state["quote_draft"].status == QuoteDraftStatus.READY_FOR_APPROVAL
-    assert SqliteQuoteRepository().get_snapshot_for_draft(draft.quote_draft_id, draft.quote_version) is None
+    # Saved on the draft before approval, so a reload keeps the edited number.
+    stored = SqliteQuoteRepository().get_draft(revision.quote_draft_id, 2).draft
+    assert stored.official_quote_number == "UI-R-01-02"
+    assert stored.status != QuoteDraftStatus.APPROVED
 
 
 def test_conflicting_draft_update_rolls_back_the_whole_approval():
@@ -394,5 +415,64 @@ def test_conflicting_draft_update_rolls_back_the_whole_approval():
 
     fresh = _fresh_repo()
     assert fresh.get_snapshot_for_draft(draft.quote_draft_id, draft.quote_version) is None
-    assert not fresh.official_quote_number_in_use("G-001")
     assert fresh.get_draft(draft.quote_draft_id, draft.quote_version).draft.status != QuoteDraftStatus.APPROVED
+
+
+
+# ---- Number rule: may repeat across revisions, fixed per approved version -------------------------
+
+
+def test_revision_inherits_and_can_keep_the_same_number():
+    store = QuoteApprovalStore()
+    quote_a, snapshot_1 = _approve_and_record(_ready_photon(), "Q-001", store=store)
+    revision = _ready_revision(snapshot_1, store=store)
+    assert revision.official_quote_number == "Q-001"
+
+    _, snapshot_2 = _approve_and_record(revision, revision.official_quote_number, store=store)
+
+    repo = _fresh_repo()
+    v1 = repo.get_snapshot_for_draft(quote_a.quote_draft_id, 1)
+    v2 = repo.get_snapshot_for_draft(revision.quote_draft_id, 2)
+    assert (v1.official_quote_number, v2.official_quote_number) == ("Q-001", "Q-001")
+    assert (v1.status, v2.status) == (QuoteDraftStatus.SUPERSEDED, QuoteDraftStatus.APPROVED)
+    assert (v1.quote_version, v2.quote_version) == (1, 2)
+    assert v2.parent_quote_id == quote_a.quote_draft_id
+    stored_revision = repo.get_draft(revision.quote_draft_id, 2).draft
+    assert stored_revision.parent_quote_id == quote_a.quote_draft_id
+    assert stored_revision.source_quote_id == quote_a.quote_draft_id
+    assert stored_revision.relation_type == QuoteLineageType.REVISION.value
+
+
+def test_revision_can_change_to_a_suffixed_number_before_approval(tmp_path):
+    quote_a, snapshot_1 = _approve_and_record(_ready_photon(), "Q-001")
+    revision = _ready_revision(snapshot_1)
+    apply_official_quote_number(revision, " Q-001-02 ")
+    SqliteQuoteRepository().save_draft(revision, force=True)
+
+    _, snapshot_2 = _approve_and_record(revision, revision.official_quote_number)
+
+    repo = _fresh_repo()
+    v1 = repo.get_snapshot_for_draft(quote_a.quote_draft_id, 1)
+    v2 = repo.get_snapshot_for_draft(revision.quote_draft_id, 2)
+    assert (v1.official_quote_number, v2.official_quote_number) == ("Q-001", "Q-001-02")
+    assert _status(repo, quote_a.quote_draft_id, 1) == QuoteDraftStatus.SUPERSEDED
+    # Each approved version keeps its own stored number. (Formal PDF/Excel files are issued only from the
+    # current APPROVED version — an existing rule; the superseded record still resolves its number.)
+    assert build_formal_quote_document(v1).quote_number == "Q-001"
+    assert build_formal_quote_document(v2).quote_number == "Q-001-02"
+    assert export_spaceone_quote_pdf(v2, output_dir=tmp_path)[0].official_quote_number == "Q-001-02"
+    assert export_spaceone_quote_excel(v2, output_dir=tmp_path)[0].official_quote_number == "Q-001-02"
+    assert export_moneyforward_tsv(v1, output_dir=tmp_path)[0].official_quote_number == "Q-001"
+    assert export_moneyforward_csv(v2, output_dir=tmp_path)[0].official_quote_number == "Q-001-02"
+
+
+def test_number_cannot_change_after_approval():
+    approved, snapshot = _approve_and_record(_ready_photon(), "Q-005")
+    loaded = _fresh_repo().get_draft(approved.quote_draft_id, 1).draft
+
+    with pytest.raises(ValueError, match="Approved drafts cannot be edited"):
+        apply_official_quote_number(loaded, "Q-005-02")
+    with pytest.raises(QuoteExportError):
+        build_export_bundle(snapshot, official_quote_number="Q-005-02")
+    with pytest.raises(Exception):
+        snapshot.official_quote_number = "Q-005-02"  # frozen model

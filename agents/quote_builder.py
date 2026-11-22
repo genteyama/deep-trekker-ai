@@ -439,6 +439,13 @@ def apply_selected_remarks(draft: QuoteDraft, texts: Sequence[str], *, source: R
     return draft
 
 
+def apply_official_quote_number(draft: QuoteDraft, value: Optional[str]) -> QuoteDraft:
+    """Official quote number entered before approval. Not unique; fixed by approval."""
+    ensure_draft_editable(draft)
+    draft.official_quote_number = (value or "").strip() or None
+    return draft
+
+
 def apply_lead_time_text(draft: QuoteDraft, text: Optional[str]) -> QuoteDraft:
     ensure_draft_editable(draft)
     draft.lead_time_text = text

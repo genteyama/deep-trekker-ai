@@ -14,7 +14,6 @@ from repositories.quote_repository import (
     ConcurrentUpdateError,
     DraftListItem,
     LoadedDraft,
-    DuplicateOfficialQuoteNumberError,
     QuoteRepositoryError,
     SaveResult,
 )
@@ -99,14 +98,10 @@ class SqliteQuoteRepository:
             "approved_quote_snapshots",
             {"approved_by": "TEXT", "official_quote_number": "TEXT"},
         )
-        # One official quote number belongs to exactly one approved snapshot. Legacy rows stay NULL.
-        self._connection.execute(
-            """
-            CREATE UNIQUE INDEX IF NOT EXISTS uq_approved_quote_snapshots_official_number
-                ON approved_quote_snapshots(official_quote_number)
-                WHERE official_quote_number IS NOT NULL
-            """
-        )
+        # Official quote numbers may repeat (revisions often keep the MoneyForward number). Versions are
+        # identified by quote_draft_id / version / parent_quote_id / source_quote_id, never by the number.
+        # Drop the unique index an earlier PORTAL-3A build created in local SQLite files.
+        self._connection.execute("DROP INDEX IF EXISTS uq_approved_quote_snapshots_official_number")
         self._connection.commit()
 
     def save_draft(
@@ -322,11 +317,6 @@ class SqliteQuoteRepository:
         try:
             self._insert_snapshot(snapshot)
             self._connection.commit()
-        except sqlite3.IntegrityError as error:
-            self._connection.rollback()
-            if self.official_quote_number_in_use(snapshot.official_quote_number):
-                raise DuplicateOfficialQuoteNumberError(snapshot.official_quote_number) from error
-            raise QuoteRepositoryError(f"Failed to save approved snapshot: {error}") from error
         except sqlite3.Error as error:
             raise QuoteRepositoryError(f"Failed to save approved snapshot: {error}") from error
         return True
@@ -353,16 +343,6 @@ class SqliteQuoteRepository:
             ),
         )
 
-    def official_quote_number_in_use(self, official_quote_number: Optional[str]) -> bool:
-        number = _clean_number(official_quote_number)
-        if number is None:
-            return False
-        row = self._connection.execute(
-            "SELECT 1 FROM approved_quote_snapshots WHERE official_quote_number = ? LIMIT 1",
-            (number,),
-        ).fetchone()
-        return row is not None
-
     def record_approval(
         self,
         draft: QuoteDraft,
@@ -387,8 +367,6 @@ class SqliteQuoteRepository:
         key = (draft.quote_draft_id, draft.quote_version)
         try:
             with self._connection:
-                if self.official_quote_number_in_use(number):
-                    raise DuplicateOfficialQuoteNumberError(number)
                 existing = self._connection.execute(
                     """
                     SELECT content_hash, created_at, updated_at, row_version
@@ -399,14 +377,8 @@ class SqliteQuoteRepository:
                 self._insert_snapshot(snapshot)
                 row_version = self._write_draft_row(draft, payload, state, digest, existing, expected_row_version)
                 superseded = self._supersede_revision_parent(snapshot)
-        except DuplicateOfficialQuoteNumberError:
-            raise
         except ConcurrentUpdateError:
             raise
-        except sqlite3.IntegrityError as error:
-            if self.official_quote_number_in_use(number):
-                raise DuplicateOfficialQuoteNumberError(number) from error
-            raise QuoteRepositoryError(f"Failed to record approval: {error}") from error
         except sqlite3.Error as error:
             raise QuoteRepositoryError(f"Failed to record approval: {error}") from error
         self._row_versions[key] = row_version

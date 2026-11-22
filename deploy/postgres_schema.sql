@@ -189,9 +189,6 @@ ALTER TABLE quote_drafts ADD COLUMN IF NOT EXISTS updated_by TEXT;
 ALTER TABLE quote_drafts ADD COLUMN IF NOT EXISTS row_version INTEGER NOT NULL DEFAULT 1;
 ALTER TABLE approved_quote_snapshots ADD COLUMN IF NOT EXISTS approved_by TEXT;
 ALTER TABLE approved_quote_snapshots ADD COLUMN IF NOT EXISTS official_quote_number TEXT;
-CREATE UNIQUE INDEX IF NOT EXISTS uq_approved_quote_snapshots_official_number
-    ON approved_quote_snapshots(official_quote_number)
-    WHERE official_quote_number IS NOT NULL;
 ALTER TABLE activity_events ADD COLUMN IF NOT EXISTS actor_email TEXT;
 ALTER TABLE price_master_imports ADD COLUMN IF NOT EXISTS file_bytes BYTEA;
 

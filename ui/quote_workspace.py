@@ -19,6 +19,7 @@ from agents.quote_builder import (
     apply_final_price,
     apply_issue_date,
     apply_lead_time_text,
+    apply_official_quote_number,
     apply_presentation_mode,
     apply_selected_remarks,
     apply_shipping_final_price,
@@ -35,7 +36,6 @@ from repositories.actor import acting_person
 from repositories.quote_repository import (
     CONFLICT_MESSAGE,
     ConcurrentUpdateError,
-    DuplicateOfficialQuoteNumberError,
     QuoteRepositoryError,
 )
 from ui.components.portal import (
@@ -53,7 +53,6 @@ from ui.components.quote_summary import render_costing_summary, render_summary_c
 from ui.components.warning_panel import render_validation_warnings, render_warning_panel
 from ui.quote_format import display_number, display_percent, display_yen
 from ui.quote_persistence import (
-    OFFICIAL_QUOTE_NUMBER_KEY,
     PENDING_FORM_KEY,
     SESSION_SAVE_ERROR,
     SESSION_SAVE_STATUS,
@@ -111,9 +110,8 @@ logger = logging.getLogger(__name__)
 
 OFFICIAL_NUMBER_LABEL = "正式見積番号（必須）"
 OFFICIAL_NUMBER_CAPTION = "顧客へ提出する見積番号です。承認時に固定され、PDF・Excel・MoneyForward出力すべてで使用されます。承認後は変更できません。"
-OFFICIAL_NUMBER_REVISION_CAPTION = "改訂版は、前の版とは別の正式見積番号を入力してください。"
+OFFICIAL_NUMBER_REVISION_CAPTION = "前の版の正式見積番号を引き継いでいます。必要に応じて承認前に変更できます（例：xxxx-02）。"
 OFFICIAL_NUMBER_REQUIRED = "承認するには正式見積番号を入力してください。"
-OFFICIAL_NUMBER_DUPLICATE = "正式見積番号「{number}」は既に別の承認済み見積で使用されています。別の番号を入力してください。承認は行っていません。"
 
 
 def render_quote_workspace(page: dict, helpers: dict) -> None:
@@ -992,12 +990,25 @@ def _render_official_quote_number(draft) -> str:
             key=f"official_quote_number_fixed_{draft.quote_draft_id}_{draft.quote_version}",
         )
         return (draft.official_quote_number or "").strip()
-    value = st.text_input(OFFICIAL_NUMBER_LABEL, key=OFFICIAL_QUOTE_NUMBER_KEY)
+    # One input per draft version, initialised from the draft (a revision starts with its parent's number).
+    value = st.text_input(
+        OFFICIAL_NUMBER_LABEL,
+        value=draft.official_quote_number or "",
+        key=official_number_widget_key(draft),
+    )
+    cleaned = (value or "").strip()
+    if cleaned != (draft.official_quote_number or ""):
+        apply_official_quote_number(draft, cleaned)
+        st.session_state["quote_draft"] = draft
     caption = OFFICIAL_NUMBER_CAPTION
     if draft.relation_type == QuoteLineageType.REVISION.value:
         caption += " " + OFFICIAL_NUMBER_REVISION_CAPTION
     st.caption(caption)
-    return (value or "").strip()
+    return cleaned
+
+
+def official_number_widget_key(draft) -> str:
+    return f"official_quote_number_{draft.quote_draft_id}_{draft.quote_version}"
 
 
 def _approve_and_persist(
@@ -1016,9 +1027,6 @@ def _approve_and_persist(
     """Approve a copy of the draft and persist it atomically; the session changes only after the DB write."""
     workspace = page["workspace"]
     repo = get_quote_repository()
-    if repo.official_quote_number_in_use(official_number):
-        st.error(OFFICIAL_NUMBER_DUPLICATE.format(number=official_number))
-        return
     candidate = draft.model_copy(deep=True)
     try:
         apply_selected_remarks(candidate, remarks)
@@ -1038,9 +1046,6 @@ def _approve_and_persist(
         return
     try:
         persist_approval(repo, candidate, snapshot, st.session_state)
-    except DuplicateOfficialQuoteNumberError:
-        st.error(OFFICIAL_NUMBER_DUPLICATE.format(number=official_number))
-        return
     except ConcurrentUpdateError as error:
         st.session_state[SESSION_SAVE_ERROR] = str(error)
         st.error(persist_error_message(error))

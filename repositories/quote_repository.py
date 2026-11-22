@@ -15,14 +15,6 @@ class QuoteRepositoryError(RuntimeError):
     pass
 
 
-class DuplicateOfficialQuoteNumberError(QuoteRepositoryError):
-    """The official quote number already belongs to another approved snapshot. Nothing was written."""
-
-    def __init__(self, official_quote_number: Optional[str]):
-        super().__init__(f"Official quote number already in use: {official_quote_number}")
-        self.official_quote_number = official_quote_number
-
-
 class ConcurrentUpdateError(QuoteRepositoryError):
     """Optimistic lock failure: the row changed after it was loaded. Nothing was written."""
 
@@ -83,9 +75,6 @@ class QuoteRepository(Protocol):
         ...
 
     def get_snapshot_for_draft(self, quote_draft_id: str, version: int) -> Optional[ApprovedQuoteSnapshot]:
-        ...
-
-    def official_quote_number_in_use(self, official_quote_number: Optional[str]) -> bool:
         ...
 
     def record_approval(

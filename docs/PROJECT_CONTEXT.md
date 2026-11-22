@@ -793,8 +793,8 @@ Next:
 
 - 承認者：固定文字列「弦」を廃止し、ログインユーザー（`repositories.actor.acting_person()`）を承認者として記録。QuoteDraft.approved_by / ApprovedQuoteSnapshot.approved_by / `approved_quote_snapshots.approved_by` 列 / 承認活動ログの payload が同じ値。ログインなしのローカル実行時のみ `local（認証なし）`。帳票の作成者も同じ値（自由入力欄は廃止）。
 - 承認記録：承認日時・確認チェック内容・確認済み警告・承認コメント（入力欄は現状なし）・親子関係を ApprovedQuoteSnapshot に保存（payload_json）。セッションだけの記録は無くなった。権限ルール（自己承認禁止等）は変更なし。
-- 正式見積番号：内部IDとは別。「確認・承認」ステップで人が入力（承認の必須項目、自動採番なし）。承認時に QuoteDraft と ApprovedQuoteSnapshot に固定し、以後変更不可。PDF / Excel / MoneyForward はすべて承認版の番号を使用し、別番号を渡すとエラー。出力画面の番号入力欄は廃止。`approved_quote_snapshots.official_quote_number` に部分一意インデックス（既存行はNULLのまま）。番号固定化以前の承認版は正式帳票不可（改訂版で番号を付けて承認）。
+- 正式見積番号：内部IDとは別。「確認・承認」ステップで人が入力（承認の必須項目、自動採番なし）。承認時に QuoteDraft と ApprovedQuoteSnapshot に固定し、以後変更不可。PDF / Excel / MoneyForward はすべて承認版の番号を使用し、別番号を渡すとエラー。出力画面の番号入力欄は廃止。番号は一意にしない（MoneyForward番号を改訂でも使い続ける／xxxx-02 等の枝番を付ける運用のため）。版の識別は quote_draft_id / version / parent_quote_id / source_quote_id のみで、番号は改訂・SUPERSEDED判定に使わない。`approved_quote_snapshots.official_quote_number` は通常列（インデックスなし）。改訂版は親の番号を初期値として引き継ぎ、承認前なら変更可（入力値は承認前から下書きに保存）。番号固定化以前の承認版は正式帳票不可（改訂版で番号を付けて承認）。
 - 承認の永続化：`SqliteQuoteRepository.record_approval()` が1トランザクションで、承認版スナップショット挿入・承認済みDraft更新（楽観ロック）・改訂元の SUPERSEDED 化を行う。失敗時は何も書かず、画面の下書きも承認前のまま。
 - 改訂：`create_revision_draft` は parent_quote_id＝承認版、relation_type＝REVISION、source_quote_id＝初版ID、ID＝`初版ID-v{n}`。改訂中は旧版 APPROVED のまま、改訂版の承認時に明示された親だけを SUPERSEDED（Draft行・スナップショットの status のみ変更、内容と番号は保持、削除なし）。案件ID＋構成名による推測判定は廃止。複製・派生は旧版に影響しない。
 - 見積一覧：正式見積番号列を追加（検索対象にも追加）。Version と状態（承認済み／改訂済み）で版を識別。
-- Migration：`deploy/migrations/20261122_quote_integrity.sql`（列追加＋部分一意インデックス、idempotent）。本番 Supabase へは PORTAL-3A のデプロイ前に適用が必要。
+- Migration：`deploy/migrations/20261122_quote_integrity.sql`（列追加のみ、一意制約なし、idempotent）。本番 Supabase へは PORTAL-3A のデプロイ前に適用が必要。

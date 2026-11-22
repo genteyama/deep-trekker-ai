@@ -348,6 +348,8 @@ def create_revision_draft(
         parent_quote_id=snapshot.quote_draft_id,
         source_quote_id=root,
         relation_type=QuoteLineageType.REVISION.value,
+        # Initial value only: the revision may keep the parent's number or change it before approval.
+        official_quote_number=snapshot.official_quote_number,
         case_id=snapshot.case_id,
         customer=snapshot.customer,
         title=snapshot.title,
