@@ -124,8 +124,13 @@ def test_actor_identity_is_recorded(tmp_path):
     quotes = SqliteQuoteRepository(db)
     draft = _ready_photon()
     quotes.save_draft(draft)
-    _approval, snapshot = _approve(draft)
+    # The UI approves as the logged-in user; the snapshot payload and the DB column carry the same value.
+    from agents.quote_approval import all_confirmations, approve_quote
+    from repositories.actor import acting_person
+
+    _approval, snapshot = approve_quote(draft, approved_by=acting_person(), confirmations=all_confirmations())
     quotes.save_snapshot(snapshot)
+    assert snapshot.approved_by == "second@example.com"
     SqliteActivityRepository(db).append(
         ActivityEvent(
             event_id="", occurred_at="", event_type="TEST", entity_kind="technical_case", entity_id=record.case_id

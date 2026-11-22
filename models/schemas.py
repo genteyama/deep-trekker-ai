@@ -1241,6 +1241,10 @@ class QuoteDraft(BaseModel):
     parent_quote_id: Optional[str] = None
     source_quote_id: Optional[str] = None
     relation_type: Optional[str] = None
+    # Set once at approval and copied into ApprovedQuoteSnapshot. Never edited afterwards.
+    official_quote_number: Optional[str] = None
+    approved_by: Optional[str] = None
+    approved_at: Optional[datetime] = None
 
 
 class CostScenario(BaseModel):
@@ -1363,6 +1367,14 @@ class ApprovedQuoteSnapshot(BaseModel):
     quote_number_candidate: Optional[str] = None
     official_quote_number: Optional[str] = None
     source_references: list[str] = Field(default_factory=list)
+    # Approval record (persisted with the snapshot; previously session-only in QuoteApproval).
+    reviewed_by: Optional[str] = None
+    approval_confirmations: dict[str, bool] = Field(default_factory=dict)
+    warnings_acknowledged: list[str] = Field(default_factory=list)
+    approval_comment: Optional[str] = None
+    # Explicit revision lineage of the approved draft (same values as the draft row).
+    parent_quote_id: Optional[str] = None
+    relation_type: Optional[str] = None
 
 
 class InternalQuoteTransferRow(BaseModel):

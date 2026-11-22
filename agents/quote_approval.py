@@ -27,6 +27,7 @@ from models import (
     QuoteApproval,
     QuoteDraft,
     QuoteDraftStatus,
+    QuoteLineageType,
     QuoteOutputBundle,
     QuoteReviewSummary,
     QuoteWarningItem,
@@ -275,8 +276,10 @@ def approve_quote(
     store: Optional[QuoteApprovalStore] = None,
     approved_at: Optional[datetime] = None,
     quote_number_candidate: Optional[str] = None,
+    official_quote_number: Optional[str] = None,
 ) -> tuple[QuoteApproval, ApprovedQuoteSnapshot]:
     captured = approved_at or datetime.now(timezone.utc)
+    official = (official_quote_number or "").strip() or None
     acknowledged = list(warnings_acknowledged or [])
     confirmation_map = dict(confirmations or {})
     missing = [key for key in REQUIRED_CONFIRMATIONS if not confirmation_map.get(key)]
@@ -310,14 +313,16 @@ def approve_quote(
         approved_at=captured,
         quote_number_candidate=quote_number_candidate,
         issuer=issuer,
+        official_quote_number=official,
+        approval=approval,
     )
     draft.status = QuoteDraftStatus.APPROVED
     draft.updated_at = captured
+    draft.official_quote_number = official
+    draft.approved_by = approved_by
+    draft.approved_at = captured
     if store is not None:
-        _supersede_previous(store, snapshot)
-        store.register_draft(draft)
-        store.approvals[approval.quote_approval_id] = approval
-        store.snapshots[snapshot.approved_quote_snapshot_id] = snapshot
+        register_approval(store, draft, approval, snapshot)
     return approval, snapshot
 
 
@@ -325,15 +330,24 @@ def create_revision_draft(
     snapshot: ApprovedQuoteSnapshot,
     *,
     store: Optional[QuoteApprovalStore] = None,
+    root_quote_id: Optional[str] = None,
 ) -> QuoteDraft:
+    """New editable version of an approved quote, linked to it as an explicit REVISION.
+
+    The approved version stays APPROVED until this revision itself is approved.
+    """
     from agents.quote_builder import refresh_quote_draft
     from agents.quote_dates import parse_quote_date, valid_until_matches_auto_rule
     from models import ScenarioCompleteness
 
     next_version = snapshot.quote_version + 1
+    root = root_quote_id or snapshot.quote_draft_id
     draft = QuoteDraft(
-        quote_draft_id=f"{snapshot.quote_draft_id}-v{next_version}",
+        quote_draft_id=f"{root}-v{next_version}",
         quote_version=next_version,
+        parent_quote_id=snapshot.quote_draft_id,
+        source_quote_id=root,
+        relation_type=QuoteLineageType.REVISION.value,
         case_id=snapshot.case_id,
         customer=snapshot.customer,
         title=snapshot.title,
@@ -621,6 +635,8 @@ def _build_approved_snapshot(
     approved_at: datetime,
     quote_number_candidate: Optional[str],
     issuer: IssuerSnapshot,
+    official_quote_number: Optional[str] = None,
+    approval: Optional[QuoteApproval] = None,
 ) -> ApprovedQuoteSnapshot:
     economics = draft.economics_result
     remarks = [
@@ -676,38 +692,51 @@ def _build_approved_snapshot(
         valid_until=draft.valid_until,
         issuer_snapshot=issuer.model_copy(deep=True),
         quote_number_candidate=candidate,
-        official_quote_number=None,
+        official_quote_number=official_quote_number,
         source_references=list(draft.source_references) + ["ApprovedQuoteSnapshot"],
+        reviewed_by=approval.reviewed_by if approval else approved_by,
+        approval_confirmations=dict(approval.confirmations) if approval else {},
+        warnings_acknowledged=list(approval.warnings_acknowledged) if approval else [],
+        approval_comment=approval.approval_comment if approval else None,
+        parent_quote_id=draft.parent_quote_id,
+        relation_type=draft.relation_type,
     )
 
 
+def revision_parent_id(draft_or_snapshot) -> Optional[str]:
+    """The approved version a REVISION replaces. Only explicit lineage counts; nothing is inferred."""
+    if getattr(draft_or_snapshot, "relation_type", None) != QuoteLineageType.REVISION.value:
+        return None
+    return getattr(draft_or_snapshot, "parent_quote_id", None) or None
+
+
 def _supersede_previous(store: QuoteApprovalStore, incoming: ApprovedQuoteSnapshot) -> None:
+    # Session mirror of the DB rule: only the explicit REVISION parent is superseded.
+    parent_id = revision_parent_id(incoming)
+    if parent_id is None:
+        return
     for snapshot_id, snapshot in list(store.snapshots.items()):
-        if (
-            snapshot.case_id == incoming.case_id
-            and snapshot.configuration_name == incoming.configuration_name
-            and snapshot.status == QuoteDraftStatus.APPROVED
-            and snapshot.approved_quote_snapshot_id != incoming.approved_quote_snapshot_id
-        ):
+        if snapshot.quote_draft_id == parent_id and snapshot.status == QuoteDraftStatus.APPROVED:
             store.snapshots[snapshot_id] = snapshot.model_copy(update={"status": QuoteDraftStatus.SUPERSEDED})
-    for draft in store.drafts.values():
-        if (
-            draft.case_id == incoming.case_id
-            and draft.configuration_name == incoming.configuration_name
-            and draft.status == QuoteDraftStatus.APPROVED
-            and draft.quote_draft_id != incoming.quote_draft_id
-        ):
-            draft.status = QuoteDraftStatus.SUPERSEDED
+    parent = store.drafts.get(parent_id)
+    if parent is not None and parent.status == QuoteDraftStatus.APPROVED:
+        parent.status = QuoteDraftStatus.SUPERSEDED
     for approval in store.approvals.values():
-        related = store.drafts.get(approval.quote_draft_id)
-        if (
-            related is not None
-            and related.case_id == incoming.case_id
-            and related.configuration_name == incoming.configuration_name
-            and approval.status == QuoteDraftStatus.APPROVED
-            and approval.quote_draft_id != incoming.quote_draft_id
-        ):
+        if approval.quote_draft_id == parent_id and approval.status == QuoteDraftStatus.APPROVED:
             approval.status = QuoteDraftStatus.SUPERSEDED
+
+
+def register_approval(
+    store: QuoteApprovalStore,
+    draft: QuoteDraft,
+    approval: QuoteApproval,
+    snapshot: ApprovedQuoteSnapshot,
+) -> None:
+    """Mirror an approval that was already persisted into the session store."""
+    _supersede_previous(store, snapshot)
+    store.register_draft(draft)
+    store.approvals[approval.quote_approval_id] = approval
+    store.snapshots[snapshot.approved_quote_snapshot_id] = snapshot
 
 
 def _assert_customer_output_safe(payload: object) -> None:

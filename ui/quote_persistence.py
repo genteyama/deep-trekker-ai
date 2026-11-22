@@ -376,6 +376,16 @@ def save_draft_now(repository: QuoteRepository, draft: QuoteDraft, session, *, f
     return result
 
 
+def persist_approval(repository: QuoteRepository, draft: QuoteDraft, snapshot, session) -> SaveResult:
+    """Write the approval (snapshot + approved draft + revision parent) in one DB transaction."""
+    previous = repository.get_draft(draft.quote_draft_id, draft.quote_version)
+    ui_state = collect_ui_state(session, draft, from_widgets=False)
+    result = repository.record_approval(draft, snapshot, ui_state)
+    _remember_result(session, result)
+    _record_quote_activity(repository, previous, draft)
+    return result
+
+
 def _record_quote_activity(repository, previous, draft) -> None:
     from agents.activity_log import record_quote_saved
     from repositories.sqlite_activity_repository import SqliteActivityRepository

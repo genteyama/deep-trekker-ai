@@ -13,6 +13,15 @@ def set_current_actor(email: Optional[str]) -> None:
     _override.set(email)
 
 
+# Recorded as the person only when the app runs without login (local development). Production requires login.
+LOCAL_ACTOR = "local（認証なし）"
+
+
+def acting_person() -> str:
+    """The logged-in user who performs a recorded human action (approval, document generation)."""
+    return current_actor() or LOCAL_ACTOR
+
+
 def current_actor() -> Optional[str]:
     explicit = _override.get()
     if explicit:

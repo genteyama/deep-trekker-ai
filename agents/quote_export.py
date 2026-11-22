@@ -127,6 +127,20 @@ def validate_export_payloads(snapshot: ApprovedQuoteSnapshot, outputs: QuoteOutp
     return warnings
 
 
+def resolve_official_quote_number(snapshot: ApprovedQuoteSnapshot, requested: Optional[str] = None) -> Optional[str]:
+    """The number fixed at approval always wins. A different number for the same snapshot is refused.
+
+    Only snapshots approved before the number was stored (no number) accept an explicit one.
+    """
+    stored = _clean_optional(snapshot.official_quote_number)
+    asked = _clean_optional(requested)
+    if stored and asked and asked != stored:
+        raise QuoteExportError(
+            "official_quote_number differs from the number fixed on the approved snapshot."
+        )
+    return stored or asked
+
+
 def build_export_bundle(
     snapshot: ApprovedQuoteSnapshot,
     *,
@@ -138,7 +152,7 @@ def build_export_bundle(
     outputs = generate_quote_outputs(snapshot)
     warnings = validate_export_payloads(snapshot, outputs)
     captured = generated_at or datetime.now(timezone.utc)
-    official = _clean_optional(official_quote_number) or snapshot.official_quote_number
+    official = resolve_official_quote_number(snapshot, official_quote_number)
     return ApprovedQuoteExportBundle(
         export_bundle_id=f"exp-{snapshot.approved_quote_snapshot_id}-{captured.strftime('%Y%m%d%H%M%S')}",
         approved_quote_snapshot_id=snapshot.approved_quote_snapshot_id,

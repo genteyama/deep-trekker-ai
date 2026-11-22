@@ -10,6 +10,7 @@ from agents.quote_approval import (
     approve_quote,
     create_revision_draft,
     generate_quote_outputs,
+    register_approval,
     validate_for_approval,
 )
 from agents.pricing_policy import DEFAULT_QUOTE_EXCHANGE_RATE, is_customer_price_unit, parse_exchange_rate
@@ -29,8 +30,14 @@ from agents.quote_dates import date_widget_keys, format_quote_date
 from agents.general_quote_entry import GeneralQuoteEntryError
 from agents.spectra_quote_entry import SpectraQuoteEntryError
 from data.golden_cases.loader import IHI_QUOTE_001, load_quote_golden_case
-from models import CustomerPresentationMode, FinalPriceStatus, QuoteDraftStatus
-from repositories.quote_repository import CONFLICT_MESSAGE, ConcurrentUpdateError, QuoteRepositoryError
+from models import CustomerPresentationMode, FinalPriceStatus, QuoteDraftStatus, QuoteLineageType
+from repositories.actor import acting_person
+from repositories.quote_repository import (
+    CONFLICT_MESSAGE,
+    ConcurrentUpdateError,
+    DuplicateOfficialQuoteNumberError,
+    QuoteRepositoryError,
+)
 from ui.components.portal import (
     render_portal_section_title,
     render_product_choice_card,
@@ -46,6 +53,7 @@ from ui.components.quote_summary import render_costing_summary, render_summary_c
 from ui.components.warning_panel import render_validation_warnings, render_warning_panel
 from ui.quote_format import display_number, display_percent, display_yen
 from ui.quote_persistence import (
+    OFFICIAL_QUOTE_NUMBER_KEY,
     PENDING_FORM_KEY,
     SESSION_SAVE_ERROR,
     SESSION_SAVE_STATUS,
@@ -57,6 +65,8 @@ from ui.quote_persistence import (
     customer_description_widget_key,
     get_quote_repository,
     maybe_autosave,
+    persist_approval,
+    persist_error_message,
     reset_pending_form,
     restore_pending_form_widgets,
     save_draft_now,
@@ -98,6 +108,12 @@ from ui.quote_steps import (
 )
 
 logger = logging.getLogger(__name__)
+
+OFFICIAL_NUMBER_LABEL = "正式見積番号（必須）"
+OFFICIAL_NUMBER_CAPTION = "顧客へ提出する見積番号です。承認時に固定され、PDF・Excel・MoneyForward出力すべてで使用されます。承認後は変更できません。"
+OFFICIAL_NUMBER_REVISION_CAPTION = "改訂版は、前の版とは別の正式見積番号を入力してください。"
+OFFICIAL_NUMBER_REQUIRED = "承認するには正式見積番号を入力してください。"
+OFFICIAL_NUMBER_DUPLICATE = "正式見積番号「{number}」は既に別の承認済み見積で使用されています。別の番号を入力してください。承認は行っていません。"
 
 
 def render_quote_workspace(page: dict, helpers: dict) -> None:
@@ -877,6 +893,7 @@ def _render_step_review(page: dict, helpers, draft, snapshot) -> None:
     )
     lead_time = st.text_input(page["lead_time_label"], value=draft.lead_time_text or "", key="input_lead_time")
     issue_date, valid_until = helpers["render_dates"](page, draft)
+    official_number = _render_official_quote_number(draft)
     confirm_configuration = st.checkbox(page["confirm_configuration"], key="confirm_configuration")
     confirm_presentation = st.checkbox(page["confirm_presentation"], key="confirm_presentation")
     confirm_sales_price = st.checkbox(page["confirm_sales_price"], key="confirm_sales_price")
@@ -922,52 +939,127 @@ def _render_step_review(page: dict, helpers, draft, snapshot) -> None:
         and confirm_sales_price
         and confirm_remarks
     )
-    if ready_to_approve and st.button(page["approve_snapshot_button"], key="approve_quote_snapshot", type="primary"):
-        try:
-            apply_selected_remarks(draft, selected_remarks)
-            apply_lead_time_text(draft, lead_time or None)
-            apply_issue_date(draft, issue_date or None)
-            apply_valid_until(draft, valid_until or None)
-            approval, snapshot = approve_quote(
-                draft,
-                approved_by="弦",
-                confirmations={
-                    "configuration": confirm_configuration,
-                    "presentation": confirm_presentation,
-                    "sales_price": confirm_sales_price,
-                    "remarks": confirm_remarks,
-                },
-                warnings_acknowledged=list(validation.regular_warnings),
-                store=store,
-            )
-            st.session_state["quote_draft"] = draft
-            st.session_state["quote_approval"] = approval
-            st.session_state["approved_quote_snapshot"] = snapshot
-            st.session_state["quote_outputs"] = generate_quote_outputs(snapshot)
-            st.session_state[SESSION_QUOTE_STEP] = 5
-            try:
-                quote_repo = get_quote_repository()
-                quote_repo.save_snapshot(snapshot)
-                from agents.activity_log import record_quote_approved
-                from repositories.sqlite_activity_repository import SqliteActivityRepository
-
-                record_quote_approved(SqliteActivityRepository(getattr(quote_repo, "path", None)), draft, snapshot)
-                _save_draft(page, draft, manual=True)
-            except QuoteRepositoryError as error:
-                st.session_state[SESSION_SAVE_ERROR] = str(error)
-                st.error(page["workspace"].get("save_failed", str(error)))
-            st.rerun()
-        except (QuoteApprovalError, ValueError) as error:
-            logger.warning("quote_approval_rejected reason=%s", type(error).__name__)
-            st.error(workspace["approval_action_blocked"])
+    if ready_to_approve and not official_number:
+        st.info(OFFICIAL_NUMBER_REQUIRED)
+    if ready_to_approve and official_number and st.button(
+        page["approve_snapshot_button"], key="approve_quote_snapshot", type="primary"
+    ):
+        _approve_and_persist(
+            page,
+            store,
+            draft,
+            validation,
+            official_number=official_number,
+            confirmations={
+                "configuration": confirm_configuration,
+                "presentation": confirm_presentation,
+                "sales_price": confirm_sales_price,
+                "remarks": confirm_remarks,
+            },
+            remarks=selected_remarks,
+            lead_time=lead_time,
+            issue_date=issue_date,
+            valid_until=valid_until,
+        )
     if snapshot is not None and st.button(page["create_revision_button"], key="create_quote_revision", type="secondary"):
-        revision = create_revision_draft(snapshot, store=store)
+        repo = get_quote_repository()
+        approved = repo.get_draft(snapshot.quote_draft_id, snapshot.quote_version)
+        base = approved.draft if approved is not None else None
+        # Revisions of a revision keep the first version's ID as their root (ROOT-v2, ROOT-v3, ...).
+        root = (
+            base.source_quote_id
+            if base is not None and base.relation_type == QuoteLineageType.REVISION.value and base.source_quote_id
+            else snapshot.quote_draft_id
+        )
+        revision = create_revision_draft(snapshot, store=store, root_quote_id=root)
         helpers["init_date_widgets"](revision, overwrite=True)
         st.session_state["quote_draft"] = revision
+        # The revision has no approved snapshot of its own yet (same as reopening it from the list).
+        st.session_state["approved_quote_snapshot"] = None
         st.session_state["quote_approval_validation"] = None
         st.session_state[SESSION_QUOTE_STEP] = 1
         _save_draft(page, revision, manual=True)
         st.rerun()
+
+
+def _render_official_quote_number(draft) -> str:
+    """Official quote number: entered before approval, fixed afterwards."""
+    if draft.status in {QuoteDraftStatus.APPROVED, QuoteDraftStatus.SUPERSEDED}:
+        st.text_input(
+            OFFICIAL_NUMBER_LABEL,
+            value=draft.official_quote_number or "",
+            disabled=True,
+            key=f"official_quote_number_fixed_{draft.quote_draft_id}_{draft.quote_version}",
+        )
+        return (draft.official_quote_number or "").strip()
+    value = st.text_input(OFFICIAL_NUMBER_LABEL, key=OFFICIAL_QUOTE_NUMBER_KEY)
+    caption = OFFICIAL_NUMBER_CAPTION
+    if draft.relation_type == QuoteLineageType.REVISION.value:
+        caption += " " + OFFICIAL_NUMBER_REVISION_CAPTION
+    st.caption(caption)
+    return (value or "").strip()
+
+
+def _approve_and_persist(
+    page: dict,
+    store,
+    draft,
+    validation,
+    *,
+    official_number: str,
+    confirmations: dict,
+    remarks,
+    lead_time,
+    issue_date,
+    valid_until,
+) -> None:
+    """Approve a copy of the draft and persist it atomically; the session changes only after the DB write."""
+    workspace = page["workspace"]
+    repo = get_quote_repository()
+    if repo.official_quote_number_in_use(official_number):
+        st.error(OFFICIAL_NUMBER_DUPLICATE.format(number=official_number))
+        return
+    candidate = draft.model_copy(deep=True)
+    try:
+        apply_selected_remarks(candidate, remarks)
+        apply_lead_time_text(candidate, lead_time or None)
+        apply_issue_date(candidate, issue_date or None)
+        apply_valid_until(candidate, valid_until or None)
+        approval, snapshot = approve_quote(
+            candidate,
+            approved_by=acting_person(),
+            confirmations=confirmations,
+            warnings_acknowledged=list(validation.regular_warnings),
+            official_quote_number=official_number,
+        )
+    except (QuoteApprovalError, ValueError) as error:
+        logger.warning("quote_approval_rejected reason=%s", type(error).__name__)
+        st.error(workspace["approval_action_blocked"])
+        return
+    try:
+        persist_approval(repo, candidate, snapshot, st.session_state)
+    except DuplicateOfficialQuoteNumberError:
+        st.error(OFFICIAL_NUMBER_DUPLICATE.format(number=official_number))
+        return
+    except ConcurrentUpdateError as error:
+        st.session_state[SESSION_SAVE_ERROR] = str(error)
+        st.error(persist_error_message(error))
+        return
+    except QuoteRepositoryError as error:
+        st.session_state[SESSION_SAVE_ERROR] = str(error)
+        st.error(workspace.get("save_failed", str(error)))
+        return
+    from agents.activity_log import record_quote_approved
+    from repositories.sqlite_activity_repository import SqliteActivityRepository
+
+    register_approval(store, candidate, approval, snapshot)
+    record_quote_approved(SqliteActivityRepository(getattr(repo, "path", None)), candidate, snapshot)
+    st.session_state["quote_draft"] = candidate
+    st.session_state["quote_approval"] = approval
+    st.session_state["approved_quote_snapshot"] = snapshot
+    st.session_state["quote_outputs"] = generate_quote_outputs(snapshot)
+    st.session_state[SESSION_QUOTE_STEP] = 5
+    st.rerun()
 
 
 def _render_approval_state(page: dict, draft, validation) -> None:

@@ -36,8 +36,10 @@ def quote_list_rows(items: Iterable, *, load_draft: Optional[Callable] = None) -
         economics = getattr(draft, "economics_result", None) if draft is not None else None
         raw_status = item.status or "-"
         status = STATUS_LABELS.get(raw_status, raw_status)
+        official = (getattr(draft, "official_quote_number", None) or "") if draft is not None else ""
         rows.append(
             {
+                "正式見積番号": official or "-",
                 "見積ID": item.quote_draft_id,
                 "Version": item.version,
                 "顧客": item.customer_name or "-",
@@ -52,6 +54,7 @@ def quote_list_rows(items: Iterable, *, load_draft: Optional[Callable] = None) -
                 "_search": " ".join(
                     str(value or "")
                     for value in (
+                        official,
                         item.quote_draft_id,
                         item.customer_name,
                         item.subject,
@@ -101,7 +104,7 @@ def render_quote_list(texts: dict) -> None:
 
     columns = st.columns([2, 1])
     with columns[0]:
-        keyword = st.text_input("見積を検索", placeholder="顧客名 / 件名 / 見積ID / 製品・構成")
+        keyword = st.text_input("見積を検索", placeholder="顧客名 / 件名 / 正式見積番号 / 見積ID / 製品・構成")
     with columns[1]:
         status_options = sorted({row["状態"] for row in rows})
         selected_statuses = st.multiselect("状態", status_options)
@@ -112,7 +115,7 @@ def render_quote_list(texts: dict) -> None:
         display_quote_list_rows(filtered),
         use_container_width=True,
         hide_index=True,
-        column_order=["見積ID", "Version", "顧客", "件名", "構成", "売上(税抜)", "粗利", "粗利率", "状態", "最終更新"],
+        column_order=["正式見積番号", "見積ID", "Version", "顧客", "件名", "構成", "売上(税抜)", "粗利", "粗利率", "状態", "最終更新"],
     )
 
     if not filtered:

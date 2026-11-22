@@ -84,6 +84,7 @@ from models import (
     UpdateSourceType,
 )
 from parsers.spaceone_master_parser import parse_spaceone_master
+from repositories.actor import acting_person
 from ui.price_master import render_price_master_management, render_price_master_summary
 from ui.quote_steps import SESSION_NEW_QUOTE_FX, ensure_new_quote_exchange_rate, new_quote_exchange_rate_source
 from ui.quote_workspace import render_quote_debug_details, render_quote_workspace
@@ -1077,6 +1078,12 @@ def _parse_landed_inputs(page, rate_text, tax_text, insurance_rate_text, domesti
     }
 
 
+LEGACY_SNAPSHOT_NO_NUMBER = (
+    "この承認版には正式見積番号が保存されていません（番号の固定化以前に承認された版です）。"
+    "正式帳票が必要な場合は、改訂版を作成し正式見積番号を入力して承認してください。"
+)
+
+
 def _render_file_export(page: dict, snapshot) -> None:
     st.markdown(f"**{page['section_file_export']}**")
     st.write(page["section_file_export_description"])
@@ -1084,9 +1091,14 @@ def _render_file_export(page: dict, snapshot) -> None:
     if snapshot is None:
         st.text(page["export_requires_snapshot"])
         return
-    official = st.text_input(page["official_quote_number_label"], key="input_official_quote_number")
-    st.caption(page["official_quote_number_caption"])
-    generated_by = st.text_input(page["generated_by_label"], value="弦", key="input_export_generated_by")
+    # The official number is fixed on the approved snapshot; it cannot be entered or changed here.
+    official = None
+    number = (snapshot.official_quote_number or "").strip()
+    st.write(f"{page['official_quote_number_label']}：{number or page['no_value']}")
+    if not number:
+        st.warning(LEGACY_SNAPSHOT_NO_NUMBER)
+    generated_by = acting_person()
+    st.caption(f"{page['generated_by_label']}：{generated_by}")
     columns = st.columns(2)
     with columns[0]:
         if st.button(page["export_spaceone_button"], key="export_spaceone_xlsx", type="primary"):

@@ -14,6 +14,7 @@ from repositories.quote_repository import (
     ConcurrentUpdateError,
     DraftListItem,
     LoadedDraft,
+    DuplicateOfficialQuoteNumberError,
     QuoteRepositoryError,
     SaveResult,
 )
@@ -93,7 +94,19 @@ class SqliteQuoteRepository:
                 "row_version": "INTEGER NOT NULL DEFAULT 1",
             },
         )
-        ensure_columns(self._connection, "approved_quote_snapshots", {"approved_by": "TEXT"})
+        ensure_columns(
+            self._connection,
+            "approved_quote_snapshots",
+            {"approved_by": "TEXT", "official_quote_number": "TEXT"},
+        )
+        # One official quote number belongs to exactly one approved snapshot. Legacy rows stay NULL.
+        self._connection.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_approved_quote_snapshots_official_number
+                ON approved_quote_snapshots(official_quote_number)
+                WHERE official_quote_number IS NOT NULL
+            """
+        )
         self._connection.commit()
 
     def save_draft(
@@ -124,7 +137,28 @@ class SqliteQuoteRepository:
                 content_hash=digest,
                 row_version=existing["row_version"],
             )
+        try:
+            row_version = self._write_draft_row(draft, payload, state, digest, existing, expected_row_version)
+            self._connection.commit()
+        except sqlite3.IntegrityError as error:
+            # Another session inserted the same draft version first.
+            self._connection.rollback()
+            raise ConcurrentUpdateError(f"{draft.quote_draft_id}:v{draft.quote_version}", None) from error
+        except ConcurrentUpdateError:
+            self._connection.rollback()
+            raise
+        except sqlite3.Error as error:
+            raise QuoteRepositoryError(f"Failed to save quote draft: {error}") from error
+        self._row_versions[key] = row_version
+        return SaveResult(
+            saved=True, skipped=False, updated_at=self._last_written_at, content_hash=digest, row_version=row_version
+        )
+
+    def _write_draft_row(self, draft: QuoteDraft, payload: dict, state: dict, digest: str, existing, expected_row_version):
+        """INSERT or optimistic-lock UPDATE of one draft row. Does not commit."""
+        key = (draft.quote_draft_id, draft.quote_version)
         now = now_iso()
+        self._last_written_at = now
         actor = current_actor()
         columns = (
             draft.case_id,
@@ -142,52 +176,40 @@ class SqliteQuoteRepository:
             draft.source_quote_id,
             draft.relation_type,
         )
-        try:
-            if existing is None:
-                created = draft.created_at.isoformat() if draft.created_at else now
-                self._connection.execute(
-                    """
-                    INSERT INTO quote_drafts (
-                        case_id, status, customer_name, subject,
-                        configuration_name, payload_json, ui_state_json, content_hash,
-                        updated_at, archived_at, deleted_at, parent_quote_id, source_quote_id, relation_type,
-                        quote_draft_id, version, created_at, schema_version,
-                        created_by, updated_by, row_version
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
-                    """,
-                    (*columns, *key, created, SCHEMA_VERSION, actor, actor),
-                )
-                row_version = 1
-            else:
-                expected = expected_row_version
-                if expected is None:
-                    expected = self._row_versions.get(key, existing["row_version"])
-                # Optimistic lock: only the version this session loaded may be replaced.
-                cursor = self._connection.execute(
-                    """
-                    UPDATE quote_drafts SET
-                        case_id = ?, status = ?, customer_name = ?, subject = ?,
-                        configuration_name = ?, payload_json = ?, ui_state_json = ?, content_hash = ?,
-                        updated_at = ?, archived_at = ?, deleted_at = ?, parent_quote_id = ?,
-                        source_quote_id = ?, relation_type = ?,
-                        updated_by = ?, row_version = row_version + 1
-                    WHERE quote_draft_id = ? AND version = ? AND row_version = ?
-                    """,
-                    (*columns, actor, *key, expected),
-                )
-                if cursor.rowcount != 1:
-                    self._connection.rollback()
-                    raise ConcurrentUpdateError(f"{draft.quote_draft_id}:v{draft.quote_version}", expected)
-                row_version = expected + 1
-            self._connection.commit()
-        except sqlite3.IntegrityError as error:
-            # Another session inserted the same draft version first.
-            self._connection.rollback()
-            raise ConcurrentUpdateError(f"{draft.quote_draft_id}:v{draft.quote_version}", None) from error
-        except sqlite3.Error as error:
-            raise QuoteRepositoryError(f"Failed to save quote draft: {error}") from error
-        self._row_versions[key] = row_version
-        return SaveResult(saved=True, skipped=False, updated_at=now, content_hash=digest, row_version=row_version)
+        if existing is None:
+            created = draft.created_at.isoformat() if draft.created_at else now
+            self._connection.execute(
+                """
+                INSERT INTO quote_drafts (
+                    case_id, status, customer_name, subject,
+                    configuration_name, payload_json, ui_state_json, content_hash,
+                    updated_at, archived_at, deleted_at, parent_quote_id, source_quote_id, relation_type,
+                    quote_draft_id, version, created_at, schema_version,
+                    created_by, updated_by, row_version
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+                """,
+                (*columns, *key, created, SCHEMA_VERSION, actor, actor),
+            )
+            return 1
+        expected = expected_row_version
+        if expected is None:
+            expected = self._row_versions.get(key, existing["row_version"])
+        # Optimistic lock: only the version this session loaded may be replaced.
+        cursor = self._connection.execute(
+            """
+            UPDATE quote_drafts SET
+                case_id = ?, status = ?, customer_name = ?, subject = ?,
+                configuration_name = ?, payload_json = ?, ui_state_json = ?, content_hash = ?,
+                updated_at = ?, archived_at = ?, deleted_at = ?, parent_quote_id = ?,
+                source_quote_id = ?, relation_type = ?,
+                updated_by = ?, row_version = row_version + 1
+            WHERE quote_draft_id = ? AND version = ? AND row_version = ?
+            """,
+            (*columns, actor, *key, expected),
+        )
+        if cursor.rowcount != 1:
+            raise ConcurrentUpdateError(f"{draft.quote_draft_id}:v{draft.quote_version}", expected)
+        return expected + 1
 
     def forget_row_version(self, quote_draft_id: str, version: int) -> None:
         """Drop the loaded version so the next get_draft becomes the editing base (reload)."""
@@ -297,29 +319,157 @@ class SqliteQuoteRepository:
         ).fetchone()
         if existing is not None:
             return False
-        payload = snapshot.model_dump(mode="json")
         try:
-            self._connection.execute(
-                """
-                INSERT INTO approved_quote_snapshots (
-                    approved_quote_snapshot_id, quote_draft_id, quote_version,
-                    payload_json, created_at, schema_version, approved_by
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    snapshot.approved_quote_snapshot_id,
-                    snapshot.quote_draft_id,
-                    snapshot.quote_version,
-                    json.dumps(payload, ensure_ascii=False),
-                    snapshot.approved_at.isoformat() if snapshot.approved_at else now_iso(),
-                    SCHEMA_VERSION,
-                    current_actor(),
-                ),
-            )
+            self._insert_snapshot(snapshot)
             self._connection.commit()
+        except sqlite3.IntegrityError as error:
+            self._connection.rollback()
+            if self.official_quote_number_in_use(snapshot.official_quote_number):
+                raise DuplicateOfficialQuoteNumberError(snapshot.official_quote_number) from error
+            raise QuoteRepositoryError(f"Failed to save approved snapshot: {error}") from error
         except sqlite3.Error as error:
             raise QuoteRepositoryError(f"Failed to save approved snapshot: {error}") from error
         return True
+
+    def _insert_snapshot(self, snapshot: ApprovedQuoteSnapshot) -> None:
+        payload = snapshot.model_dump(mode="json")
+        self._connection.execute(
+            """
+            INSERT INTO approved_quote_snapshots (
+                approved_quote_snapshot_id, quote_draft_id, quote_version,
+                payload_json, created_at, schema_version, approved_by, official_quote_number
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                snapshot.approved_quote_snapshot_id,
+                snapshot.quote_draft_id,
+                snapshot.quote_version,
+                json.dumps(payload, ensure_ascii=False),
+                snapshot.approved_at.isoformat() if snapshot.approved_at else now_iso(),
+                SCHEMA_VERSION,
+                # The approver recorded in the snapshot itself, so the column and payload always agree.
+                snapshot.approved_by if snapshot.approved_by is not None else current_actor(),
+                _clean_number(snapshot.official_quote_number),
+            ),
+        )
+
+    def official_quote_number_in_use(self, official_quote_number: Optional[str]) -> bool:
+        number = _clean_number(official_quote_number)
+        if number is None:
+            return False
+        row = self._connection.execute(
+            "SELECT 1 FROM approved_quote_snapshots WHERE official_quote_number = ? LIMIT 1",
+            (number,),
+        ).fetchone()
+        return row is not None
+
+    def record_approval(
+        self,
+        draft: QuoteDraft,
+        snapshot: ApprovedQuoteSnapshot,
+        ui_state: Optional[dict] = None,
+        *,
+        expected_row_version: Optional[int] = None,
+    ) -> SaveResult:
+        """Persist one approval atomically: snapshot, approved draft row, and the explicit revision parent.
+
+        The parent (relation_type REVISION, parent_quote_id) becomes SUPERSEDED only here, when the
+        revision is approved. Nothing is inferred from case IDs or configuration names.
+        """
+        number = _clean_number(snapshot.official_quote_number)
+        if number is None or _clean_number(draft.official_quote_number) != number:
+            raise QuoteRepositoryError("An approved quote requires its official quote number.")
+        if draft.status.value != "APPROVED" or snapshot.quote_draft_id != draft.quote_draft_id:
+            raise QuoteRepositoryError("Only the approved draft of this snapshot can be recorded.")
+        state = ui_state or {}
+        payload = draft.model_dump(mode="json")
+        digest = content_hash(payload, state)
+        key = (draft.quote_draft_id, draft.quote_version)
+        try:
+            with self._connection:
+                if self.official_quote_number_in_use(number):
+                    raise DuplicateOfficialQuoteNumberError(number)
+                existing = self._connection.execute(
+                    """
+                    SELECT content_hash, created_at, updated_at, row_version
+                    FROM quote_drafts WHERE quote_draft_id = ? AND version = ?
+                    """,
+                    key,
+                ).fetchone()
+                self._insert_snapshot(snapshot)
+                row_version = self._write_draft_row(draft, payload, state, digest, existing, expected_row_version)
+                superseded = self._supersede_revision_parent(snapshot)
+        except DuplicateOfficialQuoteNumberError:
+            raise
+        except ConcurrentUpdateError:
+            raise
+        except sqlite3.IntegrityError as error:
+            if self.official_quote_number_in_use(number):
+                raise DuplicateOfficialQuoteNumberError(number) from error
+            raise QuoteRepositoryError(f"Failed to record approval: {error}") from error
+        except sqlite3.Error as error:
+            raise QuoteRepositoryError(f"Failed to record approval: {error}") from error
+        self._row_versions[key] = row_version
+        for parent_key, parent_version in superseded:
+            self._row_versions[parent_key] = parent_version
+        return SaveResult(
+            saved=True, skipped=False, updated_at=self._last_written_at, content_hash=digest, row_version=row_version
+        )
+
+    def _supersede_revision_parent(self, snapshot: ApprovedQuoteSnapshot) -> list[tuple[tuple[str, int], int]]:
+        if snapshot.relation_type != "REVISION" or not snapshot.parent_quote_id:
+            return []
+        now = now_iso()
+        actor = current_actor()
+        changed = []
+        rows = self._connection.execute(
+            """
+            SELECT quote_draft_id, version, payload_json, ui_state_json, row_version
+            FROM quote_drafts WHERE quote_draft_id = ? AND status = 'APPROVED'
+            """,
+            (snapshot.parent_quote_id,),
+        ).fetchall()
+        for row in rows:
+            payload = json.loads(row["payload_json"])
+            payload["status"] = "SUPERSEDED"
+            state = json.loads(row["ui_state_json"] or "{}")
+            cursor = self._connection.execute(
+                """
+                UPDATE quote_drafts SET status = 'SUPERSEDED', payload_json = ?, content_hash = ?,
+                    updated_at = ?, updated_by = ?, row_version = row_version + 1
+                WHERE quote_draft_id = ? AND version = ? AND row_version = ?
+                """,
+                (
+                    json.dumps(payload, ensure_ascii=False),
+                    content_hash(payload, state),
+                    now,
+                    actor,
+                    row["quote_draft_id"],
+                    row["version"],
+                    row["row_version"],
+                ),
+            )
+            if cursor.rowcount != 1:
+                raise ConcurrentUpdateError(f"{row['quote_draft_id']}:v{row['version']}", row["row_version"])
+            changed.append(((row["quote_draft_id"], row["version"]), row["row_version"] + 1))
+            snapshots = self._connection.execute(
+                """
+                SELECT approved_quote_snapshot_id, payload_json FROM approved_quote_snapshots
+                WHERE quote_draft_id = ? AND quote_version = ?
+                """,
+                (row["quote_draft_id"], row["version"]),
+            ).fetchall()
+            for item in snapshots:
+                stored = json.loads(item["payload_json"])
+                if stored.get("status") != "APPROVED":
+                    continue
+                # Only the lifecycle status changes; the approved content stays as it was.
+                stored["status"] = "SUPERSEDED"
+                self._connection.execute(
+                    "UPDATE approved_quote_snapshots SET payload_json = ? WHERE approved_quote_snapshot_id = ?",
+                    (json.dumps(stored, ensure_ascii=False), item["approved_quote_snapshot_id"]),
+                )
+        return changed
 
     def get_snapshot(self, approved_quote_snapshot_id: str) -> Optional[ApprovedQuoteSnapshot]:
         row = self._connection.execute(
@@ -341,3 +491,8 @@ class SqliteQuoteRepository:
         if row is None:
             return None
         return ApprovedQuoteSnapshot.model_validate(json.loads(row["payload_json"]))
+
+
+def _clean_number(value: Optional[str]) -> Optional[str]:
+    text = (value or "").strip()
+    return text or None

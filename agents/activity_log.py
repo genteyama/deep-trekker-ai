@@ -269,7 +269,11 @@ def record_quote_approved(repository: SqliteActivityRepository, draft, snapshot)
         entity_version=draft.quote_version,
         customer_name=draft.customer,
         title=draft.title,
-        payload={"snapshot_id": snapshot.approved_quote_snapshot_id},
+        payload={
+            "snapshot_id": snapshot.approved_quote_snapshot_id,
+            "approved_by": snapshot.approved_by,
+            "official_quote_number": snapshot.official_quote_number,
+        },
     )
 
 

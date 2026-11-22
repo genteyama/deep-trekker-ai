@@ -27,7 +27,10 @@ def build_formal_quote_document(
         raise FormalQuoteDocumentError(
             f"FormalQuoteDocument requires an approved snapshot. Current status is {snapshot.status.value}."
         )
-    quote_number = _clean(official_quote_number) or snapshot.official_quote_number or snapshot.quote_number_candidate
+    from agents.quote_export import resolve_official_quote_number
+
+    # The number fixed on the approved snapshot always wins; a different explicit number is refused.
+    quote_number = resolve_official_quote_number(snapshot, official_quote_number) or snapshot.quote_number_candidate
     issuer = None
     if snapshot.issuer_snapshot is not None:
         issuer = FormalQuoteIssuer(
