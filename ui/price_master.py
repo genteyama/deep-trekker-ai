@@ -20,8 +20,21 @@ from agents.online_price_master import (
 )
 from agents.online_price_source import resolve_online_price_source
 from agents.price_master import ONLINE_SYNC_MASTERS, get_active_master, import_price_master
+from agents.price_master_csv_fallback import (
+    CSV_FALLBACK_SHEETS,
+    CsvFallbackError,
+    CsvFallbackReview,
+    activate_csv_fallback,
+    build_csv_fallback_review,
+)
 from agents.quote_dates import TOKYO
-from models import PriceMasterImport, PriceMasterImportOutcome, PriceMasterImportStatus, PriceMasterType
+from models import (
+    PriceMasterImport,
+    PriceMasterImportOutcome,
+    PriceMasterImportStatus,
+    PriceMasterSourceType,
+    PriceMasterType,
+)
 from repositories.manufacturer_price_source_repository import (
     ManufacturerPriceSourceConflictError,
     ManufacturerPriceSourceRepositoryError,
@@ -31,6 +44,51 @@ from repositories.sqlite_price_master_repository import SqlitePriceMasterReposit
 
 SESSION_PRICE_MASTER_FLASH = "price_master_flash"
 SESSION_SHIPPING_FLASH = "shipping_reference_flash"
+ONLINE_SECTION_TITLE = "オンライン価格表（通常はこちら）"
+FALLBACK_SECTION_TITLE = "Fallback（オンライン取得できない場合）"
+FALLBACK_SECTION_NOTE = (
+    "通常はオンライン価格表を利用します。オンライン取得できない場合だけ、Excel（.xlsx）またはCSVを使用してください。"
+    "Fallbackを使ってもOnline Source設定は消えません。"
+)
+EXCEL_FALLBACK_TITLE = "Excel（.xlsx）— 完全Fallback"
+CSV_FALLBACK_TITLE = "CSV — 単一Sheet Fallback"
+CSV_FALLBACK_NOTE = (
+    "CSVは1Sheet分だけです。現在のActive Masterをコピーし、選択したSheetだけをCSV内容で置き換えて、"
+    "Workbook全体を検証します。登録・有効化は確認後の明示操作でのみ行います。"
+)
+ONLINE_FALLBACK_NOTICE = (
+    "オンライン価格表を取得できません。現在のActive Masterを継続使用しています。"
+    "必要に応じてExcel / CSVのFallbackを使用してください。"
+)
+SOURCE_UPDATED_AT_LABEL = "最終更新日時（URL保存・接続確認）"
+SOURCE_UPDATED_BY_LABEL = "更新者"
+SOURCE_TYPE_LABELS = {
+    "MANUFACTURER_ONLINE": "Online",
+    "FILE_UPLOAD": "Excel Upload",
+    "CSV_UPLOAD": "CSV Upload",
+}
+CSV_OUTCOME_TEMPLATES = {
+    "CSV_REVIEW_REQUIRED": "{label}は、CSVの確認結果に変更がある場合だけ登録できます。現在の価格マスターは変更していません。",
+    "CSV_REVIEW_STALE": "確認後に{label}のActive Masterが更新されています。CSVをもう一度検証してください。現在の価格マスターは変更していません。",
+}
+CSV_ERROR_MESSAGES = {
+    "PRICE_BOOK_REQUIRED": "Price Bookを選択してください。",
+    "PRICE_BOOK_NOT_ALLOWED": "このPrice BookはCSV Fallbackの対象外です。",
+    "SHEET_REQUIRED": "対象Sheetを選択してください。",
+    "SHEET_NOT_ALLOWED": "このSheetはCSV Fallbackの対象外です。",
+    "SHEET_NOT_IN_ACTIVE_MASTER": "選択したSheetが現在のActive Masterにありません。",
+    "NOT_CSV": "CSV（.csv）ファイルを選択してください。",
+    "CSV_EMPTY": "CSVが空です。",
+    "CSV_TOO_LARGE": "CSVが大きすぎます。",
+    "CSV_UNREADABLE": "CSVを読み込めませんでした（UTF-8のCSVを使用してください）。",
+    "ACTIVE_MASTER_REQUIRED": "CSV Fallbackには現在のActive Masterが必要です。初回登録はExcel（.xlsx）を使用してください。",
+    "ACTIVE_MASTER_UNREADABLE": "現在のActive Masterを読み込めませんでした。",
+    "CSV_MISSING_COLUMNS": "CSVに必須列（Part Number / Description / MSRP / Dealer・Gold price）がありません。",
+    "CSV_NO_SKUS": "CSVから価格のあるSKUを読み取れませんでした。",
+    "PARSER_FAILED": "CSVを反映したWorkbookを読み込めませんでした。",
+    "CSV_REVIEW_STALE": "確認中にActive Masterが更新されました。もう一度検証してください。",
+    "DEFAULT": "CSVを検証できませんでした。",
+}
 SHIPPING_ADMIN_TITLE = "国際輸送費（参考）管理"
 SHIPPING_SAVE_BUTTON = "国際輸送費を更新"
 SHIPPING_UNCHANGED = "変更はありません"
@@ -63,89 +121,161 @@ def render_price_master_management(page: dict) -> None:
             (st.success if level == "success" else st.info if level == "info" else st.error)(text)
         repository = SqlitePriceMasterRepository()
         source_repository = ManufacturerPriceSourceRepository()
-        _render_source_registry(labels, source_repository, repository)
+        st.markdown(f"### {labels['online']['settings_title']}")
+        st.caption(labels["online"]["settings_safety"])
+        sources ={source.source_key: source for source in list_effective_sources(source_repository)}
         for master_type in PriceMasterType:
-            _render_master_section(labels, master_type, repository, source_repository)
+            if master_type in ONLINE_SYNC_MASTERS:
+                _render_manufacturer_book(labels, master_type, sources.get(master_type.value), repository, source_repository)
+            else:
+                _render_master_section(labels, master_type, repository, source_repository)
     render_shipping_reference_management()
 
 
-def _render_source_registry(labels: dict, source_repository, price_master_repository) -> None:
+def _render_manufacturer_book(
+    labels: dict,
+    master_type: PriceMasterType,
+    source,
+    repository: SqlitePriceMasterRepository,
+    source_repository: ManufacturerPriceSourceRepository,
+) -> None:
+    """One manufacturer Price Book: current source, online (primary), then file fallbacks."""
+    st.markdown(f"#### {labels['labels'][master_type.value]}")
+    active = repository.get_active(master_type)
+    _render_active_source(labels, active)
+    st.markdown(f"##### {ONLINE_SECTION_TITLE}")
+    if source is not None:
+        _render_source_settings(labels, source, source_repository, repository)
+    _render_online_review(labels, master_type, repository, source_repository, active)
+    st.markdown(f"##### {FALLBACK_SECTION_TITLE}")
+    st.caption(FALLBACK_SECTION_NOTE)
+    st.markdown(f"**{EXCEL_FALLBACK_TITLE}**")
+    _render_excel_upload(labels, master_type, repository)
+    st.markdown(f"**{CSV_FALLBACK_TITLE}**")
+    _render_csv_fallback(labels, master_type, repository)
+    _render_import_history(labels, master_type, repository)
+
+
+def describe_active_source(record: Optional[PriceMasterImport]) -> list[tuple[str, str]]:
+    """Where the Active master came from, as (label, value) rows. Empty when nothing is active."""
+    if record is None:
+        return []
+    summary = record.validation_summary or {}
+    source_type = record.source_type.value
+    rows = [("Source Type", SOURCE_TYPE_LABELS.get(source_type, source_type))]
+    if source_type == PriceMasterSourceType.MANUFACTURER_ONLINE.value:
+        online = summary.get("online_source") or {}
+        rows.append(("取得元URL", online.get("source_url") or "-"))
+        rows.append(("ファイル名", record.original_filename or "-"))
+    elif source_type == PriceMasterSourceType.CSV_UPLOAD.value:
+        csv_source = summary.get("csv_source") or {}
+        rows.append(("CSVファイル", csv_source.get("csv_filename") or "-"))
+        rows.append(("置換Sheet", csv_source.get("replaced_sheet") or "-"))
+        rows.append(("Base Master", csv_source.get("base_import_id") or "-"))
+    else:
+        rows.append(("ファイル名", record.original_filename or "-"))
+    rows.append(("取込日時", format_imported_at(record.imported_at)))
+    rows.append(("状態", "Active" if record.active else "Inactive"))
+    rows.append(("Import ID", record.import_id))
+    rows.append(("sha256", f"{record.sha256[:12]}…"))
+    if summary.get("imported_by"):
+        rows.append(("登録者", summary["imported_by"]))
+    return rows
+
+
+def active_source_headline(record: Optional[PriceMasterImport]) -> str:
+    if record is None:
+        return "現在使用中：未設定"
+    summary = record.validation_summary or {}
+    source_type = record.source_type.value
+    label = SOURCE_TYPE_LABELS.get(source_type, source_type)
+    if source_type == PriceMasterSourceType.MANUFACTURER_ONLINE.value:
+        detail = record.master_type.value
+    elif source_type == PriceMasterSourceType.CSV_UPLOAD.value:
+        detail = (summary.get("csv_source") or {}).get("csv_filename") or "-"
+    else:
+        detail = record.original_filename or "-"
+    return f"現在使用中：{label} / {detail}"
+
+
+def _render_active_source(labels: dict, active: Optional[PriceMasterImport]) -> None:
+    with st.container(border=True):
+        st.markdown(f"**{active_source_headline(active)}**")
+        rows = describe_active_source(active)
+        if rows:
+            st.table([{"項目": key, "内容": value} for key, value in rows])
+            st.caption(f"{labels['validation_label']}：{format_validation(labels, active)}")
+
+
+def _render_source_settings(labels: dict, source, source_repository, price_master_repository) -> None:
     online = labels["online"]
-    st.markdown(f"### {online['settings_title']}")
-    st.caption(online["settings_safety"])
-    for source in list_effective_sources(source_repository):
-        version_key = f"manufacturer_source_version_{source.source_key}"
-        if version_key not in st.session_state:
-            st.session_state[version_key] = source.row_version
-        with st.container(border=True):
-            heading = source.display_name
-            if source.lifecycle_status == "FUTURE":
-                heading += f" — {online['future_status']}"
-            st.markdown(f"**{heading}**")
-            if source.lifecycle_status == "FUTURE":
-                st.caption(online["future_notice"])
-                st.write(f"{online['future_state_label']}：{online['future_state_stopped']}")
-                continue
-            state = online["enabled"] if source.enabled else online["disabled"]
-            st.write(f"{online['state_label']}：{state}")
-            st.write(
-                f"{online['checked_at_label']}：{format_imported_at(source.last_checked_at)} ／ "
-                f"{online['check_status_label']}：{source.last_check_status or online['not_checked']}"
+    version_key = f"manufacturer_source_version_{source.source_key}"
+    if version_key not in st.session_state:
+        st.session_state[version_key] = source.row_version
+    state = online["enabled"] if source.enabled else online["disabled"]
+    st.write(f"{online['state_label']}：{state}")
+    st.write(
+        f"{online['checked_at_label']}：{format_imported_at(source.last_checked_at)} ／ "
+        f"{online['check_status_label']}：{source.last_check_status or online['not_checked']}"
+    )
+    st.caption(
+        f"{SOURCE_UPDATED_AT_LABEL}：{format_imported_at(source.updated_at)} ／ "
+        f"{SOURCE_UPDATED_BY_LABEL}：{source.updated_by or '-'}"
+    )
+    url = st.text_input(
+        online["url_label"],
+        value=source.source_url,
+        key=f"manufacturer_source_url_{source.source_key}",
+    )
+    enabled = st.checkbox(
+        online["enabled_label"],
+        value=source.enabled,
+        key=f"manufacturer_source_enabled_{source.source_key}",
+    )
+    save_column, check_column = st.columns(2)
+    if save_column.button(online["save_url_button"], key=f"manufacturer_source_save_{source.source_key}"):
+        try:
+            save_source_setting(
+                source.source_key,
+                url,
+                enabled,
+                expected_row_version=st.session_state[version_key],
+                repository=source_repository,
             )
-            url = st.text_input(
-                online["url_label"],
-                value=source.source_url,
-                key=f"manufacturer_source_url_{source.source_key}",
+        except ManufacturerPriceSourceValidationError:
+            st.session_state[SESSION_PRICE_MASTER_FLASH] = ("error", online["invalid_url"])
+        except ManufacturerPriceSourceConflictError:
+            st.session_state.pop(version_key, None)
+            st.session_state[SESSION_PRICE_MASTER_FLASH] = ("error", online["conflict"])
+        except ManufacturerPriceSourceRepositoryError:
+            st.session_state[SESSION_PRICE_MASTER_FLASH] = ("error", online["registry_unavailable"])
+        else:
+            st.session_state.pop(version_key, None)
+            st.session_state.pop(_review_key_for_source(source.source_key), None)
+            st.session_state[SESSION_PRICE_MASTER_FLASH] = ("success", online["saved"])
+        st.rerun()
+    if check_column.button(online["connection_button"], key=f"manufacturer_source_check_{source.source_key}"):
+        try:
+            updated, review = check_source_connection(
+                source.model_copy(update={"row_version": st.session_state[version_key]}),
+                source_repository=source_repository,
+                price_master_repository=price_master_repository,
             )
-            enabled = st.checkbox(
-                online["enabled_label"],
-                value=source.enabled,
-                key=f"manufacturer_source_enabled_{source.source_key}",
-            )
-            save_column, check_column = st.columns(2)
-            if save_column.button(online["save_url_button"], key=f"manufacturer_source_save_{source.source_key}"):
-                try:
-                    save_source_setting(
-                        source.source_key,
-                        url,
-                        enabled,
-                        expected_row_version=st.session_state[version_key],
-                        repository=source_repository,
-                    )
-                except ManufacturerPriceSourceValidationError:
-                    st.session_state[SESSION_PRICE_MASTER_FLASH] = ("error", online["invalid_url"])
-                except ManufacturerPriceSourceConflictError:
-                    st.session_state.pop(version_key, None)
-                    st.session_state[SESSION_PRICE_MASTER_FLASH] = ("error", online["conflict"])
-                except ManufacturerPriceSourceRepositoryError:
-                    st.session_state[SESSION_PRICE_MASTER_FLASH] = ("error", online["registry_unavailable"])
-                else:
-                    st.session_state.pop(version_key, None)
-                    st.session_state.pop(_review_key_for_source(source.source_key), None)
-                    st.session_state[SESSION_PRICE_MASTER_FLASH] = ("success", online["saved"])
-                st.rerun()
-            if check_column.button(online["connection_button"], key=f"manufacturer_source_check_{source.source_key}"):
-                try:
-                    updated, review = check_source_connection(
-                        source.model_copy(update={"row_version": st.session_state[version_key]}),
-                        source_repository=source_repository,
-                        price_master_repository=price_master_repository,
-                    )
-                except ManufacturerPriceSourceValidationError:
-                    st.session_state[SESSION_PRICE_MASTER_FLASH] = ("error", online["save_before_check"])
-                except ManufacturerPriceSourceConflictError:
-                    st.session_state.pop(version_key, None)
-                    st.session_state[SESSION_PRICE_MASTER_FLASH] = ("error", online["conflict"])
-                except ManufacturerPriceSourceRepositoryError:
-                    st.session_state[SESSION_PRICE_MASTER_FLASH] = ("error", online["registry_unavailable"])
-                else:
-                    st.session_state.pop(version_key, None)
-                    if review is not None:
-                        st.session_state[_review_key_for_source(source.source_key)] = review
-                    message = online["connection_ok"] if updated.last_check_status in CHECK_OK else online["connection_failed"]
-                    level = "success" if updated.last_check_status in CHECK_OK else "error"
-                    st.session_state[SESSION_PRICE_MASTER_FLASH] = (level, message)
-                st.rerun()
+        except ManufacturerPriceSourceValidationError:
+            st.session_state[SESSION_PRICE_MASTER_FLASH] = ("error", online["save_before_check"])
+        except ManufacturerPriceSourceConflictError:
+            st.session_state.pop(version_key, None)
+            st.session_state[SESSION_PRICE_MASTER_FLASH] = ("error", online["conflict"])
+        except ManufacturerPriceSourceRepositoryError:
+            st.session_state[SESSION_PRICE_MASTER_FLASH] = ("error", online["registry_unavailable"])
+        else:
+            st.session_state.pop(version_key, None)
+            if review is not None:
+                st.session_state[_review_key_for_source(source.source_key)] = review
+            ok = updated.last_check_status in CHECK_OK
+            message = online["connection_ok"] if ok else f"{online['connection_failed']} {ONLINE_FALLBACK_NOTICE}"
+            st.session_state[SESSION_PRICE_MASTER_FLASH] = ("success" if ok else "error", message)
+        st.rerun()
 
 
 def _review_key_for_source(source_key: str) -> str:
@@ -170,8 +300,11 @@ def _render_master_section(
             f"{labels['hash_label']}：{active.sha256[:12]}…"
         )
         st.caption(f"{labels['validation_label']}：{format_validation(labels, active)}")
-    if master_type in ONLINE_SYNC_MASTERS:
-        _render_online_review(labels, master_type, repository, source_repository, active)
+    _render_excel_upload(labels, master_type, repository)
+    _render_import_history(labels, master_type, repository)
+
+
+def _render_excel_upload(labels: dict, master_type: PriceMasterType, repository: SqlitePriceMasterRepository) -> None:
     uploaded = st.file_uploader(labels["upload_label"], type=["xlsx"], key=f"price_master_upload_{master_type.value}")
     if st.button(labels["import_button"], key=f"price_master_import_{master_type.value}"):
         if uploaded is None:
@@ -180,6 +313,9 @@ def _render_master_section(
             outcome = import_price_master(master_type, uploaded.name, uploaded.getvalue(), repository=repository)
             st.session_state[SESSION_PRICE_MASTER_FLASH] = outcome_message(labels, outcome)
             st.rerun()
+
+
+def _render_import_history(labels: dict, master_type: PriceMasterType, repository: SqlitePriceMasterRepository) -> None:
     history = repository.list_imports(master_type)
     with st.expander(labels["history_label"], expanded=False):
         if not history:
@@ -189,12 +325,102 @@ def _render_master_section(
                 [
                     {
                         labels["imported_at_label"]: format_imported_at(item.imported_at),
+                        "Source": SOURCE_TYPE_LABELS.get(item.source_type.value, item.source_type.value),
                         labels["file_label"]: item.original_filename or "-",
                         labels["hash_label"]: f"{item.sha256[:12]}…",
                         labels["current_label"]: labels["status_active"] if item.active else labels["status_inactive"],
                         labels["validation_label"]: format_validation(labels, item),
                     }
                     for item in history
+                ]
+            )
+
+
+def _csv_review_key(master_type: PriceMasterType) -> str:
+    return f"csv_fallback_review_{master_type.value}"
+
+
+def _render_csv_fallback(labels: dict, master_type: PriceMasterType, repository: SqlitePriceMasterRepository) -> None:
+    st.caption(CSV_FALLBACK_NOTE)
+    if repository.get_active(master_type) is None:
+        st.info(CSV_ERROR_MESSAGES["ACTIVE_MASTER_REQUIRED"])
+        return
+    book_column, sheet_column = st.columns(2)
+    selected_book = book_column.selectbox(
+        "Price Book",
+        [master_type.value],
+        index=None,
+        placeholder="選択してください",
+        key=f"csv_price_book_{master_type.value}",
+    )
+    selected_sheet = sheet_column.selectbox(
+        "対象Sheet",
+        list(CSV_FALLBACK_SHEETS[master_type]),
+        index=None,
+        placeholder="選択してください",
+        key=f"csv_sheet_{master_type.value}",
+    )
+    uploaded = st.file_uploader("CSVファイル", type=["csv"], key=f"csv_upload_{master_type.value}")
+    if st.button("CSVを検証して差分を確認", key=f"csv_validate_{master_type.value}"):
+        st.session_state.pop(_csv_review_key(master_type), None)
+        if uploaded is None:
+            st.session_state[SESSION_PRICE_MASTER_FLASH] = ("error", "CSVファイルを選択してください。現在の価格マスターは変更していません。")
+        else:
+            try:
+                fallback = build_csv_fallback_review(
+                    selected_book,
+                    selected_sheet,
+                    uploaded.name,
+                    uploaded.getvalue(),
+                    repository=repository,
+                )
+            except CsvFallbackError as error:
+                message = CSV_ERROR_MESSAGES.get(error.code, CSV_ERROR_MESSAGES["DEFAULT"])
+                st.session_state[SESSION_PRICE_MASTER_FLASH] = ("error", f"{message} 現在の価格マスターは変更していません。")
+            else:
+                st.session_state[_csv_review_key(master_type)] = fallback
+        st.rerun()
+    fallback = st.session_state.get(_csv_review_key(master_type))
+    if not isinstance(fallback, CsvFallbackReview):
+        return
+    review = fallback.review
+    st.caption(f"検証済みCSV：{fallback.csv_filename} ／ 置換Sheet：{fallback.sheet_name} ／ Base Master：{fallback.base_import_id}")
+    if review.error_count:
+        status_text = labels["online"]["statuses"].get(review.status.value, labels["online"]["statuses"]["VALIDATION_FAILED"])
+        st.error(status_text.format(label=labels["labels"][master_type.value]))
+        return
+    _render_review_summary(labels, review)
+    if review.status == OnlinePriceReviewStatus.NO_CHANGE:
+        st.info(labels["online"]["no_change"])
+        return
+    if st.button("CSV反映版を新しいPrice Masterとして登録・有効化", key=f"csv_activate_{master_type.value}"):
+        outcome = activate_csv_fallback(fallback, repository=repository)
+        st.session_state.pop(_csv_review_key(master_type), None)
+        st.session_state[SESSION_PRICE_MASTER_FLASH] = outcome_message(labels, outcome)
+        st.rerun()
+
+
+def _render_review_summary(labels: dict, review: OnlinePriceReview) -> None:
+    online = labels["online"]
+    st.markdown(f"**{online['summary_title']}**")
+    st.write(online["price_changes"].format(count=review.price_change_count))
+    st.write(online["dealer_changes"].format(count=review.dealer_change_count))
+    st.write(online["msrp_changes"].format(count=review.msrp_change_count))
+    st.write(online["sku_added"].format(count=review.added_count))
+    st.write(online["sku_removed"].format(count=review.removed_count))
+    st.write(online["errors"].format(count=review.error_count))
+    if review.changes:
+        kind_labels = online["change_kinds"]
+        with st.expander(online["details"], expanded=False):
+            st.table(
+                [
+                    {
+                        online["column_sku"]: item.sku,
+                        online["column_change"]: kind_labels[item.kind],
+                        online["column_dealer"]: _price_pair(item.old_dealer, item.new_dealer),
+                        online["column_msrp"]: _price_pair(item.old_msrp, item.new_msrp),
+                    }
+                    for item in review.changes
                 ]
             )
 
@@ -230,31 +456,12 @@ def _render_online_review(
         return
     if review.error_count:
         st.error(online["statuses"][review.status.value].format(label=labels["labels"][master_type.value]))
+        st.warning(ONLINE_FALLBACK_NOTICE)
         return
-    st.markdown(f"**{online['summary_title']}**")
-    st.write(online["price_changes"].format(count=review.price_change_count))
-    st.write(online["dealer_changes"].format(count=review.dealer_change_count))
-    st.write(online["msrp_changes"].format(count=review.msrp_change_count))
-    st.write(online["sku_added"].format(count=review.added_count))
-    st.write(online["sku_removed"].format(count=review.removed_count))
-    st.write(online["errors"].format(count=review.error_count))
+    _render_review_summary(labels, review)
     if review.status == OnlinePriceReviewStatus.NO_CHANGE:
         st.info(online["no_change"])
         return
-    if review.changes:
-        kind_labels = online["change_kinds"]
-        with st.expander(online["details"], expanded=False):
-            st.table(
-                [
-                    {
-                        online["column_sku"]: item.sku,
-                        online["column_change"]: kind_labels[item.kind],
-                        online["column_dealer"]: _price_pair(item.old_dealer, item.new_dealer),
-                        online["column_msrp"]: _price_pair(item.old_msrp, item.new_msrp),
-                    }
-                    for item in review.changes
-                ]
-            )
     if st.button(online["activate_button"], key=f"online_price_activate_{master_type.value}"):
         outcome = activate_reviewed_online_price(
             review,
@@ -292,6 +499,7 @@ def outcome_message(labels: dict, outcome: PriceMasterImportOutcome) -> tuple[st
     if outcome.status == PriceMasterImportStatus.REJECTED:
         template = (
             templates.get(outcome.reason_code or "")
+            or CSV_OUTCOME_TEMPLATES.get(outcome.reason_code or "")
             or templates.get("VALIDATION_FAILED")
             or "{label}: validation failed"
         )

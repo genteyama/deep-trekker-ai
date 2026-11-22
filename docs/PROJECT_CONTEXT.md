@@ -776,3 +776,15 @@ Next:
 - 価格一覧「国際輸送費（参考）」は現在 APPROVED の3区分を表示（USD dollar / 参考JPY yen）。未登録は要確認。閲覧ではDB writeなし。
 - 優先順位：Supplier Quote / メーカー見積の案件固有Shipping ＞ その他案件固有送料 ＞ 標準マスター ＞ 要確認。Quote / Landed Cost への自動適用、個口数計算、Box Type 判定は未実装。
 - Production PostgreSQL は `deploy/migrations/20261122_shipping_rules.sql`（table＋index＋seed、idempotent）を別途適用。Runtime では PostgreSQL に CREATE / ALTER しない（ローカルSQLiteのみ自動作成・seed）。
+
+### PORTAL-2A.4 — メーカー価格表オンライン同期統一＋Fallback
+
+- DT40 / PT30 / SPECTRA GOLD を同じ Online Source 方式へ統一（`ONLINE_SYNC_MASTERS = MANUFACTURER_MASTERS`）。SPECTRA GOLD は FUTURE（接続確認のみ）から ACTIVE（parser_profile `SPECTRA_GOLD`）へ。旧 FUTURE 行は読込時にコード値で ACTIVE 扱い、次回URL保存で DB も更新。
+- Google Sheets＝上流Source、Active Master＝見積・価格一覧が使う承認済みSnapshot。流れは Online取得 → Validation → Active Masterとの差分 → Human approval → Activate。Quote / 価格一覧は Active Master のみを使用（Live Read なし）。
+- SPECTRA は既存 `parsers/spectra_gold_parser.py` の SPECTRA タブのみを読む（非表示Sheetは不採用）。
+- URLはコードに持たず `manufacturer_price_sources` Registry に保存し、管理UIから変更。URL保存・接続確認は Active Master を変更しない。最終更新日時／更新者は既存 updated_at / updated_by / row_version を表示。URL変更後の古いReviewは stale として Activate 不可。
+- Online取得・Validation失敗時は Active Master を維持し「Excel / CSVのFallbackを使用」と案内。
+- Excel（.xlsx）は完全Fallbackとして維持（既存の明示Import操作で有効化）。Upload後も Online Source 設定は残り、復旧後は Online最新版 vs 現在Active（Upload版）を通常どおり差分確認できる。
+- CSV は単一Sheet Fallback（`agents/price_master_csv_fallback.py`）。Price Book と対象Sheet（固定allowlist：DT40 6 / PT30 3 / SPECTRA 1）をユーザーが明示選択。現在の Active Master が必須（無ければ「初回はExcel」と案内）。Active workbook を値としてコピーし、選択Sheetだけを CSV の行・列で置換 → Workbook全体を既存Parser / `validate_price_master()` / 既存差分で確認 → 明示操作でのみ Activate（source_type `CSV_UPLOAD`）。確認後に Active が変わっていれば stale として拒否。
+- Provenance：source_type（MANUFACTURER_ONLINE / FILE_UPLOAD / CSV_UPLOAD）、original_filename、imported_at、sha256、imported_by。Online は source URL / key / fetched_at / auth_mode、CSV は CSV filename / Price Book / 置換Sheet / Base Master import_id を validation_summary に保持。管理画面に「現在使用中：Online / Excel Upload / CSV Upload」を表示。
+- DB schema 変更なし。Quote計算 / Pricing Policy / SO_MASTER / Shipping Rule は変更なし。

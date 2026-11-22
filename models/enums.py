@@ -390,6 +390,8 @@ class PriceMasterSourceType(str, Enum):
     # Online manufacturer workbooks use the same validation, hashing and activation as uploads.
     FILE_UPLOAD = "FILE_UPLOAD"
     MANUFACTURER_ONLINE = "MANUFACTURER_ONLINE"
+    # One sheet of the current Active workbook replaced from a CSV, then validated as a whole workbook.
+    CSV_UPLOAD = "CSV_UPLOAD"
 
 
 class PriceMasterValidationStatus(str, Enum):

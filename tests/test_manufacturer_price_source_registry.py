@@ -39,7 +39,7 @@ def reset_actor():
     [
         (SOURCE_DT40, "https://example.test/dt40.xlsx", "ACTIVE"),
         (SOURCE_PT30, "https://example.test/pt30.xlsx", "ACTIVE"),
-        (SOURCE_SPECTRA_GOLD, "https://example.test/spectra-gold.xlsx", "FUTURE"),
+        (SOURCE_SPECTRA_GOLD, "https://example.test/spectra-gold.xlsx", "ACTIVE"),
     ],
 )
 def test_source_registry_saves_all_supported_sources(source_key, url, lifecycle):
@@ -246,7 +246,7 @@ def test_invalid_url_is_rejected_and_active_master_is_unchanged():
     assert ManufacturerPriceSourceRepository().get(SOURCE_DT40) is None
 
 
-def test_spectra_gold_connection_check_does_not_enter_quote_price_books():
+def test_spectra_gold_connection_check_reviews_without_activating():
     repo = ManufacturerPriceSourceRepository()
     source = save_source_setting(
         SOURCE_SPECTRA_GOLD,
@@ -257,6 +257,7 @@ def test_spectra_gold_connection_check_does_not_enter_quote_price_books():
     )
 
     def fetch(_source):
+        # A workbook without a SPECTRA tab is a failed review, never a master.
         return FetchedWorkbook(
             data=_dt40({"NEW SHEET NAME": [["S-1", "Future", 100, 60, None]]}),
             filename="spectra.xlsx",
@@ -265,9 +266,11 @@ def test_spectra_gold_connection_check_does_not_enter_quote_price_books():
 
     checked, review = check_source_connection(source, source_repository=repo, fetcher=fetch)
 
-    assert checked.last_check_status == "CONNECTED_FUTURE"
-    assert review is None
-    assert SOURCE_SPECTRA_GOLD not in {item.value for item in ONLINE_SYNC_MASTERS}
+    assert review is not None
+    assert review.master_type == PriceMasterType.SPECTRA_GOLD
+    assert review.error_count == 1
+    assert checked.last_check_status == review.status.value
+    assert PriceMasterType.SPECTRA_GOLD in ONLINE_SYNC_MASTERS
     assert get_active_master(PriceMasterType.SPECTRA_GOLD) is None
     assert get_active_master(PriceMasterType.DT40) is None
     assert get_active_master(PriceMasterType.PT30) is None
@@ -328,22 +331,24 @@ def test_json_bootstrap_is_used_when_db_and_environment_are_empty(monkeypatch, t
     assert source.configured is True
 
 
-def test_effective_source_list_includes_future_source_without_persisting_it():
+def test_effective_source_list_includes_spectra_as_active_without_persisting_it():
     repo = ManufacturerPriceSourceRepository()
 
     sources = {item.source_key: item for item in list_effective_sources(repo)}
 
-    assert sources[SOURCE_SPECTRA_GOLD].lifecycle_status == "FUTURE"
+    assert sources[SOURCE_SPECTRA_GOLD].lifecycle_status == "ACTIVE"
+    assert sources[SOURCE_SPECTRA_GOLD].parser_profile == "SPECTRA_GOLD"
     assert repo.list_sources() == []
 
 
-def test_admin_ui_can_save_url_and_labels_spectra_as_future():
+def test_admin_ui_can_save_url_and_shows_spectra_as_online_source():
     from tests.test_price_master_ui import _open_price_master_page, _texts
 
     at = _open_price_master_page()
     assert "オンライン価格表設定" in _texts(at)
-    assert "現在はExcel手動アップロードで価格マスターを運用しています。" in _texts(at)
-    assert "現在の見積価格には使用しません。" in _texts(at)
+    assert "オンライン連携保留" not in _texts(at)
+    assert any(item.key == "manufacturer_source_url_SPECTRA_GOLD" for item in at.text_input)
+    assert any(item.key == "manufacturer_source_check_SPECTRA_GOLD" for item in at.button)
 
     at.text_input(key="manufacturer_source_url_DT40").set_value("https://example.test/ui-dt40.xlsx")
     at.button(key="manufacturer_source_save_DT40").click().run()

@@ -95,14 +95,16 @@ def _draft_for_sku(sku, candidates):
     )
 
 
-def test_spectra_gold_is_a_manual_manufacturer_price_master_not_online_sync():
+def test_spectra_gold_is_an_online_sync_manufacturer_master():
     assert PriceMasterType.SPECTRA_GOLD.value == "SPECTRA_GOLD"
     assert PriceMasterType.SPECTRA_GOLD in MANUFACTURER_MASTERS
-    assert PriceMasterType.SPECTRA_GOLD not in ONLINE_SYNC_MASTERS
+    assert PriceMasterType.SPECTRA_GOLD in ONLINE_SYNC_MASTERS
 
+    # Without a registered URL the review stops before fetching; nothing is activated.
     review = review_manufacturer_online_price(PriceMasterType.SPECTRA_GOLD)
 
     assert review.status == OnlinePriceReviewStatus.NOT_CONFIGURED
+    assert get_active_master(PriceMasterType.SPECTRA_GOLD) is None
 
 
 def test_valid_spectra_manual_upload_activates_with_validation_summary():
@@ -343,11 +345,11 @@ def test_active_spectra_master_flows_to_quote_with_provenance_and_no_inferred_sa
     assert validate_for_approval(draft).can_approve is False
 
 
-def test_price_master_ui_shows_manual_spectra_section_and_paused_online_label():
+def test_price_master_ui_shows_spectra_with_online_source_and_excel_fallback():
     at = _open_price_master_page()
     texts = _texts(at)
 
-    assert "SPECTRA GOLD（手動アップロード）" in texts
-    assert "SPECTRA GOLD — オンライン連携保留" in texts
-    assert "現在はExcel手動アップロードで価格マスターを運用しています" in texts
+    assert "#### SPECTRA GOLD" in texts
+    assert "オンライン連携保留" not in texts
+    assert any(item.key == "manufacturer_source_check_SPECTRA_GOLD" for item in at.button)
     assert any(item.key == "price_master_import_SPECTRA_GOLD" for item in at.button)

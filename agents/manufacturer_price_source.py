@@ -1,19 +1,10 @@
 from __future__ import annotations
 
-from io import BytesIO
 from typing import Optional
 from urllib.parse import urlparse
 
-from openpyxl import load_workbook
-
 from agents.online_price_master import OnlinePriceReview, OnlinePriceReviewStatus, review_manufacturer_online_price
-from agents.online_price_source import (
-    OnlinePriceFetchError,
-    OnlinePriceSource,
-    fetch_workbook,
-    resolve_registered_price_source,
-)
-from agents.price_master import XLSX_SIGNATURE
+from agents.online_price_source import OnlinePriceSource, resolve_registered_price_source
 from models import ManufacturerPriceSource, PriceMasterType
 from repositories.manufacturer_price_source_repository import (
     ManufacturerPriceSourceRepository,
@@ -25,7 +16,7 @@ from repositories.manufacturer_price_source_repository import (
 )
 from repositories.sqlite_price_master_repository import SqlitePriceMasterRepository
 
-CHECK_OK = {"NO_CHANGE", "CHANGES_PENDING", "CONNECTED_FUTURE"}
+CHECK_OK = {"NO_CHANGE", "CHANGES_PENDING"}
 
 
 class ManufacturerPriceSourceValidationError(ValueError):
@@ -85,13 +76,16 @@ def check_source_connection(
     repo = source_repository or ManufacturerPriceSourceRepository()
     if source.row_version < 1:
         raise ManufacturerPriceSourceValidationError("SAVE_BEFORE_CHECK")
+    master_type = _master_type(source.source_key)
+    if master_type is None:
+        raise ManufacturerPriceSourceValidationError("UNKNOWN_SOURCE")
     resolved = resolve_registered_price_source(
         source.source_key,
-        master_type=_master_type(source.source_key),
+        master_type=master_type,
         source_repository=repo,
     )
     online = OnlinePriceSource(
-        master_type=_master_type(source.source_key),
+        master_type=master_type,
         source_id=source.source_key,
         url=source.source_url,
         enabled=source.enabled,
@@ -99,63 +93,34 @@ def check_source_connection(
         registry_row_version=source.row_version,
         authorization=resolved.authorization,
     )
-    if source.source_key in {SOURCE_DT40, SOURCE_PT30}:
-        review = review_manufacturer_online_price(
-            PriceMasterType(source.source_key),
-            repository=price_master_repository,
-            source=online,
-            fetcher=fetcher,
-        )
-        status = review.status.value
-        error = None if review.status in {
-            OnlinePriceReviewStatus.NO_CHANGE,
-            OnlinePriceReviewStatus.CHANGES_PENDING,
-        } else review.reason_code or review.status.value
-    elif source.source_key == SOURCE_SPECTRA_GOLD:
-        review = None
-        status, error = _check_future_workbook(online, fetcher=fetcher)
-    else:
-        raise ManufacturerPriceSourceValidationError("UNKNOWN_SOURCE")
+    # DT40 / PT30 / SPECTRA GOLD share one path: fetch, parse, validate, diff. Nothing is activated here.
+    review = review_manufacturer_online_price(
+        master_type,
+        repository=price_master_repository,
+        source=online,
+        fetcher=fetcher,
+    )
+    status = review.status.value
+    error = None if review.status in {
+        OnlinePriceReviewStatus.NO_CHANGE,
+        OnlinePriceReviewStatus.CHANGES_PENDING,
+    } else review.reason_code or review.status.value
     updated = repo.record_check(
         source.source_key,
         status=status,
         error=error,
         expected_row_version=source.row_version,
     )
-    if review is not None:
-        # record_check is itself a Registry update; the approved review must bind to its new version.
-        review.source_key = updated.source_key
-        review.source_url = online.fetch_url
-        review.source_enabled = updated.enabled
-        review.source_row_version = updated.row_version
+    # record_check is itself a Registry update; the approved review must bind to its new version.
+    review.source_key = updated.source_key
+    review.source_url = online.fetch_url
+    review.source_enabled = updated.enabled
+    review.source_row_version = updated.row_version
     return updated, review
 
 
-def _check_future_workbook(source: OnlinePriceSource, *, fetcher=None) -> tuple[str, Optional[str]]:
-    if not source.configured:
-        return "NOT_CONFIGURED", "NOT_CONFIGURED"
-    try:
-        fetched = (fetcher or fetch_workbook)(source)
-    except OnlinePriceFetchError as error:
-        return error.reason_code, error.reason_code
-    except Exception:
-        return "FETCH_FAILED", "FETCH_FAILED"
-    if not fetched.data.startswith(XLSX_SIGNATURE):
-        return "NOT_XLSX", "NOT_XLSX"
-    try:
-        workbook = load_workbook(BytesIO(fetched.data), read_only=True, data_only=True)
-        has_sheet = bool(workbook.sheetnames)
-        workbook.close()
-    except Exception:
-        return "PARSER_FAILED", "PARSER_FAILED"
-    if not has_sheet:
-        return "NO_DATA", "NO_DATA"
-    # FUTURE only: connectivity/xlsx structure is confirmed; no pricing identity is inferred.
-    return "CONNECTED_FUTURE", None
-
-
 def _master_type(source_key: str) -> Optional[PriceMasterType]:
-    if source_key in {SOURCE_DT40, SOURCE_PT30}:
+    if source_key in {SOURCE_DT40, SOURCE_PT30, SOURCE_SPECTRA_GOLD}:
         return PriceMasterType(source_key)
     return None
 

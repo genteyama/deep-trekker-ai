@@ -488,7 +488,7 @@
         "labels": {
           "DT40": "DT40 (Deep Trekker price book)",
           "PT30": "PT30 (PipeTrekker price book)",
-          "SPECTRA_GOLD": "SPECTRA GOLD (manual upload)",
+          "SPECTRA_GOLD": "SPECTRA GOLD",
           "SO_MASTER": "SpaceOne price master",
           "QUOTE_CALC": "Quote-calc policy (import tax, insurance, shipping markup)"
         },

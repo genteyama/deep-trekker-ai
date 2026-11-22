@@ -27,8 +27,8 @@ SOURCE_DEFAULTS = {
     },
     SOURCE_SPECTRA_GOLD: {
         "display_name": "SPECTRA GOLD",
-        "parser_profile": "SPECTRA_GOLD_FUTURE",
-        "lifecycle_status": "FUTURE",
+        "parser_profile": "SPECTRA_GOLD",
+        "lifecycle_status": "ACTIVE",
     },
 }
 
@@ -143,13 +143,15 @@ class ManufacturerPriceSourceRepository:
                 cursor = self._connection.execute(
                     """
                     UPDATE manufacturer_price_sources SET
-                        source_url = ?, enabled = ?, updated_at = ?, updated_by = ?,
-                        row_version = row_version + 1
+                        source_url = ?, enabled = ?, parser_profile = ?, lifecycle_status = ?,
+                        updated_at = ?, updated_by = ?, row_version = row_version + 1
                     WHERE source_key = ? AND row_version = ?
                     """,
                     (
                         source.source_url.strip(),
                         int(source.enabled),
+                        SOURCE_DEFAULTS[source.source_key]["parser_profile"],
+                        SOURCE_DEFAULTS[source.source_key]["lifecycle_status"],
                         now,
                         actor,
                         source.source_key,
@@ -212,13 +214,16 @@ def default_source(source_key: str, *, source_url: str = "", enabled: bool = Fal
 
 
 def _to_record(row) -> ManufacturerPriceSource:
+    # parser_profile / lifecycle_status are code-owned (not user settings). Rows written before
+    # SPECTRA GOLD joined online sync still say SPECTRA_GOLD_FUTURE / FUTURE; the code value wins.
+    defaults = SOURCE_DEFAULTS.get(row["source_key"], {})
     return ManufacturerPriceSource(
         source_key=row["source_key"],
         display_name=row["display_name"],
         source_url=row["source_url"] or "",
         enabled=bool(row["enabled"]),
-        parser_profile=row["parser_profile"],
-        lifecycle_status=row["lifecycle_status"],
+        parser_profile=defaults.get("parser_profile", row["parser_profile"]),
+        lifecycle_status=defaults.get("lifecycle_status", row["lifecycle_status"]),
         last_checked_at=row["last_checked_at"],
         last_check_status=row["last_check_status"],
         last_error=row["last_error"],

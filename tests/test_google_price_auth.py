@@ -341,8 +341,10 @@ def test_credentials_and_token_are_not_logged_on_access_denied(monkeypatch, capl
     assert "Authorization" not in caplog.text
 
 
-def test_spectra_gold_authenticated_connectivity_succeeds_without_pricing(monkeypatch):
-    data = build_workbook({"ANY FUTURE SHEET": [["SKU"], ["S-1"]]}).getvalue()
+def test_spectra_gold_authenticated_fetch_is_reviewed_without_activation(monkeypatch):
+    from tests.test_spectra_price_master import spectra_workbook
+
+    data = spectra_workbook().getvalue()
     sources = ManufacturerPriceSourceRepository()
     source = save_source_setting(
         SOURCE_SPECTRA_GOLD,
@@ -357,9 +359,10 @@ def test_spectra_gold_authenticated_connectivity_succeeds_without_pricing(monkey
 
     checked, review = check_source_connection(source, source_repository=sources)
 
-    assert checked.last_check_status == "CONNECTED_FUTURE"
-    assert review is None
-    assert SOURCE_SPECTRA_GOLD not in {item.value for item in ONLINE_SYNC_MASTERS}
+    assert review.status == OnlinePriceReviewStatus.CHANGES_PENDING
+    assert review.auth_mode == AUTH_MODE_GOOGLE_SERVICE_ACCOUNT
+    assert checked.last_check_status == "CHANGES_PENDING"
+    assert SOURCE_SPECTRA_GOLD in {item.value for item in ONLINE_SYNC_MASTERS}
     assert get_active_master(PriceMasterType.SPECTRA_GOLD) is None
     assert get_active_master(PriceMasterType.DT40) is None
     assert get_active_master(PriceMasterType.PT30) is None

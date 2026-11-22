@@ -488,7 +488,7 @@
         "labels": {
           "DT40": "DT40（Deep Trekker 価格表）",
           "PT30": "PT30（PipeTrekker 価格表）",
-          "SPECTRA_GOLD": "SPECTRA GOLD（手動アップロード）",
+          "SPECTRA_GOLD": "SPECTRA GOLD",
           "SO_MASTER": "SpaceOne価格マスター",
           "QUOTE_CALC": "見積試算ポリシー（輸入税・保険・Shipping倍率）"
         },

@@ -12,11 +12,11 @@ def _ja_workspace():
         return json.load(file)["pages"]["quote_control"]["workspace"]
 
 
-def test_future_spectra_source_is_read_only_and_hides_previous_failure():
+def test_spectra_source_is_editable_like_dt40_and_pt30_and_shows_last_failure():
     repository = ManufacturerPriceSourceRepository()
     source = save_source_setting(
         SOURCE_SPECTRA_GOLD,
-        "https://docs.google.com/spreadsheets/d/future-sheet/edit",
+        "https://docs.google.com/spreadsheets/d/spectra-sheet/edit",
         True,
         expected_row_version=0,
         repository=repository,
@@ -31,15 +31,13 @@ def test_future_spectra_source_is_read_only_and_hides_previous_failure():
     at = _open_price_master_page()
     texts = _texts(at)
 
-    assert "SPECTRA GOLD — オンライン連携保留" in texts
-    assert "オンライン連携：停止中" in texts
-    assert "GOOGLE_EXPORT_FAILED" not in texts
-    assert not any(item.key == "manufacturer_source_url_SPECTRA_GOLD" for item in at.text_input)
-    assert not any(item.key == "manufacturer_source_enabled_SPECTRA_GOLD" for item in at.checkbox)
-    assert not any(item.key == "manufacturer_source_save_SPECTRA_GOLD" for item in at.button)
-    assert not any(item.key == "manufacturer_source_check_SPECTRA_GOLD" for item in at.button)
-    assert any(item.key == "manufacturer_source_url_DT40" for item in at.text_input)
-    assert any(item.key == "manufacturer_source_check_PT30" for item in at.button)
+    assert "オンライン連携保留" not in texts
+    for key in ("DT40", "PT30", "SPECTRA_GOLD"):
+        assert any(item.key == f"manufacturer_source_url_{key}" for item in at.text_input)
+        assert any(item.key == f"manufacturer_source_enabled_{key}" for item in at.checkbox)
+        assert any(item.key == f"manufacturer_source_save_{key}" for item in at.button)
+        assert any(item.key == f"manufacturer_source_check_{key}" for item in at.button)
+    assert at.text_input(key="manufacturer_source_url_SPECTRA_GOLD").value == "https://docs.google.com/spreadsheets/d/spectra-sheet/edit"
 
 
 def test_spectra_review_summary_is_concrete_deduplicated_and_localized():

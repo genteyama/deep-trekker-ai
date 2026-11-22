@@ -35,6 +35,7 @@ from models import (
 from parsers.quote_calc_parser import extract_quote_calc_audit
 from parsers.spaceone_master_parser import parse_spaceone_master
 from parsers.spectra_gold_parser import parse_spectra_gold
+from repositories.actor import current_actor
 from repositories.sqlite import now_iso
 from repositories.sqlite_price_master_repository import SqlitePriceMasterRepository
 
@@ -42,10 +43,15 @@ logger = logging.getLogger(__name__)
 
 GENERIC_MANUFACTURER_MASTERS = (PriceMasterType.DT40, PriceMasterType.PT30)
 MANUFACTURER_MASTERS = (*GENERIC_MANUFACTURER_MASTERS, PriceMasterType.SPECTRA_GOLD)
-ONLINE_SYNC_MASTERS = GENERIC_MANUFACTURER_MASTERS
+ONLINE_SYNC_MASTERS = MANUFACTURER_MASTERS
 ALLOWED_EXTENSION = ".xlsx"
 XLSX_SIGNATURE = b"PK\x03\x04"
 STAGING_DIRECTORY = ".staging"
+# validation_summary key that carries where a snapshot came from.
+_PROVENANCE_KEYS = {
+    PriceMasterSourceType.MANUFACTURER_ONLINE: "online_source",
+    PriceMasterSourceType.CSV_UPLOAD: "csv_source",
+}
 
 
 class PriceMasterValidationError(ValueError):
@@ -109,7 +115,10 @@ def import_price_master(
         try:
             summary = validate_price_master(master_type, staging)
             if provenance:
-                summary = {**summary, "online_source": dict(provenance)}
+                summary = {**summary, _PROVENANCE_KEYS.get(source_type, "online_source"): dict(provenance)}
+            actor = current_actor()
+            if actor:
+                summary = {**summary, "imported_by": actor}
         except PriceMasterValidationError as error:
             logger.warning("price_master_rejected type=%s file=%s reason=%s", master_type.value, display_name, error)
             return _rejected(master_type, error.code)
