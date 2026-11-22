@@ -27,7 +27,7 @@
     "pages": {
       "home": "HOME",
       "technical_case": "営業・技術問い合わせ",
-      "quote_control": "見積・価格管理",
+      "quote_control": "見積作成",
       "activity_ledger": "履歴・活動台帳",
       "price_master": "価格マスター管理"
     }

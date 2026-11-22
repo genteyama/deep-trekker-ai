@@ -27,7 +27,7 @@
     "pages": {
       "home": "HOME",
       "technical_case": "Sales & Technical Inquiry",
-      "quote_control": "Quote & Price Control",
+      "quote_control": "Create quote",
       "activity_ledger": "Activity Ledger",
       "price_master": "Price Master Management"
     }
