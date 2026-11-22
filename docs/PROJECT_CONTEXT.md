@@ -753,3 +753,14 @@ Next:
 - Active Masterに無い、または複数行一致で一意に特定できない主要SKUは採用せず、warningと不足SKU一覧を表示（fail-safe）。
 - 全SKU一覧・検索・Filterは「全商品・オプション」タブで従来どおり維持。参考売価の為替は2タブ共通。
 - Pricing logic / rounding / Price Master / DB schema / Quote logic の変更なし。
+
+### PORTAL-2A.2 — 通貨表示統一＋国際輸送費（参考）タブ
+
+- 価格一覧の通貨表示を統一（値は数値のまま、`st.column_config.NumberColumn` で表示のみ整形）。USD：`$#,###.00`（format="dollar"）、JPY：`¥#,###`（format="yen"）。未設定・要確認は空欄のまま、金額を作らない。
+- 価格一覧に3番目のタブ「国際輸送費（参考）」を追加。既存2タブのロジックは変更なし。
+- Source = Active SO_MASTER snapshot（`get_active_master(SO_MASTER)`、Live Google Sheet直接参照なし）。主要21 SKUについて、対応Sheetの Column B=SKU / C=製品名 / L=保険（3%）USD / M=送料（単体の目安）USD を read-only で読む。JPYキャッシュ行は使わない。
+- Sheet mapping：PHOTON / PIVOT / REVOLUTION / Utility Crawler→MAG / A-150 / A-200。DTG3は対応Sheetが無いため要確認（推測しない）。
+- SKUは完全一致（空白・改行のみ `classify_spaceone_sku()` 同等に正規化）。不在・同一Sheet内重複・値欠落は要確認とし、warningで一覧表示。
+- 保険・送料を別表示し、両方ある場合のみ合計と参考JPY換算（画面上の参考為替）を算出。Quoteへは書き込まない。
+- 案件では Supplier / Manufacturer Quote の Shipping / Insurance を優先し、SO_MASTER値は参考扱い。自動見積確定には使用しない。
+- Quote calculation / Pricing Policy / Shipping Rule / Price Master / DB schema の変更なし。

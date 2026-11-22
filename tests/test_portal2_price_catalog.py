@@ -1,4 +1,8 @@
+import hashlib
 from types import SimpleNamespace
+
+import openpyxl
+import pytest
 
 from ui.price_catalog import (
     REFERENCE_AVAILABLE,
@@ -18,6 +22,22 @@ from ui.price_catalog import (
     display_primary_package_rows,
     filter_primary_package_rows,
     missing_primary_package_skus,
+    JPY_PRICE_COLUMNS,
+    SHIPPING_COLUMN_ORDER,
+    SHIPPING_JPY_COLUMNS,
+    SHIPPING_REASON_ABSENT,
+    SHIPPING_REASON_DUPLICATE,
+    SHIPPING_REASON_NO_SHEET,
+    SHIPPING_STATUS_AVAILABLE,
+    SHIPPING_STATUS_REVIEW,
+    SHIPPING_USD_COLUMNS,
+    USD_PRICE_COLUMNS,
+    currency_column_config,
+    display_shipping_reference_rows,
+    extract_shipping_reference_rows,
+    filter_shipping_reference_rows,
+    load_shipping_reference_rows,
+    shipping_reference_issues,
 )
 
 
@@ -220,3 +240,157 @@ def test_primary_keyword_and_group_filter():
     assert skus(groups=["A-150", "DTG3"]) == ["7340-BASE-4K", "11000S", "11000X"]
     assert skus(keyword="SAR", groups=["PIVOT"]) == ["8530-SAR"]
     assert len(skus()) == 21
+
+
+def _format(config, column):
+    return config[column]["type_config"]["format"]
+
+
+def test_usd_price_columns_use_dollar_format():
+    config = currency_column_config(USD_PRICE_COLUMNS + SHIPPING_USD_COLUMNS, ())
+    assert set(USD_PRICE_COLUMNS) == {"MSRP USD", "Dealer USD"}
+    for column in USD_PRICE_COLUMNS + SHIPPING_USD_COLUMNS:
+        assert _format(config, column) == "dollar"
+
+
+def test_jpy_price_columns_use_yen_format():
+    config = currency_column_config((), JPY_PRICE_COLUMNS + SHIPPING_JPY_COLUMNS)
+    assert set(JPY_PRICE_COLUMNS) == {"SpaceOne参考売価 JPY"}
+    assert set(SHIPPING_JPY_COLUMNS) == {"参考換算 JPY"}
+    for column in JPY_PRICE_COLUMNS + SHIPPING_JPY_COLUMNS:
+        assert _format(config, column) == "yen"
+
+
+def _so_row(sku, name, insurance, shipping):
+    row = [None] * 14
+    row[1], row[2], row[11], row[12] = sku, name, insurance, shipping
+    return row
+
+
+def _so_master(tmp_path, sheets):
+    workbook = openpyxl.Workbook()
+    workbook.remove(workbook.active)
+    for sheet_name, rows in sheets.items():
+        sheet = workbook.create_sheet(sheet_name)
+        sheet.append(_so_row("Part Number", "製品名", "保険（3%）④", "送料\n（単体の目安）"))
+        for row in rows:
+            sheet.append(row)
+            # JPY cache row under each SKU row: column B empty, must never be used.
+            sheet.append([None, None, None, None, 2956470, 1773882, None, None, None, None, None, 53216, 235790, 10000])
+    path = tmp_path / "so_master.xlsx"
+    workbook.save(path)
+    return path
+
+
+def _by_sku(rows):
+    return {row["SKU"]: row for row in rows}
+
+
+def test_shipping_reference_extracts_insurance_and_shipping(tmp_path):
+    path = _so_master(
+        tmp_path,
+        {
+            "PHOTON": [
+                _so_row("9680-BASE", "PHOTON \nBASE PACKAGE", 313.04, 1387.00),
+                _so_row(" 9680-EXPERT\n", "PHOTON EXPERT PACKAGE", 478.44, 2756),
+            ]
+        },
+    )
+    rows = _by_sku(extract_shipping_reference_rows(path, 160))
+    base = rows["9680-BASE"]
+    assert base["製品"] == "PHOTON"
+    assert base["製品名"] == "PHOTON BASE PACKAGE"
+    assert base["保険 USD"] == pytest.approx(313.04)
+    assert base["国際送料 USD"] == pytest.approx(1387.00)
+    assert base["送料・保険合計 USD"] == pytest.approx(1700.04)
+    assert base["状態"] == SHIPPING_STATUS_AVAILABLE
+    # Whitespace / newlines in the SKU cell are normalized like classify_spaceone_sku().
+    assert rows["9680-EXPERT"]["送料・保険合計 USD"] == pytest.approx(3234.44)
+
+
+def test_shipping_reference_jpy_uses_screen_exchange_rate(tmp_path):
+    path = _so_master(tmp_path, {"PHOTON": [_so_row("9680-BASE", "PHOTON BASE", 313.04, 1387.00)]})
+    base = _by_sku(extract_shipping_reference_rows(path, 160))["9680-BASE"]
+    assert base["参考換算 JPY"] == pytest.approx(1700.04 * 160)
+    assert round(base["参考換算 JPY"]) == 272006
+    other_rate = _by_sku(extract_shipping_reference_rows(path, 150))["9680-BASE"]
+    assert other_rate["参考換算 JPY"] == pytest.approx(1700.04 * 150)
+    assert list(display_shipping_reference_rows([base])[0].keys()) == SHIPPING_COLUMN_ORDER
+
+
+def test_shipping_reference_absent_sku_is_review(tmp_path):
+    path = _so_master(tmp_path, {"PHOTON": [_so_row("9680-BASE", "PHOTON BASE", 313.04, 1387.00)]})
+    rows = extract_shipping_reference_rows(path, 160)
+    sar = _by_sku(rows)["9680-SAR"]
+    assert sar["状態"] == SHIPPING_STATUS_REVIEW
+    assert sar["保険 USD"] is None and sar["国際送料 USD"] is None
+    assert sar["送料・保険合計 USD"] is None and sar["参考換算 JPY"] is None
+    assert {"製品": "PHOTON", "SKU": "9680-SAR", "理由": SHIPPING_REASON_ABSENT} in shipping_reference_issues(rows)
+
+
+def test_shipping_reference_duplicate_sku_is_review(tmp_path):
+    path = _so_master(
+        tmp_path,
+        {
+            "PHOTON": [
+                _so_row("9680-BASE", "PHOTON BASE", 313.04, 1387.00),
+                _so_row("9680-BASE", "PHOTON BASE (dup)", 999.0, 9999.0),
+            ]
+        },
+    )
+    rows = extract_shipping_reference_rows(path, 160)
+    base = _by_sku(rows)["9680-BASE"]
+    assert base["状態"] == SHIPPING_STATUS_REVIEW
+    assert base["保険 USD"] is None and base["送料・保険合計 USD"] is None
+    assert {"製品": "PHOTON", "SKU": "9680-BASE", "理由": SHIPPING_REASON_DUPLICATE} in shipping_reference_issues(rows)
+
+
+def test_shipping_reference_dtg3_without_sheet_does_not_break_catalog(tmp_path):
+    path = _so_master(tmp_path, {"MAG": [_so_row("9701-MAG-4K", "MAG", 637.866, 4134)]})
+    rows = extract_shipping_reference_rows(path, 160)
+    assert len(rows) == 21
+    dtg3 = _by_sku(rows)["7340-BASE-4K"]
+    assert dtg3["状態"] == SHIPPING_STATUS_REVIEW
+    assert dtg3["保険 USD"] is None and dtg3["国際送料 USD"] is None and dtg3["参考換算 JPY"] is None
+    assert {"製品": "DTG3", "SKU": "7340-BASE-4K", "理由": SHIPPING_REASON_NO_SHEET} in shipping_reference_issues(rows)
+    assert _by_sku(rows)["9701-MAG-4K"]["状態"] == SHIPPING_STATUS_AVAILABLE
+    assert [row["SKU"] for row in filter_shipping_reference_rows(rows, keyword="mag")] == ["9701-MAG-4K"]
+    assert [row["SKU"] for row in filter_shipping_reference_rows(rows, keyword="A-200")] == ["10800S", "10800X", "10800PRO"]
+
+
+def test_shipping_reference_display_is_read_only(tmp_path):
+    from models import PriceMasterType
+
+    path = _so_master(tmp_path, {"PHOTON": [_so_row("9680-BASE", "PHOTON BASE", 313.04, 1387.00)]})
+    before = hashlib.sha256(path.read_bytes()).hexdigest()
+    calls = []
+
+    def fake_get_active(master_type):
+        calls.append(master_type)
+        return SimpleNamespace(record=SimpleNamespace(import_id="SO_MASTER-test"), path=path)
+
+    rows = load_shipping_reference_rows(160, get_active=fake_get_active)
+    assert calls == [PriceMasterType.SO_MASTER]
+    assert _by_sku(rows)["9680-BASE"]["状態"] == SHIPPING_STATUS_AVAILABLE
+    assert hashlib.sha256(path.read_bytes()).hexdigest() == before
+    assert load_shipping_reference_rows(160, get_active=lambda master_type: None) is None
+
+
+def test_shipping_reference_load_does_not_write_price_master_db(tmp_path, monkeypatch):
+    from agents import price_master
+    from repositories.sqlite_price_master_repository import SqlitePriceMasterRepository
+
+    path = _so_master(tmp_path, {"PHOTON": [_so_row("9680-BASE", "PHOTON BASE", 313.04, 1387.00)]})
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("price master DB must not be written while displaying shipping reference")
+
+    for name in ("add", "activate"):
+        monkeypatch.setattr(SqlitePriceMasterRepository, name, forbidden)
+    monkeypatch.setattr(
+        price_master,
+        "get_active_master",
+        lambda master_type, repository=None: SimpleNamespace(record=SimpleNamespace(import_id="SO_MASTER-test"), path=path),
+    )
+    rows = load_shipping_reference_rows(160)
+    assert len(rows) == 21
