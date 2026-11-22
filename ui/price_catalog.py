@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Callable, Iterable, Optional
+from typing import Iterable, Optional
 
 
 STATUS_OFFICIAL = "正式価格"
@@ -230,32 +229,30 @@ JPY_PRICE_COLUMNS = ("SpaceOne参考売価 JPY",)
 
 SHIPPING_TAB_LABEL = "国際輸送費（参考）"
 SHIPPING_INFO = (
-    "国際輸送費はActive SO_MASTERに登録されている参考値です。"
-    "実際の案件では、Deep Trekkerのメーカー見積に記載されたShipping / Insuranceを優先して確認してください。"
+    "国際輸送費は手動登録されたDeep Trekkerの標準参考値です。"
+    "実際の案件では、Deep Trekkerのメーカー見積に記載されたShippingを優先してください。"
 )
-SHIPPING_MISSING_WARNING = "一部の主要機体はActive SO_MASTERに国際輸送費の参考値がありません（要確認）。"
-SHIPPING_STATUS_AVAILABLE = "参考値"
+SHIPPING_BASIS_NOTE = (
+    "Large Box / Small Boxは1個口あたりの参考送料です。Pipe Trekkerは本体発注時の基本輸送費一式です。"
+    "オプション等により梱包数が増える場合は追加送料が発生する可能性があります。"
+)
+SHIPPING_MISSING_WARNING = "一部の国際輸送費が登録されていません（要確認）。価格マスター管理で登録してください。"
+SHIPPING_LOAD_ERROR = "国際輸送費の参考値を読み込めませんでした。価格マスター管理を確認してください。"
+SHIPPING_STATUS_AVAILABLE = "有効"
 SHIPPING_STATUS_REVIEW = "要確認"
-SHIPPING_REASON_NO_SHEET = "SO_MASTERに対応Sheetなし"
-SHIPPING_REASON_ABSENT = "SO_MASTERにSKUなし"
-SHIPPING_REASON_DUPLICATE = "同一Sheet内で複数行一致"
-SHIPPING_REASON_INCOMPLETE = "保険または送料が未設定"
-SHIPPING_USD_COLUMNS = ("保険 USD", "国際送料 USD", "送料・保険合計 USD")
+SHIPPING_USD_COLUMNS = ("輸送費 USD",)
 SHIPPING_JPY_COLUMNS = ("参考換算 JPY",)
-SHIPPING_COLUMN_ORDER = ["製品", "SKU", "製品名", *SHIPPING_USD_COLUMNS, *SHIPPING_JPY_COLUMNS, "状態"]
-
-# Primary product group -> Active SO_MASTER sheet. DTG3 has no SO_MASTER sheet; nothing is inferred.
-SHIPPING_SHEET_BY_GROUP: dict[str, Optional[str]] = {
-    "DTG3": None,
-    "PHOTON": "PHOTON",
-    "PIVOT": "PIVOT",
-    "REVOLUTION": "REVOLUTION",
-    "Utility Crawler": "MAG",
-    "A-150": "A-150",
-    "A-200": "A-200",
-}
-# Fixed SO_MASTER columns (0-based): B = SKU, C = 製品名, L = 保険（3%）USD, M = 送料（単体の目安）USD.
-_SO_SKU_COL, _SO_NAME_COL, _SO_INSURANCE_COL, _SO_SHIPPING_COL = 1, 2, 11, 12
+SHIPPING_COLUMN_ORDER = [
+    "区分",
+    "適用目安",
+    "輸送費 USD",
+    "課金単位",
+    "参考換算 JPY",
+    "基準日",
+    "登録日時",
+    "最終更新日時",
+    "状態",
+]
 
 
 def currency_column_config(usd_columns: Iterable[str] = (), jpy_columns: Iterable[str] = ()) -> dict:
@@ -267,114 +264,68 @@ def currency_column_config(usd_columns: Iterable[str] = (), jpy_columns: Iterabl
     return config
 
 
-def _usd_amount(value) -> Optional[float]:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
+def format_tokyo_datetime(value: Optional[str]) -> Optional[str]:
+    """UTC ISO timestamp -> Asia/Tokyo 'YYYY-MM-DD HH:mm'."""
+    if not value:
         return None
-    return float(value)
+    from datetime import datetime, timezone
 
+    from agents.quote_dates import TOKYO
 
-def _clean_text(value) -> Optional[str]:
-    if value is None:
-        return None
-    text = " ".join(str(value).split())
-    return text or None
-
-
-def _read_shipping_sheets(path: Path, sheet_names: Iterable[str]) -> dict[str, dict[str, list[tuple]]]:
-    """Read-only scan: {sheet: {normalized SKU: [row values, ...]}} for rows with a SKU in column B."""
-    import openpyxl
-
-    from parsers.spaceone_master_parser import classify_spaceone_sku
-
-    wanted = set(sheet_names)
-    result: dict[str, dict[str, list[tuple]]] = {}
-    workbook = openpyxl.load_workbook(path, read_only=True, data_only=True)
     try:
-        for sheet_name in workbook.sheetnames:
-            if sheet_name not in wanted:
-                continue
-            by_sku: dict[str, list[tuple]] = {}
-            for row in workbook[sheet_name].iter_rows(max_col=_SO_SHIPPING_COL + 1, values_only=True):
-                if len(row) <= _SO_SKU_COL:
-                    continue
-                sku, _error, _kind, _raw = classify_spaceone_sku(row[_SO_SKU_COL])
-                if sku:
-                    by_sku.setdefault(sku, []).append(tuple(row) + (None,) * (_SO_SHIPPING_COL + 1 - len(row)))
-            result[sheet_name] = by_sku
-    finally:
-        workbook.close()
-    return result
+        moment = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return str(value)
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return moment.astimezone(TOKYO).strftime("%Y-%m-%d %H:%M")
 
 
-def extract_shipping_reference_rows(path: Path, exchange_rate: float) -> list[dict]:
-    """Shipping / insurance reference values for the primary SKUs from an SO_MASTER snapshot file.
+def build_shipping_reference_rows(active_rates: Iterable, exchange_rate: float) -> list[dict]:
+    """One row per standard GLOBAL shipping type. Unregistered types are 要確認 with no amounts."""
+    from repositories.shipping_rule_repository import (
+        CHARGE_BASIS_BY_TYPE,
+        CHARGE_BASIS_LABELS,
+        SHIPPING_APPLICABILITY_LABELS,
+        SHIPPING_TYPE_LABELS,
+        STANDARD_GLOBAL_TYPES,
+    )
 
-    Exact SKU match within the mapped sheet only. Absent, duplicated or incomplete rows are 要確認.
-    """
-    sheets = _read_shipping_sheets(path, {name for name in SHIPPING_SHEET_BY_GROUP.values() if name})
+    by_type = {active.rule.shipping_type: active for active in active_rates}
     rows = []
-    for group, _price_book, sku in PRIMARY_PACKAGE_SKUS:
-        sheet = SHIPPING_SHEET_BY_GROUP.get(group)
-        name = insurance = shipping = None
-        if sheet is None:
-            reason = SHIPPING_REASON_NO_SHEET
-        else:
-            found = sheets.get(sheet, {}).get(sku, [])
-            if not found:
-                reason = SHIPPING_REASON_ABSENT
-            elif len(found) > 1:
-                reason = SHIPPING_REASON_DUPLICATE
-            else:
-                values = found[0]
-                name = _clean_text(values[_SO_NAME_COL])
-                insurance = _usd_amount(values[_SO_INSURANCE_COL])
-                shipping = _usd_amount(values[_SO_SHIPPING_COL])
-                reason = None if insurance is not None and shipping is not None else SHIPPING_REASON_INCOMPLETE
-        total = insurance + shipping if insurance is not None and shipping is not None else None
+    for shipping_type in STANDARD_GLOBAL_TYPES:
+        active = by_type.get(shipping_type)
+        rate = active.rule.rate_usd if active is not None else None
+        basis = active.rule.charge_basis if active is not None else CHARGE_BASIS_BY_TYPE[shipping_type]
+        effective = active.rule.effective_from if active is not None else None
         rows.append(
             {
-                "製品": group,
-                "SKU": sku,
-                "製品名": name,
-                "保険 USD": insurance,
-                "国際送料 USD": shipping,
-                "送料・保険合計 USD": total,
-                "参考換算 JPY": total * float(exchange_rate) if total is not None else None,
-                "状態": SHIPPING_STATUS_AVAILABLE if reason is None else SHIPPING_STATUS_REVIEW,
-                "_reason": reason,
-                "_search": " ".join((group, sku, name or "")).casefold(),
+                "区分": SHIPPING_TYPE_LABELS[shipping_type],
+                "適用目安": SHIPPING_APPLICABILITY_LABELS[shipping_type],
+                "輸送費 USD": rate,
+                "課金単位": CHARGE_BASIS_LABELS.get(basis, "-"),
+                "参考換算 JPY": rate * float(exchange_rate) if rate is not None else None,
+                "基準日": effective.date().isoformat() if effective is not None else None,
+                "登録日時": format_tokyo_datetime(active.registered_at) if active is not None else None,
+                "最終更新日時": format_tokyo_datetime(active.last_updated_at) if active is not None else None,
+                "状態": SHIPPING_STATUS_AVAILABLE if active is not None else SHIPPING_STATUS_REVIEW,
+                "_shipping_type": shipping_type.value,
             }
         )
     return rows
-
-
-def shipping_reference_issues(rows: Iterable[dict]) -> list[dict]:
-    return [
-        {"製品": row["製品"], "SKU": row["SKU"], "理由": row["_reason"]}
-        for row in rows
-        if row.get("_reason")
-    ]
-
-
-def filter_shipping_reference_rows(rows: Iterable[dict], *, keyword: str = "") -> list[dict]:
-    keyword = (keyword or "").strip().casefold()
-    return [row for row in rows if not keyword or keyword in row.get("_search", "")]
 
 
 def display_shipping_reference_rows(rows: Iterable[dict]) -> list[dict]:
     return [{key: row.get(key) for key in SHIPPING_COLUMN_ORDER} for row in rows]
 
 
-def load_shipping_reference_rows(exchange_rate: float, *, get_active: Optional[Callable] = None) -> Optional[list[dict]]:
-    """Rows from the current Active SO_MASTER snapshot, or None when no Active SO_MASTER exists."""
-    from models import PriceMasterType
+def load_shipping_reference_rows(exchange_rate: float, *, repository=None) -> list[dict]:
+    """Read-only: current APPROVED STANDARD / GLOBAL rates from the manual shipping master."""
+    if repository is None:
+        from repositories.shipping_rule_repository import ShippingRuleRepository
 
-    if get_active is None:
-        from agents.price_master import get_active_master as get_active
-    active = get_active(PriceMasterType.SO_MASTER)
-    if active is None:
-        return None
-    return extract_shipping_reference_rows(Path(active.path), exchange_rate)
+        repository = ShippingRuleRepository()
+    return build_shipping_reference_rows(repository.list_active_standard_global(), exchange_rate)
 
 
 def _reference_sales_candidates(books, exchange_rate: float):
@@ -487,24 +438,16 @@ def render_price_catalog(texts: dict) -> None:
 
     with shipping_tab:
         st.info(SHIPPING_INFO)
+        st.caption(SHIPPING_BASIS_NOTE)
         try:
             shipping_rows = load_shipping_reference_rows(float(exchange_rate))
-        except Exception:  # A broken reference file must not take down the price catalog.
-            shipping_rows = None
-            st.warning("Active SO_MASTERから国際輸送費の参考値を読み込めませんでした。価格マスター管理を確認してください。")
+        except Exception:  # Repository / DB errors must not take down the price catalog.
+            st.warning(SHIPPING_LOAD_ERROR)
         else:
-            if shipping_rows is None:
-                st.warning("Active SO_MASTERがありません。国際輸送費の参考値は表示できません。")
-        if shipping_rows is not None:
-            issues = shipping_reference_issues(shipping_rows)
-            if issues:
+            if any(row["状態"] == SHIPPING_STATUS_REVIEW for row in shipping_rows):
                 st.warning(SHIPPING_MISSING_WARNING)
-                st.dataframe(issues, use_container_width=True, hide_index=True)
-            shipping_keyword = st.text_input("製品・SKUを検索（国際輸送費）", placeholder="例：PHOTON / 9680 / NAV / A-200")
-            shipping_filtered = filter_shipping_reference_rows(shipping_rows, keyword=shipping_keyword)
-            st.caption(f"{len(shipping_filtered)} / {len(shipping_rows)} 件")
             st.dataframe(
-                display_shipping_reference_rows(shipping_filtered),
+                display_shipping_reference_rows(shipping_rows),
                 use_container_width=True,
                 hide_index=True,
                 column_order=SHIPPING_COLUMN_ORDER,

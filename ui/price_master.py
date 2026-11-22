@@ -30,6 +30,12 @@ from repositories.manufacturer_price_source_repository import (
 from repositories.sqlite_price_master_repository import SqlitePriceMasterRepository
 
 SESSION_PRICE_MASTER_FLASH = "price_master_flash"
+SESSION_SHIPPING_FLASH = "shipping_reference_flash"
+SHIPPING_ADMIN_TITLE = "国際輸送費（参考）管理"
+SHIPPING_SAVE_BUTTON = "国際輸送費を更新"
+SHIPPING_UNCHANGED = "変更はありません"
+SHIPPING_HISTORY_LABEL = "更新履歴"
+SHIPPING_STATUS_LABELS = {"APPROVED": "有効（APPROVED）", "SUPERSEDED": "旧版（SUPERSEDED）"}
 
 
 def render_price_master_summary(page: dict) -> None:
@@ -60,6 +66,7 @@ def render_price_master_management(page: dict) -> None:
         _render_source_registry(labels, source_repository, repository)
         for master_type in PriceMasterType:
             _render_master_section(labels, master_type, repository, source_repository)
+    render_shipping_reference_management()
 
 
 def _render_source_registry(labels: dict, source_repository, price_master_repository) -> None:
@@ -318,3 +325,116 @@ def format_imported_at(value: Optional[str], *, date_only: bool = False) -> str:
     except ValueError:
         return value
     return moment.strftime("%Y-%m-%d" if date_only else "%Y-%m-%d %H:%M")
+
+
+def render_shipping_reference_management() -> None:
+    """Manual International Shipping Reference Master: view, explicit update, history. No deletion."""
+    from repositories.actor import current_actor
+    from repositories.shipping_rule_repository import (
+        CHARGE_BASIS_BY_TYPE,
+        CHARGE_BASIS_LABELS,
+        SHIPPING_TYPE_LABELS,
+        STANDARD_GLOBAL_TYPES,
+        ShippingRuleRepository,
+        ShippingRuleRepositoryError,
+        ShippingRuleValidationError,
+    )
+    from ui.price_catalog import SHIPPING_BASIS_NOTE, SHIPPING_INFO, currency_column_config
+
+    st.header(SHIPPING_ADMIN_TITLE)
+    st.caption(SHIPPING_INFO)
+    st.caption(SHIPPING_BASIS_NOTE)
+    flash = st.session_state.pop(SESSION_SHIPPING_FLASH, None)
+    if flash:
+        level, text = flash
+        (st.success if level == "success" else st.info if level == "info" else st.error)(text)
+    try:
+        repository = ShippingRuleRepository()
+        current = {shipping_type: repository.get_active_standard_global(shipping_type) for shipping_type in STANDARD_GLOBAL_TYPES}
+        history = repository.list_history()
+    except ShippingRuleRepositoryError:
+        st.warning("国際輸送費マスターを読み込めませんでした。DB migrationの適用状況を確認してください。")
+        return
+
+    for shipping_type in STANDARD_GLOBAL_TYPES:
+        active = current[shipping_type]
+        basis = CHARGE_BASIS_BY_TYPE[shipping_type]
+        version = active.rule.shipping_rule_id if active is not None else "new"
+        with st.container(border=True):
+            st.markdown(f"**{SHIPPING_TYPE_LABELS[shipping_type]}**")
+            if active is None:
+                st.warning("未登録（要確認）")
+            info = {
+                "区分": SHIPPING_TYPE_LABELS[shipping_type],
+                "現在金額 USD": f"${active.rule.rate_usd:,.2f}" if active is not None else "-",
+                "課金単位": CHARGE_BASIS_LABELS[basis],
+                "基準日": active.rule.effective_from.date().isoformat() if active is not None and active.rule.effective_from else "-",
+                "登録日時": format_imported_at(active.registered_at) if active is not None else "-",
+                "最終更新日時": format_imported_at(active.last_updated_at) if active is not None else "-",
+                "メモ": (active.rule.notes or "-") if active is not None else "-",
+            }
+            st.table([info])
+            rate_column, date_column = st.columns(2)
+            rate = rate_column.number_input(
+                "USD金額",
+                min_value=0.0,
+                value=float(active.rule.rate_usd) if active is not None else None,
+                step=0.01,
+                format="%.2f",
+                key=f"shipping_rate_{shipping_type.value}_{version}",
+            )
+            effective = date_column.date_input(
+                "基準日",
+                value=active.rule.effective_from.date() if active is not None and active.rule.effective_from else None,
+                key=f"shipping_effective_{shipping_type.value}_{version}",
+            )
+            notes = st.text_area(
+                "メモ",
+                value=(active.rule.notes or "") if active is not None else "",
+                key=f"shipping_notes_{shipping_type.value}_{version}",
+            )
+            if st.button(SHIPPING_SAVE_BUTTON, key=f"shipping_save_{shipping_type.value}"):
+                try:
+                    saved = repository.save_standard_global_rate(
+                        shipping_type,
+                        rate_usd=rate,
+                        effective_from=effective,
+                        notes=notes,
+                        created_by=current_actor(),
+                    )
+                except ShippingRuleValidationError as error:
+                    st.session_state[SESSION_SHIPPING_FLASH] = ("error", str(error))
+                except ShippingRuleRepositoryError:
+                    st.session_state[SESSION_SHIPPING_FLASH] = ("error", "国際輸送費を保存できませんでした。再読み込みして確認してください。")
+                else:
+                    if saved is None:
+                        st.session_state[SESSION_SHIPPING_FLASH] = ("info", SHIPPING_UNCHANGED)
+                    else:
+                        st.session_state[SESSION_SHIPPING_FLASH] = (
+                            "success",
+                            f"{SHIPPING_TYPE_LABELS[shipping_type]} を ${saved.rule.rate_usd:,.2f} に更新しました。",
+                        )
+                st.rerun()
+
+    with st.expander(SHIPPING_HISTORY_LABEL, expanded=False):
+        if not history:
+            st.text("履歴はありません。")
+        else:
+            st.dataframe(
+                [
+                    {
+                        "Shipping Type": SHIPPING_TYPE_LABELS.get(item.rule.shipping_type, item.rule.shipping_type.value),
+                        "USD": item.rule.rate_usd,
+                        "課金単位": CHARGE_BASIS_LABELS.get(item.rule.charge_basis, "-"),
+                        "基準日": item.rule.effective_from.date().isoformat() if item.rule.effective_from else "-",
+                        "状態": SHIPPING_STATUS_LABELS.get(item.rule.status.value, item.rule.status.value),
+                        "登録日時": format_imported_at(item.created_at),
+                        "登録者": item.created_by or "-",
+                        "メモ": item.rule.notes or "-",
+                    }
+                    for item in history
+                ],
+                use_container_width=True,
+                hide_index=True,
+                column_config=currency_column_config(("USD",), ()),
+            )

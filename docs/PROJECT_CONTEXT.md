@@ -764,3 +764,15 @@ Next:
 - 保険・送料を別表示し、両方ある場合のみ合計と参考JPY換算（画面上の参考為替）を算出。Quoteへは書き込まない。
 - 案件では Supplier / Manufacturer Quote の Shipping / Insurance を優先し、SO_MASTER値は参考扱い。自動見積確定には使用しない。
 - Quote calculation / Pricing Policy / Shipping Rule / Price Master / DB schema の変更なし。
+
+### PORTAL-2A.3 — 国際輸送費 手動マスター化
+
+- International Shipping Reference を SO_MASTER から分離。PORTAL-2A.2 の SO_MASTER L/M列・SKU単位の送料/保険抽出は廃止。
+- Source of Truth は Manual International Shipping Reference Master（`shipping_rules` table / `repositories/shipping_rule_repository.py`、`models.ShippingRule` を再利用）。
+- 3区分（STANDARD / GLOBAL）：Large Box Shipping Globally（PER_PARCEL＝1個口あたり）、Small Box Shipping Globally（PER_PARCEL）、Pipe Trekker Shipping Globally（PER_ORDER_BASE＝PT本体発注時の基本輸送一式。オプション量によっては Large / Small Box の追加個口が発生し得る）。課金単位は区分に固定で編集不可。
+- 初期値（基準日 2026-10-23）：$2,922.15 / $1,356.00 / $8,828.15。Insurance は保持・推測しない。
+- 日付の区別：基準日＝effective_from、登録日時＝その区分の最古Versionの created_at、最終更新日時＝現在 APPROVED Version の created_at。DBはUTC、表示は Asia/Tokyo `YYYY-MM-DD HH:mm`。
+- 更新は価格マスター管理「国際輸送費（参考）管理」から明示操作のみ。旧APPROVED→SUPERSEDED、新Version→APPROVED。物理削除・上書きなし。同一内容は新Versionを作らない。
+- 価格一覧「国際輸送費（参考）」は現在 APPROVED の3区分を表示（USD dollar / 参考JPY yen）。未登録は要確認。閲覧ではDB writeなし。
+- 優先順位：Supplier Quote / メーカー見積の案件固有Shipping ＞ その他案件固有送料 ＞ 標準マスター ＞ 要確認。Quote / Landed Cost への自動適用、個口数計算、Box Type 判定は未実装。
+- Production PostgreSQL は `deploy/migrations/20261122_shipping_rules.sql`（table＋index＋seed、idempotent）を別途適用。Runtime では PostgreSQL に CREATE / ALTER しない（ローカルSQLiteのみ自動作成・seed）。

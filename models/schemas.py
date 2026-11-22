@@ -48,6 +48,7 @@ from models.enums import (
     RecommendationOrigin,
     RecordStatus,
     RelationType,
+    ShippingChargeBasis,
     ShippingScopeType,
     ShippingType,
     SkuDuplicateClass,
@@ -686,6 +687,7 @@ class ShippingRule(BaseModel):
     destination_region: Optional[DestinationRegion] = None
     rate_usd: Optional[float] = None
     currency: str = "USD"
+    charge_basis: Optional[ShippingChargeBasis] = None
     dangerous_goods: YesNoUnknown = YesNoUnknown.UNKNOWN
     battery_included: YesNoUnknown = YesNoUnknown.UNKNOWN
     product_scope: Optional[str] = None

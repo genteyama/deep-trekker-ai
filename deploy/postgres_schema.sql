@@ -148,6 +148,32 @@ CREATE TABLE IF NOT EXISTS manufacturer_price_sources (
     row_version INTEGER NOT NULL DEFAULT 1
 );
 
+-- PORTAL-2A.3 Manual International Shipping Reference Master. Initial seed rows:
+-- deploy/migrations/20261122_shipping_rules.sql.
+CREATE TABLE IF NOT EXISTS shipping_rules (
+    id BIGSERIAL PRIMARY KEY,
+    shipping_rule_id TEXT NOT NULL UNIQUE,
+    shipping_type TEXT NOT NULL,
+    destination_region TEXT NOT NULL,
+    rate_usd NUMERIC(12, 2) NOT NULL CHECK (rate_usd > 0),
+    currency TEXT NOT NULL DEFAULT 'USD',
+    charge_basis TEXT NOT NULL,
+    scope_type TEXT NOT NULL,
+    source_type TEXT NOT NULL,
+    source_reference TEXT,
+    effective_from TEXT NOT NULL,
+    status TEXT NOT NULL,
+    notes TEXT,
+    created_at TEXT NOT NULL,
+    created_by TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_shipping_rules_type ON shipping_rules(shipping_type);
+CREATE INDEX IF NOT EXISTS idx_shipping_rules_region ON shipping_rules(destination_region);
+CREATE INDEX IF NOT EXISTS idx_shipping_rules_scope ON shipping_rules(scope_type);
+CREATE INDEX IF NOT EXISTS idx_shipping_rules_status ON shipping_rules(status);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_shipping_rules_one_approved
+    ON shipping_rules(shipping_type, destination_region, scope_type) WHERE status = 'APPROVED';
+
 -- Audit / locking columns for databases created before v1.1.
 ALTER TABLE technical_cases ADD COLUMN IF NOT EXISTS created_by TEXT;
 ALTER TABLE technical_cases ADD COLUMN IF NOT EXISTS updated_by TEXT;
@@ -167,5 +193,6 @@ ALTER TABLE price_master_imports ADD COLUMN IF NOT EXISTS file_bytes BYTEA;
 -- The app connects server-side with DATABASE_URL. Block the public Supabase REST API (anon key)
 -- from these tables without adding row-level policies.
 REVOKE ALL ON customers, technical_cases, technical_case_response_revisions, quote_drafts,
-    approved_quote_snapshots, activity_events, price_master_imports, manufacturer_price_sources
+    approved_quote_snapshots, activity_events, price_master_imports, manufacturer_price_sources,
+    shipping_rules
     FROM anon, authenticated;

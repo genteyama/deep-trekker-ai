@@ -187,3 +187,47 @@ def test_imported_at_is_shown_in_tokyo_time():
     assert format_imported_at("2026-10-06T15:30:00+00:00") == "2026-10-07 00:30"
     assert format_imported_at("2026-10-06T15:30:00+00:00", date_only=True) == "2026-10-07"
     assert format_imported_at(None) == "-"
+
+
+def _shipping_rate_key(at, shipping_type: str) -> str:
+    return next(item.key for item in at.number_input if item.key.startswith(f"shipping_rate_{shipping_type}_"))
+
+
+def test_shipping_reference_admin_shows_three_types_and_updates_with_history():
+    from models import RecordStatus, ShippingType
+    from repositories.shipping_rule_repository import ShippingRuleRepository
+
+    at = _open_price_master_page()
+    assert any(item.value == "国際輸送費（参考）管理" for item in at.header)
+    for shipping_type in ("LARGE_BOX", "SMALL_BOX", "PIPE_TREKKER"):
+        assert any(item.key == f"shipping_save_{shipping_type}" for item in at.button)
+        assert at.button(key=f"shipping_save_{shipping_type}").label == "国際輸送費を更新"
+    tables = " ".join(str(table.value.to_dict()) for table in at.table)
+    assert "1個口あたり" in tables
+    assert "PT本体発注時の基本一式" in tables
+    assert "$2,922.15" in tables
+    assert "2026-10-23" in tables
+
+    at.button(key="shipping_save_LARGE_BOX").click().run()
+    assert "変更はありません" in _texts(at)
+    assert len(ShippingRuleRepository().list_history(ShippingType.LARGE_BOX)) == 1
+
+    at.number_input(key=_shipping_rate_key(at, "LARGE_BOX")).set_value(3100.0).run()
+    at.button(key="shipping_save_LARGE_BOX").click().run()
+    _drop_stale_widgets(at)
+    assert not at.exception
+    assert "Large Box Shipping Globally を $3,100.00 に更新しました。" in _texts(at)
+    history = ShippingRuleRepository().list_history(ShippingType.LARGE_BOX)
+    assert [item.rule.status for item in history] == [RecordStatus.APPROVED, RecordStatus.SUPERSEDED]
+    assert ShippingRuleRepository().get_active_standard_global(ShippingType.SMALL_BOX).rule.rate_usd == 1356.0
+
+
+def test_shipping_reference_admin_rejects_zero_without_saving():
+    from models import ShippingType
+    from repositories.shipping_rule_repository import ShippingRuleRepository
+
+    at = _open_price_master_page()
+    at.number_input(key=_shipping_rate_key(at, "SMALL_BOX")).set_value(0.0).run()
+    at.button(key="shipping_save_SMALL_BOX").click().run()
+    assert "USD金額は0より大きい値を入力してください。" in _texts(at)
+    assert len(ShippingRuleRepository().list_history(ShippingType.SMALL_BOX)) == 1

@@ -171,6 +171,12 @@ class ShippingScopeType(str, Enum):
     CASE_SPECIFIC = "CASE_SPECIFIC"
 
 
+class ShippingChargeBasis(str, Enum):
+    # PER_PARCEL: rate applies per parcel (個口). PER_ORDER_BASE: base shipping set per main-unit order.
+    PER_PARCEL = "PER_PARCEL"
+    PER_ORDER_BASE = "PER_ORDER_BASE"
+
+
 class UpdateSourceType(str, Enum):
     DEALER_UPDATE_EMAIL = "DEALER_UPDATE_EMAIL"
     DIRECT_EMAIL = "DIRECT_EMAIL"
