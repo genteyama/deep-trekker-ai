@@ -542,3 +542,93 @@ def test_admin_ui_csv_validate_then_explicit_activate(uploads):
     assert record.import_id != active.import_id
     assert record.source_type == PriceMasterSourceType.CSV_UPLOAD
     assert "現在使用中：CSV Upload / PHOTON.csv" in _texts(at)
+
+
+# ---- Single "最新価格表を確認" button --------------------------------------------------------
+
+
+def _edited(data: bytes, sheet: str, cell: str, value) -> bytes:
+    workbook = load_workbook(io.BytesIO(data))
+    workbook[sheet][cell] = value
+    buffer = io.BytesIO()
+    workbook.save(buffer)
+    return buffer.getvalue()
+
+
+BOOK_CASES = [
+    (PriceMasterType.DT40, lambda: official_dt40_style_book().getvalue(), lambda data: _edited(data, "PHOTON", "D6", 17500)),
+    (PriceMasterType.PT30, lambda: official_pt30_style_book().getvalue(), lambda data: _edited(data, "A-150", "D2", 99999)),
+    (PriceMasterType.SPECTRA_GOLD, lambda: spectra_workbook().getvalue(), lambda _data: _changed_spectra()),
+]
+
+
+@pytest.mark.parametrize(("master_type", "base", "change"), BOOK_CASES)
+def test_single_latest_check_button_runs_check_source_connection_and_allows_activation(
+    monkeypatch, master_type, base, change
+):
+    import agents.online_price_master as online_module
+    import ui.price_master as price_master_ui
+
+    key = master_type.value
+    base_data = base()
+    active = _activate(master_type, base_data)
+    _saved_source(key, f"https://docs.google.com/spreadsheets/d/{key}-latest/edit")
+    monkeypatch.setattr(
+        online_module,
+        "_default_fetcher",
+        lambda source: FetchedWorkbook(data=change(base_data), filename=f"{key}.xlsx", fetch_url=source.fetch_url),
+    )
+    calls = []
+    original = price_master_ui.check_source_connection
+
+    def spy(source, **kwargs):
+        calls.append(source.source_key)
+        return original(source, **kwargs)
+
+    monkeypatch.setattr(price_master_ui, "check_source_connection", spy)
+
+    at = _open_price_master_page()
+    for book in ("DT40", "PT30", "SPECTRA_GOLD"):
+        online_buttons = [
+            item for item in at.button if item.key in {f"manufacturer_source_check_{book}", f"online_price_check_{book}"}
+        ]
+        assert [item.label for item in online_buttons] == ["最新価格表を確認"]
+    assert not any(item.key == f"online_price_activate_{key}" for item in at.button)
+
+    at.button(key=f"manufacturer_source_check_{key}").click().run()
+    _drop_stale_widgets(at)
+
+    assert not at.exception
+    assert calls == [key]
+    checked = ManufacturerPriceSourceRepository().get(key)
+    assert checked.last_checked_at is not None
+    assert checked.last_check_status == "CHANGES_PENDING"
+    review = at.session_state[f"online_price_review_{key}"]
+    assert review.status == OnlinePriceReviewStatus.CHANGES_PENDING
+    assert get_active_master(master_type).record.import_id == active.import_id
+
+    at.button(key=f"online_price_activate_{key}").click().run()
+    _drop_stale_widgets(at)
+
+    assert not at.exception
+    record = get_active_master(master_type).record
+    assert record.import_id != active.import_id
+    assert record.source_type == PriceMasterSourceType.MANUFACTURER_ONLINE
+
+
+@pytest.mark.parametrize(("master_type", "base", "_change"), BOOK_CASES)
+def test_saving_url_alone_never_changes_active_master(master_type, base, _change):
+    key = master_type.value
+    active = _activate(master_type, base())
+    _saved_source(key, f"https://docs.google.com/spreadsheets/d/{key}-old/edit")
+
+    at = _open_price_master_page()
+    at.text_input(key=f"manufacturer_source_url_{key}").set_value(f"https://docs.google.com/spreadsheets/d/{key}-new/edit")
+    at.button(key=f"manufacturer_source_save_{key}").click().run()
+    _drop_stale_widgets(at)
+
+    assert not at.exception
+    assert ManufacturerPriceSourceRepository().get(key).source_url.endswith(f"{key}-new/edit")
+    assert ManufacturerPriceSourceRepository().get(key).last_checked_at is None
+    assert get_active_master(master_type).record.import_id == active.import_id
+    assert not any(item.key == f"online_price_activate_{key}" for item in at.button)

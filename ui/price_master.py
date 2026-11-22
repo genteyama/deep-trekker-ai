@@ -16,9 +16,7 @@ from agents.online_price_master import (
     OnlinePriceReview,
     OnlinePriceReviewStatus,
     activate_reviewed_online_price,
-    review_manufacturer_online_price,
 )
-from agents.online_price_source import resolve_online_price_source
 from agents.price_master import ONLINE_SYNC_MASTERS, get_active_master, import_price_master
 from agents.price_master_csv_fallback import (
     CSV_FALLBACK_SHEETS,
@@ -60,7 +58,7 @@ ONLINE_FALLBACK_NOTICE = (
     "オンライン価格表を取得できません。現在のActive Masterを継続使用しています。"
     "必要に応じてExcel / CSVのFallbackを使用してください。"
 )
-SOURCE_UPDATED_AT_LABEL = "最終更新日時（URL保存・接続確認）"
+SOURCE_UPDATED_AT_LABEL = "最終更新日時（URL保存・最新価格表を確認）"
 SOURCE_UPDATED_BY_LABEL = "更新者"
 SOURCE_TYPE_LABELS = {
     "MANUFACTURER_ONLINE": "Online",
@@ -146,7 +144,7 @@ def _render_manufacturer_book(
     st.markdown(f"##### {ONLINE_SECTION_TITLE}")
     if source is not None:
         _render_source_settings(labels, source, source_repository, repository)
-    _render_online_review(labels, master_type, repository, source_repository, active)
+    _render_online_review(labels, master_type, repository, source_repository)
     st.markdown(f"##### {FALLBACK_SECTION_TITLE}")
     st.caption(FALLBACK_SECTION_NOTE)
     st.markdown(f"**{EXCEL_FALLBACK_TITLE}**")
@@ -429,29 +427,10 @@ def _review_key(master_type: PriceMasterType) -> str:
     return _review_key_for_source(master_type.value)
 
 
-def _render_online_review(
-    labels: dict,
-    master_type: PriceMasterType,
-    repository,
-    source_repository,
-    active: Optional[PriceMasterImport],
-) -> None:
+def _render_online_review(labels: dict, master_type: PriceMasterType, repository, source_repository) -> None:
+    """Show the review stored by 最新価格表を確認 (check_source_connection). Nothing when there is none."""
     online = labels["online"]
-    source = resolve_online_price_source(master_type, source_repository=source_repository)
-    configured = online["configured"] if source.configured else online["not_configured"]
-    st.write(f"{online['source_label']}：{configured}")
-    active_id = active.import_id if active is not None else online["unset"]
-    st.write(f"{online['active_label']}：{active_id}")
     review = st.session_state.get(_review_key(master_type))
-    checked = format_imported_at(review.fetched_at) if isinstance(review, OnlinePriceReview) and review.fetched_at else online["not_checked"]
-    st.write(f"{online['checked_at_label']}：{checked}")
-    if st.button(online["check_button"], key=f"online_price_check_{master_type.value}"):
-        st.session_state[_review_key(master_type)] = review_manufacturer_online_price(
-            master_type,
-            repository=repository,
-            source=source,
-        )
-        st.rerun()
     if not isinstance(review, OnlinePriceReview):
         return
     if review.error_count:
