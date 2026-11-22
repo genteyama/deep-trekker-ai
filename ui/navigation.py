@@ -195,6 +195,12 @@ def _request_workflow_step(texts: dict, current_page: str, session_key: str, ste
     st.rerun()
 
 
+def _legacy_quote_ui() -> bool:
+    from ui.quote_ui_mode import use_legacy_quote_ui
+
+    return use_legacy_quote_ui(st.session_state)
+
+
 def _render_quote_workflow(texts: dict, current_page: str) -> None:
     from ui.quote_steps import SESSION_QUOTE_STEP, normalize_quote_step
 
@@ -282,7 +288,8 @@ def render_dashboard_sidebar(texts: dict, current_page: str) -> None:
                 ):
                     _request_page_navigation(texts, current_page, page)
         _render_current_location(texts, current_page)
-        if current_page == PAGE_QUOTE_CONTROL:
+        if current_page == PAGE_QUOTE_CONTROL and _legacy_quote_ui():
+            # The 5-step list belongs to the legacy workspace only; the one-screen builder has no steps.
             _render_quote_workflow(texts, current_page)
         elif current_page == PAGE_TECHNICAL_CASE:
             _render_technical_workflow(texts, current_page)

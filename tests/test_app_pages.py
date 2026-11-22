@@ -111,6 +111,7 @@ def test_technical_case_stepper_navigates_incomplete_steps():
 
 def test_home_opens_quote_control_page():
     at = _start_app()
+    at.session_state["quote_ui_mode"] = "legacy"  # legacy 5-step workspace
     quote_button = at.button(key="sidebar_nav_quote")
 
     assert quote_button.disabled is False
@@ -521,6 +522,7 @@ def test_quote_date_widgets_do_not_raise_and_follow_auto_rule():
     from tests.test_quote_builder import _photon_draft
 
     at = _start_app()
+    at.session_state["quote_ui_mode"] = "legacy"  # legacy 5-step workspace
     at.button(key="sidebar_nav_quote").click().run()
 
     draft = _photon_draft()
@@ -564,6 +566,7 @@ def test_quote_date_human_final_button_does_not_raise_after_widgets():
     from tests.test_quote_builder import _photon_draft
 
     at = _start_app()
+    at.session_state["quote_ui_mode"] = "legacy"  # legacy 5-step workspace
     at.button(key="sidebar_nav_quote").click().run()
     draft = _photon_draft()
     keys = date_widget_keys(draft.quote_draft_id)
@@ -586,6 +589,7 @@ def test_quote_workspace_shows_only_selected_step_and_keeps_draft():
     from tests.test_quote_builder import _photon_draft
 
     at = _start_app()
+    at.session_state["quote_ui_mode"] = "legacy"  # legacy 5-step workspace
     at.button(key="sidebar_nav_quote").click().run()
     draft = _photon_draft()
     draft_id = draft.quote_draft_id
@@ -670,6 +674,7 @@ def test_saved_draft_can_be_resumed_after_session_is_cleared():
     )
 
     at = _start_app()
+    at.session_state["quote_ui_mode"] = "legacy"  # legacy 5-step workspace
     at.button(key="sidebar_nav_quote").click().run()
     resume = next((button for button in at.button if button.label == "作業を再開"), None)
     assert resume is not None
@@ -691,6 +696,7 @@ def test_new_quote_buttons_remain_after_draft_is_created():
     from tests.test_quote_builder import _photon_draft
 
     at = _start_app()
+    at.session_state["quote_ui_mode"] = "legacy"  # legacy 5-step workspace
     at.button(key="sidebar_nav_quote").click().run()
     at.session_state["quote_draft"] = _photon_draft()
     at.session_state["quote_workspace_step"] = 1
@@ -725,6 +731,7 @@ def test_pending_form_values_resume_without_applying_or_widget_exception():
     keys = date_widget_keys(draft.quote_draft_id)
 
     at = _start_app()
+    at.session_state["quote_ui_mode"] = "legacy"  # legacy 5-step workspace
     at.button(key="sidebar_nav_quote").click().run()
     at.session_state["quote_draft"] = draft
     at.session_state["quote_workspace_step"] = 2
@@ -757,6 +764,7 @@ def test_pending_form_values_resume_without_applying_or_widget_exception():
     ).description == official_description
 
     resumed = _start_app()
+    resumed.session_state["quote_ui_mode"] = "legacy"  # legacy 5-step workspace
     resumed.button(key="sidebar_nav_quote").click().run()
     resume = next((button for button in resumed.button if button.label == "作業を再開"), None)
     assert resume is not None
@@ -792,6 +800,7 @@ def test_generated_export_files_offer_browser_download(tmp_path):
     _, snapshot = _approve(draft)
 
     at = _start_app()
+    at.session_state["quote_ui_mode"] = "legacy"  # legacy 5-step workspace
     at.button(key="sidebar_nav_quote").click().run()
     at.session_state["quote_draft"] = draft
     at.session_state["approved_quote_snapshot"] = snapshot
@@ -828,6 +837,7 @@ def test_export_inputs_resume_without_changing_snapshot():
     )
 
     at = _start_app()
+    at.session_state["quote_ui_mode"] = "legacy"  # legacy 5-step workspace
     at.button(key="sidebar_nav_quote").click().run()
     resume = next((button for button in at.button if button.label == "作業を再開"), None)
     assert resume is not None

@@ -798,3 +798,16 @@ Next:
 - 改訂：`create_revision_draft` は parent_quote_id＝承認版、relation_type＝REVISION、source_quote_id＝初版ID、ID＝`初版ID-v{n}`。改訂中は旧版 APPROVED のまま、改訂版の承認時に明示された親だけを SUPERSEDED（Draft行・スナップショットの status のみ変更、内容と番号は保持、削除なし）。案件ID＋構成名による推測判定は廃止。複製・派生は旧版に影響しない。
 - 見積一覧：正式見積番号列を追加（検索対象にも追加）。Version と状態（承認済み／改訂済み）で版を識別。
 - Migration：`deploy/migrations/20261122_quote_integrity.sql`（列追加のみ、一意制約なし、idempotent）。本番 Supabase へは PORTAL-3A のデプロイ前に適用が必要。
+
+### PORTAL-3B.1 — シンプル見積ビルダー（1画面）
+
+- 「見積作成」の通常画面を1画面型ビルダーに変更（`ui/simple_quote_builder.py`、ドメイン処理は `agents/simple_quote_builder.py`）。流れ：顧客情報 → 商品検索・複数選択 → 数量 → GlobalShipping → 見積額・原価・粗利 → 保存・承認・出力。対象は Active DT40 / PT30（正式価格の行のみ選択可）。SPECTRA は対象外。
+- 商品選択：製品名・SKU・Sheet の部分一致検索と Price Book 絞り込み、価格表形式で複数チェック→「見積に追加」。同じSKUは数量加算。数量変更・削除は明細上で即時再計算。
+- 売価：SO_MASTERポリシーの標準売価を自動採用（`USE_STANDARD_CANDIDATE`）。標準売価が無い商品・例外は「売価を調整」（既存の手動売価＋理由・QuoteAdjustment）。
+- GlobalShipping：PORTAL-2A.3 の現在 APPROVED 3区分から選択し、`QuoteDraft.global_shipping`（`GlobalShippingSelection`）に凍結（rule id・マスター値・基準日・実額・調整理由・倍率・原価・自動顧客価格・顧客価格の手動値と理由・選択者）。原価＝実額×為替、顧客向け＝原価×QUOTE_CALC の Shipping倍率（`policy.shipping_markup_multiplier`、現行 1.2）を既存の顧客価格丸め（千円単位）で丸め。手動調整は理由必須、マスター値は保持。
+- 原価＝仕入原価＋輸送保険料＋輸入税（既存の landed cost ルール、ディーラー原価基準）＋国際輸送原価。国内送料は含めない（各行0）。粗利＝税抜見積額−原価合計、粗利率＝粗利÷税抜見積額。消費税率は画面で表示・変更可（初期値10%）。
+- 為替：新規は既存の見積用既定為替（変更は既存の新規為替入力）、作成後は既存の為替変更エディタ（理由・設定者の記録を維持）。為替変更後は標準売価採用行と国際輸送費が新為替に追従。
+- Snapshot：各行は追加時点のActive Master価格snapshotを保持、GlobalShippingは選択時の値を保持。保存後にPrice Master・GlobalShipping・為替設定が更新されても保存済み見積は変わらない（数量変更も行のsnapshot価格で再計算）。DB schema 変更なし（QuoteDraft / ApprovedQuoteSnapshot の payload に `builder` と `global_shipping` を追加）。
+- 承認・出力：PORTAL-3A の承認（正式見積番号・承認者・確認チェック・ロック・改訂・SUPERSEDED）と帳票出力（PDF / Excel / MoneyForward）を同じ画面の下部で再利用。改訂版も `builder` と `global_shipping` を引き継ぐ。
+- 従来の5ステップ画面は削除せず「SPECTRA見積・従来の詳細画面」から開く（SPECTRA、従来の下書き、営業・技術案件からの引き継ぎは自動でこちら）。ビルダー表示中はサイドバーの見積工程（5ステップ）を表示しない。ナビゲーション上の入口は「見積作成」1つのみ。
+- 次候補（PORTAL-3B.2）：価格一覧ページでチェックした商品を見積作成へ直接送る機能。

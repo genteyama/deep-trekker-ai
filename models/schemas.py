@@ -1204,6 +1204,35 @@ class IssuerSnapshot(BaseModel):
     source_reference: Optional[str] = None
 
 
+class GlobalShippingSelection(BaseModel):
+    """International shipping chosen from the Manual Shipping Reference Master, frozen into the quote.
+
+    master_* keep the reference value as selected; actual_rate_usd is the DT shipping cost used for the
+    quote (master value unless a person adjusted it). The customer price defaults to cost x the QUOTE_CALC
+    shipping markup and is overridden only explicitly, with a reason.
+    """
+
+    shipping_rule_id: str
+    shipping_type: Optional[str] = None
+    label: Optional[str] = None
+    charge_basis: Optional[str] = None
+    master_rate_usd: float
+    master_effective_from: Optional[str] = None
+    master_source_reference: Optional[str] = None
+    actual_rate_usd: float
+    rate_adjusted: bool = False
+    rate_adjustment_reason: Optional[str] = None
+    exchange_rate: Optional[float] = None
+    markup_multiplier: Optional[float] = None
+    cost_jpy: Optional[float] = None
+    auto_customer_price_jpy: Optional[float] = None
+    customer_price_jpy: Optional[float] = None
+    customer_price_overridden: bool = False
+    customer_price_reason: Optional[str] = None
+    selected_by: Optional[str] = None
+    selected_at: Optional[datetime] = None
+
+
 class QuoteDraft(BaseModel):
     quote_draft_id: str
     quote_version: int = 1
@@ -1245,6 +1274,9 @@ class QuoteDraft(BaseModel):
     official_quote_number: Optional[str] = None
     approved_by: Optional[str] = None
     approved_at: Optional[datetime] = None
+    # PORTAL-3B.1: drafts made by the one-screen builder, and their frozen GlobalShipping choice.
+    builder: Optional[str] = None
+    global_shipping: Optional[GlobalShippingSelection] = None
 
 
 class CostScenario(BaseModel):
@@ -1375,6 +1407,8 @@ class ApprovedQuoteSnapshot(BaseModel):
     # Explicit revision lineage of the approved draft (same values as the draft row).
     parent_quote_id: Optional[str] = None
     relation_type: Optional[str] = None
+    builder: Optional[str] = None
+    global_shipping: Optional[GlobalShippingSelection] = None
 
 
 class InternalQuoteTransferRow(BaseModel):

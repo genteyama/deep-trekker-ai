@@ -51,6 +51,7 @@ def uploads(monkeypatch):
 
 def _open_quote_page() -> AppTest:
     at = AppTest.from_file(str(APP_PATH)).run()
+    at.session_state["quote_ui_mode"] = "legacy"  # legacy 5-step workspace
     at.button(key="sidebar_nav_quote").click().run()
     assert not at.exception
     return at
@@ -136,6 +137,7 @@ def test_upload_import_activate_then_quote_uses_it_and_existing_drafts_stay(uplo
     assert "DT40（Deep Trekker 価格表）を取り込み、有効にしました（9月 DT40.xlsx）" in texts
     assert "DT40：有効 /" in texts and "取込" in texts
 
+    at.session_state["quote_ui_mode"] = "legacy"  # legacy 5-step workspace
     at.button(key="sidebar_nav_quote").click().run()
     _drop_stale_widgets(at)
     at.button(key="ihi_photon_draft").click().run()
@@ -152,6 +154,7 @@ def test_upload_import_activate_then_quote_uses_it_and_existing_drafts_stay(uplo
     assert SqliteQuoteRepository().get_draft(first.quote_draft_id).draft.model_dump(mode="json") == stored_before
     assert _line(at.session_state["quote_draft"]).dealer_price_usd == 10434.6
 
+    at.session_state["quote_ui_mode"] = "legacy"  # legacy 5-step workspace
     at.button(key="sidebar_nav_quote").click().run()
     _drop_stale_widgets(at)
     at.button(key="ihi_photon_draft").click().run()

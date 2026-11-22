@@ -117,6 +117,7 @@ def test_sidebar_admin_section_opens_price_master_page():
     from tests.test_price_master_ui import _drop_stale_widgets
 
     _drop_stale_widgets(at)
+    at.session_state["quote_ui_mode"] = "legacy"  # legacy 5-step workspace
     at.button(key="sidebar_nav_quote").click().run()
     assert at.session_state[SESSION_CURRENT_PAGE] == PAGE_QUOTE_CONTROL
     assert not any(item.label == "価格マスター管理" for item in at.expander)
@@ -141,12 +142,14 @@ def test_old_back_to_home_buttons_are_removed():
 
 def test_quote_deep_location_and_direct_step_navigation():
     at = _start_app()
+    at.session_state["quote_ui_mode"] = "legacy"  # legacy 5-step workspace
     at.button(key="sidebar_nav_quote").click().run()
     at.button(key="sidebar_quote_step_2").click().run()
     assert at.session_state[SESSION_QUOTE_STEP] == 2
     assert "› 2. 原価・標準売価" in _visible(at)
 
     at = _start_app()
+    at.session_state["quote_ui_mode"] = "legacy"  # legacy 5-step workspace
     at.button(key="sidebar_nav_quote").click().run()
     at.button(key="sidebar_quote_step_5").click().run()
     assert at.session_state[SESSION_QUOTE_STEP] == 5
@@ -186,6 +189,7 @@ def test_home_shows_brand_logos_in_hero_and_internal_pages_are_compact():
 
 def test_main_workflow_overview_follows_sidebar_and_keeps_prev_next():
     at = _start_app()
+    at.session_state["quote_ui_mode"] = "legacy"  # legacy 5-step workspace
     at.button(key="sidebar_nav_quote").click().run()
     assert _cards(at).count("dt-step-card is-compact") == 5
     assert not any(

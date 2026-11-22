@@ -141,6 +141,7 @@ def test_handoff_click_navigates_without_a_database_write():
 def test_pending_handoff_overwrites_an_older_quote_pre_draft():
     _save_case()
     at = _start_app()
+    at.session_state["quote_ui_mode"] = "legacy"  # legacy 5-step workspace
     at.button(key="sidebar_nav_quote").click().run()
     line_id = _line_id(at)
     at.text_input(key="generic_quote_customer").set_value("古い顧客")
@@ -259,6 +260,7 @@ def test_navigation_before_create_keeps_handoff_and_writes_nothing():
     _drop_stale_widgets(at)
 
     assert SqliteQuoteRepository().list_recent_drafts() == []
+    at.session_state["quote_ui_mode"] = "legacy"  # legacy 5-step workspace
     at.button(key="sidebar_nav_quote").click().run()
     assert at.text_input(key="generic_quote_customer").value == "編集顧客"
     assert at.text_input(key="generic_quote_title").value == "設備調査"

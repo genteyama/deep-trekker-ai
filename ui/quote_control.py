@@ -88,6 +88,8 @@ from repositories.actor import acting_person
 from ui.price_master import render_price_master_management, render_price_master_summary
 from ui.quote_steps import SESSION_NEW_QUOTE_FX, ensure_new_quote_exchange_rate, new_quote_exchange_rate_source
 from ui.quote_workspace import render_quote_debug_details, render_quote_workspace
+from ui.quote_ui_mode import QUOTE_UI_MODE_KEY, QUOTE_UI_SIMPLE, use_legacy_quote_ui
+from ui.simple_quote_builder import render_simple_quote_builder
 
 SESSION_IMPORT = "price_book_import"
 SESSION_DIFF = "price_book_diff"
@@ -115,20 +117,34 @@ def render_quote_control(texts: dict) -> None:
     st.caption(page["internal_name"])
     st.write(page["description"])
 
-    render_quote_workspace(
-        page,
-        helpers={
-            "create_ihi_draft": _build_ihi_draft_from_ui,
-            "create_spectra_draft": _build_spectra_draft_from_ui,
-            "create_general_draft": _build_general_draft_from_ui,
-            "init_date_widgets": _init_date_widget_state,
-            "render_dates": _render_quote_date_inputs,
-            "render_export": _render_file_export,
-            "ensure_store": _ensure_quote_approval_store,
-            "sales_candidates_for_rate": _sales_candidates_for_rate,
-            "texts": texts,
-        },
-    )
+    helpers = {
+        "create_ihi_draft": _build_ihi_draft_from_ui,
+        "create_spectra_draft": _build_spectra_draft_from_ui,
+        "create_general_draft": _build_general_draft_from_ui,
+        "init_date_widgets": _init_date_widget_state,
+        "render_dates": _render_quote_date_inputs,
+        "render_export": _render_file_export,
+        "ensure_store": _ensure_quote_approval_store,
+        "sales_candidates_for_rate": _sales_candidates_for_rate,
+        "texts": texts,
+    }
+    if use_legacy_quote_ui(st.session_state):
+        _render_back_to_simple_builder()
+        render_quote_workspace(page, helpers=helpers)
+    else:
+        render_simple_quote_builder(page, helpers)
+
+
+def _render_back_to_simple_builder() -> None:
+    # The legacy 5-step workspace (SPECTRA, older drafts). The one-screen builder is the normal 見積作成.
+    if st.button("← シンプル見積作成に戻る", key="quote_back_to_simple"):
+        from agents.simple_quote_builder import is_simple_draft
+
+        st.session_state[QUOTE_UI_MODE_KEY] = QUOTE_UI_SIMPLE
+        if not is_simple_draft(st.session_state.get("quote_draft")):
+            for key in ("quote_draft", "approved_quote_snapshot", "quote_approval_validation"):
+                st.session_state[key] = None
+        st.rerun()
 
 
 def render_price_master_admin(texts: dict) -> None:

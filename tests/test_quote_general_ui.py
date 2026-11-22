@@ -83,6 +83,7 @@ def test_navigation_does_not_create_a_draft_and_restores_pre_draft_input():
     assert "quote_draft" not in at.session_state or at.session_state["quote_draft"] is None
     assert at.session_state["quote_repository"].list_recent_drafts() == []
 
+    at.session_state["quote_ui_mode"] = "legacy"  # legacy 5-step workspace
     at.button(key="sidebar_nav_quote").click().run()
     assert "quote_draft" not in at.session_state or at.session_state["quote_draft"] is None
     assert at.text_input(key="generic_quote_customer").value == "保管顧客"

@@ -350,6 +350,8 @@ def create_revision_draft(
         relation_type=QuoteLineageType.REVISION.value,
         # Initial value only: the revision may keep the parent's number or change it before approval.
         official_quote_number=snapshot.official_quote_number,
+        builder=snapshot.builder,
+        global_shipping=snapshot.global_shipping.model_copy(deep=True) if snapshot.global_shipping else None,
         case_id=snapshot.case_id,
         customer=snapshot.customer,
         title=snapshot.title,
@@ -702,6 +704,8 @@ def _build_approved_snapshot(
         approval_comment=approval.approval_comment if approval else None,
         parent_quote_id=draft.parent_quote_id,
         relation_type=draft.relation_type,
+        builder=draft.builder,
+        global_shipping=draft.global_shipping.model_copy(deep=True) if draft.global_shipping else None,
     )
 
 

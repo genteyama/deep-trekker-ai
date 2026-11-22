@@ -68,6 +68,7 @@ def _import(master_type, factory, name):
 
 def _create_ihi_photon_draft():
     at = AppTest.from_file(str(APP_PATH)).run()
+    at.session_state["quote_ui_mode"] = "legacy"  # legacy 5-step workspace
     at.button(key="sidebar_nav_quote").click().run()
     at.button(key="ihi_photon_draft").click().run()
     assert not at.exception
