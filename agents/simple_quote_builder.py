@@ -251,6 +251,64 @@ def remove_line(draft: QuoteDraft, line_id: str) -> QuoteDraft:
     return refresh_quote_draft(draft) if not draft.shipping_lines else apply_shipping(draft)
 
 
+def move_line(draft: QuoteDraft, line_id: str, step: int) -> QuoteDraft:
+    """Move a line up (step -1) or down (step +1). The line list order is the quote order.
+
+    The customer lines (and so the approved snapshot, PDF, Excel and MoneyForward rows) follow the
+    configuration line order when they are rebuilt; no separate sort key is stored.
+    """
+    ensure_draft_editable(draft)
+    _line(draft, line_id)
+    lines = list(draft.configuration_lines)
+    index = next(position for position, item in enumerate(lines) if item.line_id == line_id)
+    target = min(max(index + int(step), 0), len(lines) - 1)
+    if target == index:
+        return draft
+    lines.insert(target, lines.pop(index))
+    draft.configuration_lines = lines
+    return apply_shipping(draft) if draft.shipping_lines else refresh_quote_draft(draft)
+
+
+def purchase_price(line) -> dict:
+    """Manufacturer purchase price of a line from its frozen price snapshot.
+
+    DT40 / PT30 call it the Dealer price, SPECTRA GOLD the Gold price. jpy is the line's existing
+    dealer cost (quantity x unit x the quote rate, as calculated by the landed cost engine).
+    """
+    snapshot = line.manufacturer_price_snapshot
+    book = (snapshot.price_book if snapshot else None) or ""
+    unit = snapshot.manufacturer_dealer_price_usd if snapshot else None
+    if unit is None:
+        unit = line.dealer_price_usd
+    return {
+        "label": "Gold" if SPECTRA_PRICE_BOOK in book.split("/") else "Dealer",
+        "price_book": book or None,
+        "unit_usd": unit,
+        "total_usd": None if unit is None else round(unit * line.quantity, 2),
+        "jpy": line.dealer_cost_jpy,
+    }
+
+
+def purchase_breakdown(draft: QuoteDraft) -> list[dict]:
+    """Purchase cost by origin (DT / PT Dealer, SPECTRA GOLD Gold), never mixing the two USD totals."""
+    groups: dict[str, dict] = {}
+    for line in draft.configuration_lines:
+        price = purchase_price(line)
+        group = groups.setdefault(
+            price["label"], {"label": price["label"], "total_usd": 0.0, "jpy": 0.0, "complete": True}
+        )
+        if price["total_usd"] is None or price["jpy"] is None:
+            group["complete"] = False
+            continue
+        group["total_usd"] = round(group["total_usd"] + price["total_usd"], 2)
+        group["jpy"] = round(group["jpy"] + price["jpy"], 4)
+    order = {"Dealer": 0, "Gold": 1}
+    return [
+        {**group, "total_usd": group["total_usd"] if group["complete"] else None, "jpy": group["jpy"] if group["complete"] else None}
+        for group in sorted(groups.values(), key=lambda item: order.get(item["label"], 9))
+    ]
+
+
 def set_customer_info(draft: QuoteDraft, customer: str, title: Optional[str]) -> QuoteDraft:
     ensure_draft_editable(draft)
     name = (customer or "").strip()
@@ -552,6 +610,7 @@ def revenue_summary(draft: QuoteDraft) -> dict:
     sales = draft.subtotal_ex_tax_jpy
     gross = None if sales is None or total_cost is None else round(sales - total_cost, 4)
     margin = None if gross is None or not sales else round(gross / sales, 6)
+    cost_rate = None if total_cost is None or not sales else round(total_cost / sales, 6)
     return {
         "purchase": purchase,
         "insurance": insurance,
@@ -563,6 +622,7 @@ def revenue_summary(draft: QuoteDraft) -> dict:
         "sales_ex_tax": sales,
         "gross_profit": gross,
         "gross_margin_rate": margin,
+        "cost_rate": cost_rate,
     }
 
 
@@ -742,6 +802,9 @@ __all__ = [
     "customer_summary",
     "is_simple_draft",
     "line_source",
+    "move_line",
+    "purchase_breakdown",
+    "purchase_price",
     "remove_line",
     "revenue_summary",
     "price_books_in",

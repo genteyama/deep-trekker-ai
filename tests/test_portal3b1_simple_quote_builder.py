@@ -330,7 +330,10 @@ def test_ui_quantity_delete_shipping_and_summary():
     updated = at.session_state["quote_draft"]
     assert updated.global_shipping.shipping_rule_id == rule_id
     labels = [item.label for item in at.metric]
-    assert {"見積額（税抜）", "原価合計", "粗利", "粗利率"} <= set(labels)
+    assert {"見積額（税抜）", "税抜見積額", "原価合計", "粗利"} <= set(labels)
+    # PORTAL-3B.1.2: 原価率 / 粗利率 sit under 原価合計 / 粗利.
+    texts = [item.value for item in at.markdown]
+    assert any(text.startswith("**原価率 ") for text in texts) and any(text.startswith("**粗利率 ") for text in texts)
     stored = SqliteQuoteRepository().get_draft(updated.quote_draft_id).draft
     assert stored.global_shipping.shipping_rule_id == rule_id
 

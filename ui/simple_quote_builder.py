@@ -23,8 +23,11 @@ from agents.simple_quote_builder import (
     create_simple_quote_draft,
     clear_spectra_shipping,
     customer_summary,
+    move_line,
     price_books_in,
     price_list_sales_candidates,
+    purchase_breakdown,
+    purchase_price,
     remove_line,
     revenue_summary,
     select_global_shipping,
@@ -345,21 +348,39 @@ def _add_products(page: dict, helpers: dict, draft, items: list[dict]) -> None:
 # ---- C. lines -------------------------------------------------------------------------------------
 
 
+LINE_COLUMNS = [0.7, 3.0, 1.7, 1.5, 1.3, 1.0, 1.4, 0.8]
+
+
 def _render_lines(page: dict, draft, locked: bool) -> None:
     with st.container(border=True):
         st.subheader("見積明細")
         if draft is None or not draft.configuration_lines:
             st.caption("商品を選んで「見積に追加」すると、ここに表示されます。")
             return
-        header = st.columns([3.2, 1.6, 1.4, 1.1, 1.5, 0.8])
-        for column, text in zip(header, ("製品名", "SKU", "単価", "数量", "小計", "")):
+        header = st.columns(LINE_COLUMNS)
+        titles = ("順番", "製品名", "SKU / Price Book", "仕入価格 USD", "売価 JPY", "数量", "小計", "")
+        for column, text in zip(header, titles):
             column.markdown(f"**{text}**")
-        for line in list(draft.configuration_lines):
-            name, sku, unit, quantity, subtotal, remove = st.columns([3.2, 1.6, 1.4, 1.1, 1.5, 0.8])
+        lines = list(draft.configuration_lines)
+        for index, line in enumerate(lines):
+            order, name, sku, purchase, unit, quantity, subtotal, remove = st.columns(LINE_COLUMNS)
+            if locked:
+                order.write(str(index + 1))
+            else:
+                if order.button("↑", key=f"simple_up_{line.line_id}", help="上へ", disabled=index == 0):
+                    move_line(draft, line.line_id, -1)
+                    st.rerun()
+                if order.button("↓", key=f"simple_down_{line.line_id}", help="下へ", disabled=index == len(lines) - 1):
+                    move_line(draft, line.line_id, 1)
+                    st.rerun()
             name.write(line.customer_display_name or line.manufacturer_description or "-")
             book = line.manufacturer_price_snapshot.price_book if line.manufacturer_price_snapshot else None
             book = price_book_label(page, book) if book else None
-            sku.write(f"{line.manufacturer_sku or '-'}（{book}）" if book else (line.manufacturer_sku or "-"))
+            sku.write(line.manufacturer_sku or "-")
+            if book:
+                sku.caption(book)
+            price = purchase_price(line)
+            purchase.write(f"{price['label']} {_usd(price['unit_usd'])}")
             unit.write(display_yen(line.final_sales_price_jpy, "未設定"))
             value = quantity.number_input(
                 "数量",
@@ -388,7 +409,24 @@ def _render_lines(page: dict, draft, locked: bool) -> None:
                 with st.expander(f"売価を調整：{line.manufacturer_sku}" + (f"（{book}）" if book else ""), expanded=False):
                     from ui.quote_workspace import _render_final_price_editor
 
+                    st.caption(_purchase_caption(draft, line))
                     _render_final_price_editor(page, draft, line)
+
+
+def _usd(value) -> str:
+    return "-" if value is None else f"${value:,.2f}"
+
+
+def _purchase_caption(draft, line) -> str:
+    """Purchase price of one unit from the line snapshot, and its JPY at the quote rate (existing result)."""
+    price = purchase_price(line)
+    text = f"{price['label']}価格：{_usd(price['unit_usd'])}"
+    if price["jpy"] is not None and line.quantity:
+        text += (
+            f" ／ {price['label']} {_usd(price['unit_usd'])} × ¥{display_number(draft.exchange_rate, '-')}"
+            f" = {display_yen(price['jpy'] / line.quantity, '-')}（1台あたり）"
+        )
+    return text
 
 
 # ---- D. GlobalShipping ----------------------------------------------------------------------------
@@ -614,30 +652,35 @@ def _render_revenue_summary(page: dict, draft) -> None:
     revenue = revenue_summary(draft)
     with st.container(border=True):
         st.subheader("社内用収益サマリー")
-        cost, sales, gross, margin = st.columns(4)
-        cost.metric("原価合計", display_yen(revenue["total_cost"], "未確定"))
+        sales, cost, gross = st.columns(3)
         sales.metric("税抜見積額", display_yen(revenue["sales_ex_tax"], "未確定"))
+        cost.metric("原価合計", display_yen(revenue["total_cost"], "未確定"))
+        cost.markdown(f"**原価率 {display_percent(revenue['cost_rate'], '-')}**")
         gross.metric("粗利", display_yen(revenue["gross_profit"], "未確定"))
-        margin.metric("粗利率", display_percent(revenue["gross_margin_rate"], "未確定"))
+        gross.markdown(f"**粗利率 {display_percent(revenue['gross_margin_rate'], '-')}**")
         with st.expander("原価内訳", expanded=False):
-            st.table(
-                [
-                    {"項目": "仕入原価", "金額": display_yen(revenue["purchase"], "-")},
-                    {"項目": "輸送保険料", "金額": display_yen(revenue["insurance"], "-")},
-                    {"項目": "輸入税", "金額": display_yen(revenue["import_tax"], "-")},
-                    {"項目": "国際輸送費", "金額": display_yen(revenue["shipping"], "未選択")},
-                    *(
-                        [
-                            {"項目": "　うち DT / PT 国際輸送費", "金額": display_yen(revenue["shipping_dt_pt"], "未選択")},
-                            {"項目": "　うち SPECTRA GOLD 国際輸送費", "金額": display_yen(revenue["shipping_spectra"], "未入力")},
-                        ]
-                        if draft.spectra_shipping is not None or SPECTRA_PRICE_BOOK in price_books_in(draft)
-                        else []
-                    ),
-                    {"項目": "原価合計", "金額": display_yen(revenue["total_cost"], "-")},
+            rows = [{"項目": "商品仕入原価", "金額": display_yen(revenue["purchase"], "-"), "根拠": ""}]
+            for group in purchase_breakdown(draft):
+                origin = "DT / PT Dealer価格" if group["label"] == "Dealer" else "SPECTRA GOLD Gold価格"
+                basis = (
+                    f"{group['label']}合計 {_usd(group['total_usd'])} × 使用為替 ¥{display_number(draft.exchange_rate, '-')}"
+                    if group["total_usd"] is not None
+                    else "-"
+                )
+                rows.append({"項目": f"　うち {origin}", "金額": display_yen(group["jpy"], "-"), "根拠": basis})
+            rows += [
+                {"項目": "輸送保険料", "金額": display_yen(revenue["insurance"], "-"), "根拠": "見積試算ポリシー"},
+                {"項目": "輸入税", "金額": display_yen(revenue["import_tax"], "-"), "根拠": "見積試算ポリシー"},
+                {"項目": "国際輸送費", "金額": display_yen(revenue["shipping"], "未選択"), "根拠": ""},
+            ]
+            if draft.spectra_shipping is not None or SPECTRA_PRICE_BOOK in price_books_in(draft):
+                rows += [
+                    {"項目": "　うち DT / PT 国際輸送費", "金額": display_yen(revenue["shipping_dt_pt"], "未選択"), "根拠": "GlobalShipping"},
+                    {"項目": "　うち SPECTRA GOLD 国際輸送費", "金額": display_yen(revenue["shipping_spectra"], "未入力"), "根拠": "手入力"},
                 ]
-            )
-            st.caption("粗利率 = 粗利 ÷ 税抜見積額。国内送料は含みません。")
+            rows.append({"項目": "原価合計", "金額": display_yen(revenue["total_cost"], "-"), "根拠": ""})
+            st.table(rows)
+            st.caption("原価率 = 原価合計 ÷ 税抜見積額、粗利率 = 粗利 ÷ 税抜見積額。国内送料は含みません。")
         render_warning_panel(page, draft)
 
 
