@@ -47,6 +47,35 @@ class SimpleQuoteError(ValueError):
         self.code = code
 
 
+def price_list_sales_candidates(sales_candidates):
+    """Sales candidates resolved with the 価格一覧 rule, so the builder shows the price list's standard price.
+
+    The price list accepts an SKU whose several SpaceOne master rows (e.g. sheets A-150 and A-200) all give
+    the same price (`build_reference_sales_map`). The quote engine would treat those rows as ambiguous, so
+    for such an SKU only its first row is passed on. SKUs the price list leaves without a price keep all
+    their rows and stay without a standard price. None (no Active SO_MASTER) stays None.
+    """
+    if sales_candidates is None:
+        return None
+    from agents.pricing_policy import round_customer_price_jpy
+    from ui.price_catalog import build_reference_sales_map
+
+    candidates = list(sales_candidates)
+    reference = build_reference_sales_map(
+        candidates, round_customer_price=round_customer_price_jpy, is_customer_price_unit=is_customer_price_unit
+    )
+    kept = []
+    seen = set()
+    for candidate in candidates:
+        sku = str(candidate.manufacturer_sku or "").strip()
+        if sku and reference.get(sku) is not None:
+            if sku in seen:
+                continue
+            seen.add(sku)
+        kept.append(candidate)
+    return kept
+
+
 def is_simple_draft(draft: Optional[QuoteDraft]) -> bool:
     return draft is not None and draft.builder == SIMPLE_BUILDER
 
@@ -73,7 +102,7 @@ def create_simple_quote_draft(
         exchange_rate=exchange_rate,
         international_shipping_usd=None,
         domestic_shipping_jpy=0.0,
-        sales_candidates=sales_candidates,
+        sales_candidates=price_list_sales_candidates(sales_candidates),
         exchange_rate_source=exchange_rate_source,
         tax_rate=tax_rate,
         repository=repository,
@@ -107,7 +136,7 @@ def add_products(draft: QuoteDraft, items: Sequence[dict], *, sales_candidates=N
             exchange_rate=draft.exchange_rate,
             international_shipping_usd=None,
             domestic_shipping_jpy=0.0,
-            sales_candidates=sales_candidates,
+            sales_candidates=price_list_sales_candidates(sales_candidates),
             tax_rate=draft.tax_rate,
             repository=repository,
         )
@@ -321,7 +350,7 @@ def change_exchange_rate(
     apply_exchange_rate(
         draft,
         rate,
-        sales_candidates=sales_candidates,
+        sales_candidates=price_list_sales_candidates(sales_candidates),
         reason_code=reason_code,
         reason_note=reason_note,
         set_by=set_by,

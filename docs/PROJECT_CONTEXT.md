@@ -810,4 +810,7 @@ Next:
 - Snapshot：各行は追加時点のActive Master価格snapshotを保持、GlobalShippingは選択時の値を保持。保存後にPrice Master・GlobalShipping・為替設定が更新されても保存済み見積は変わらない（数量変更も行のsnapshot価格で再計算）。DB schema 変更なし（QuoteDraft / ApprovedQuoteSnapshot の payload に `builder` と `global_shipping` を追加）。
 - 承認・出力：PORTAL-3A の承認（正式見積番号・承認者・確認チェック・ロック・改訂・SUPERSEDED）と帳票出力（PDF / Excel / MoneyForward）を同じ画面の下部で再利用。改訂版も `builder` と `global_shipping` を引き継ぐ。
 - 従来の5ステップ画面は削除せず「SPECTRA見積・従来の詳細画面」から開く（SPECTRA、従来の下書き、営業・技術案件からの引き継ぎは自動でこちら）。ビルダー表示中はサイドバーの見積工程（5ステップ）を表示しない。ナビゲーション上の入口は「見積作成」1つのみ。
+- 標準売価は「価格一覧」と同じ規則（`build_reference_sales_map`）：同じSKUがSO_MASTERの複数シート（例 A-150 / A-200）にあっても売価が1つに決まるなら採用し、異なる売価が並ぶSKUは未設定のまま（`price_list_sales_candidates`。追加・為替変更の両方に適用）。従来の見積エンジンはシート名一致が無い複数行を一律「曖昧」としており、価格一覧で売価が出るのに見積で出ないSKUがあった（実データで6件）。
+- 実データ（2026-11-23時点のローカルマスター）：選択可能1,385行のうち標準売価ありは101行。残り1,284行は、SO_MASTER（119品目）にSKUが無い1,281行と、SO_MASTER内で同じSKUに異なる売価がある3行（5608 / 2535 / 9757-2）。これらは価格一覧でも「要確認」で、見積では「売価を調整」で入力する。
+- 見出し：`pages.quote_control.title` と `location.pages.quote_control` を「見積作成」/「Create quote」に統一。
 - 次候補（PORTAL-3B.2）：価格一覧ページでチェックした商品を見積作成へ直接送る機能。

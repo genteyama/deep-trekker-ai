@@ -120,7 +120,7 @@ def test_home_opens_quote_control_page():
     visible_text = [item.value for item in at.text] + [item.value for item in at.markdown]
     caption_text = [item.value for item in at.caption]
 
-    assert at.title[0].value == "見積・価格管理AI"
+    assert at.title[0].value == "見積作成"
     assert "Quote & Price Control Agent" in caption_text
     joined = " ".join(visible_text)
     assert "1 構成確認" in joined

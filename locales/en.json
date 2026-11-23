@@ -12,7 +12,7 @@
     "separator": "›",
     "pages": {
       "technical_case": "Sales & Technical Inquiry AI",
-      "quote_control": "Quote & Price Control AI",
+      "quote_control": "Create quote",
       "activity_ledger": "Activity Ledger",
       "price_master": "Price Master Management"
     }
@@ -380,7 +380,7 @@
       "description": "Review and update the price masters, pricing policy, and related administration used by quotes."
     },
     "quote_control": {
-      "title": "Quote & Price Control Agent",
+      "title": "Create quote",
       "internal_name": "Quote & Price Control Agent",
       "agent_code": "quote_control_agent",
       "description": "Supports price checks, configuration review, and quote estimates.",

@@ -12,7 +12,7 @@
     "separator": "›",
     "pages": {
       "technical_case": "営業・技術問い合わせAI",
-      "quote_control": "見積・価格管理AI",
+      "quote_control": "見積作成",
       "activity_ledger": "履歴・活動台帳",
       "price_master": "価格マスター管理"
     }
@@ -380,7 +380,7 @@
       "description": "見積で使用する価格マスター、価格ポリシー、関連管理情報を確認・更新"
     },
     "quote_control": {
-      "title": "見積・価格管理AI",
+      "title": "見積作成",
       "internal_name": "Quote & Price Control Agent",
       "agent_code": "quote_control_agent",
       "description": "価格確認、構成チェック、見積試算を支援します。",

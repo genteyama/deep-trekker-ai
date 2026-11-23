@@ -20,6 +20,7 @@ from agents.simple_quote_builder import (
     clear_global_shipping,
     create_simple_quote_draft,
     customer_summary,
+    price_list_sales_candidates,
     remove_line,
     revenue_summary,
     select_global_shipping,
@@ -57,6 +58,9 @@ ERRORS = {
 def render_simple_quote_builder(page: dict, helpers: dict) -> None:
     from ui.quote_workspace import _save_draft
 
+    # Every standard price on this page (add, exchange-rate change) follows the 価格一覧 rule.
+    base_candidates = helpers["sales_candidates_for_rate"]
+    helpers = {**helpers, "sales_candidates_for_rate": lambda rate: price_list_sales_candidates(base_candidates(rate))}
     draft = st.session_state.get("quote_draft")
     snapshot = st.session_state.get("approved_quote_snapshot")
     if draft is not None:

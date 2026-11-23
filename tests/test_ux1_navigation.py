@@ -68,7 +68,7 @@ def test_sidebar_current_location_remains_visible_and_home_is_clickable():
 def test_sidebar_location_for_quote_and_activity():
     at = _start_app()
     at.button(key="sidebar_nav_quote").click().run()
-    assert "› 見積・価格管理AI" in _visible(at)
+    assert "› 見積作成" in _visible(at)
     assert "› 1. 構成確認" in _visible(at)
     assert at.session_state["current_page"] == PAGE_QUOTE_CONTROL
 
