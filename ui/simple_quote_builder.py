@@ -14,8 +14,6 @@ import streamlit as st
 from agents.general_quote_entry import GeneralQuoteEntryError
 from agents.simple_quote_builder import (
     GLOBAL_SHIPPING_PRICE_BOOKS,
-    MANUAL_SHIPPING_ID,
-    MANUAL_SHIPPING_LABEL,
     SIMPLE_PRICE_BOOKS,
     SPECTRA_PRICE_BOOK,
     SimpleQuoteError,
@@ -23,16 +21,17 @@ from agents.simple_quote_builder import (
     adjust_global_shipping,
     clear_global_shipping,
     create_simple_quote_draft,
+    clear_spectra_shipping,
     customer_summary,
-    is_manual_shipping,
     price_books_in,
     price_list_sales_candidates,
     remove_line,
     revenue_summary,
     select_global_shipping,
-    select_manual_shipping,
     set_customer_info,
     set_quantity,
+    set_spectra_shipping,
+    shipping_breakdown,
     sync_after_rate_change,
 )
 from agents.quote_builder import apply_tax_rate
@@ -60,7 +59,10 @@ ERRORS = {
     "SHIPPING_NOT_SELECTED": "先に国際輸送費（GlobalShipping）を選択してください。",
     "POLICY_MISSING": "見積計算ポリシー（QUOTE_CALC）がありません。価格マスター管理を確認してください。",
     "SOURCE_CHANGED": "価格マスターが更新されたため追加できませんでした。商品一覧から選び直してください。",
-    "PRICE_BOOK_INVALID": "DT40 / PT30 の商品を選択してください。",
+    "PRICE_BOOK_INVALID": "DT40 / PT30 / SPECTRA GOLD の商品を選択してください。",
+    "GLOBAL_SHIPPING_NEEDS_DT_PT": "GlobalShipping は Deep Trekker / PipeTrekker の商品がある見積でのみ使います。",
+    "SPECTRA_SHIPPING_NEEDS_SPECTRA": "SPECTRA GOLD の商品がある見積でのみ入力できます。",
+    "SPECTRA_SHIPPING_REASON_REQUIRED": "SPECTRA GOLD 国際輸送費の理由・根拠を入力してください。",
 }
 
 
@@ -393,104 +395,132 @@ def _render_lines(page: dict, draft, locked: bool) -> None:
 
 
 def _render_shipping(draft, locked: bool) -> None:
+    books = price_books_in(draft)
+    has_dt_pt = bool(books & set(GLOBAL_SHIPPING_PRICE_BOOKS))
+    has_spectra = SPECTRA_PRICE_BOOK in books
+    with st.container(border=True):
+        st.subheader("国際輸送費")
+        if has_dt_pt or draft.global_shipping is not None:
+            if has_spectra:
+                st.markdown("##### Deep Trekker / PipeTrekker 国際輸送費")
+            _render_global_shipping(draft, locked)
+        if has_spectra or draft.spectra_shipping is not None:
+            st.markdown("##### SPECTRA GOLD 国際輸送費")
+            _render_spectra_shipping(draft, locked)
+        if has_dt_pt and has_spectra:
+            parts = shipping_breakdown(draft)
+            st.markdown("##### 顧客向け国際輸送費 合計")
+            st.metric(
+                "顧客向け国際輸送費 合計",
+                display_yen(customer_summary(draft)["shipping"], "未確定"),
+                label_visibility="collapsed",
+            )
+            st.caption(
+                f"DT / PT {display_yen(parts['dt_pt_customer'], '未選択')} ＋ "
+                f"SPECTRA GOLD {display_yen(parts['spectra_customer'], '未入力')}"
+            )
+
+
+def _render_global_shipping(draft, locked: bool) -> None:
     from repositories.shipping_rule_repository import CHARGE_BASIS_LABELS, ShippingRuleRepository
 
-    with st.container(border=True):
-        st.subheader("国際輸送費（GlobalShipping）")
-        selection = draft.global_shipping
-        books = price_books_in(draft)
-        has_dt_pt = bool(books & set(GLOBAL_SHIPPING_PRICE_BOOKS))
-        has_spectra = SPECTRA_PRICE_BOOK in books
-        manual_selected = is_manual_shipping(selection)
-        if has_spectra and has_dt_pt:
-            st.info(
-                "GlobalShipping は Deep Trekker / PipeTrekker の国際輸送費です。SPECTRA 商品分の送料は含まれません。"
-                "SPECTRA 分は「国際輸送費を手動調整」で理由とともに合算するか、「手動入力」で入力してください。"
-            )
-        elif has_spectra:
-            st.info(
-                "SPECTRA 商品には GlobalShipping を使いません。既存の SPECTRA 見積と同じく、"
-                "メーカー見積などの国際輸送費（USD）を「手動入力」で入力してください（顧客向けは見積試算ポリシーの倍率で計算）。"
-            )
+    selection = draft.global_shipping
+    try:
+        rates = ShippingRuleRepository().list_active_standard_global()
+    except Exception:
+        logger.exception("simple_quote_shipping_load_failed")
         rates = []
-        if has_dt_pt:
-            try:
-                rates = ShippingRuleRepository().list_active_standard_global()
-            except Exception:
-                logger.exception("simple_quote_shipping_load_failed")
-                st.warning("GlobalShippingを読み込めませんでした。価格マスター管理の国際輸送費を確認してください。")
-        by_id = {item.rule.shipping_rule_id: item for item in rates}
-        options = ["__none__"] + list(by_id)
-        labels = {"__none__": "選択してください", MANUAL_SHIPPING_ID: MANUAL_SHIPPING_LABEL}
-        for item in rates:
-            basis = CHARGE_BASIS_LABELS.get(item.rule.charge_basis, "-")
-            labels[item.rule.shipping_rule_id] = f"{_rule_label(item.rule)} / ${item.rule.rate_usd:,.2f}（{basis}）"
-        if selection is not None and not manual_selected and selection.shipping_rule_id not in by_id:
-            # The frozen choice stays selectable even after the reference master changed.
-            options.append(selection.shipping_rule_id)
-            labels[selection.shipping_rule_id] = f"{selection.label} / ${selection.master_rate_usd:,.2f}（保存時の値）"
-        if has_spectra or manual_selected:
-            options.append(MANUAL_SHIPPING_ID)
-        current = selection.shipping_rule_id if selection is not None else "__none__"
-        chosen = st.selectbox(
-            "国際輸送費を選択",
-            options,
-            index=options.index(current),
-            format_func=lambda key: labels.get(key, key),
-            key=f"simple_shipping_{draft.quote_draft_id}_{draft.quote_version}",
-            disabled=locked,
-        )
-        if not locked and chosen == MANUAL_SHIPPING_ID and current != MANUAL_SHIPPING_ID:
-            _render_manual_shipping_entry(draft)
-            return
-        if not locked and chosen != current:
-            try:
-                if chosen == "__none__":
-                    clear_global_shipping(draft)
-                else:
-                    select_global_shipping(draft, by_id[chosen], selected_by=acting_person())
-            except SimpleQuoteError as error:
-                st.error(ERRORS.get(error.code, error.code))
+        st.warning("GlobalShippingを読み込めませんでした。価格マスター管理の国際輸送費を確認してください。")
+    by_id = {item.rule.shipping_rule_id: item for item in rates}
+    options = ["__none__"] + list(by_id)
+    labels = {"__none__": "選択してください"}
+    for item in rates:
+        basis = CHARGE_BASIS_LABELS.get(item.rule.charge_basis, "-")
+        labels[item.rule.shipping_rule_id] = f"{_rule_label(item.rule)} / ${item.rule.rate_usd:,.2f}（{basis}）"
+    if selection is not None and selection.shipping_rule_id not in by_id:
+        # The frozen choice stays selectable even after the reference master changed.
+        options.append(selection.shipping_rule_id)
+        labels[selection.shipping_rule_id] = f"{selection.label} / ${selection.master_rate_usd:,.2f}（保存時の値）"
+    current = selection.shipping_rule_id if selection is not None else "__none__"
+    chosen = st.selectbox(
+        "GlobalShippingを選択",
+        options,
+        index=options.index(current),
+        format_func=lambda key: labels.get(key, key),
+        key=f"simple_shipping_{draft.quote_draft_id}_{draft.quote_version}",
+        disabled=locked,
+    )
+    if not locked and chosen != current:
+        try:
+            if chosen == "__none__":
+                clear_global_shipping(draft)
             else:
-                st.rerun()
-        if selection is None:
-            st.caption("国際輸送費を選択すると、原価と顧客向け輸送費が自動計算されます。")
-            return
-        markup = selection.markup_multiplier
-        cost_label = "国際輸送費（手動）" if manual_selected else "DT実輸送費"
-        st.write(
-            f"{cost_label}：${selection.actual_rate_usd:,.2f} → 原価 {display_yen(selection.cost_jpy, '-')} ／ "
-            f"顧客向け（×{display_number(markup, '-')}）：{display_yen(selection.customer_price_jpy, '-')}"
+                select_global_shipping(draft, by_id[chosen], selected_by=acting_person())
+        except SimpleQuoteError as error:
+            st.error(ERRORS.get(error.code, error.code))
+        else:
+            st.rerun()
+    if selection is None:
+        st.caption("国際輸送費を選択すると、原価と顧客向け輸送費が自動計算されます。")
+        return
+    markup = selection.markup_multiplier
+    st.write(
+        f"DT実輸送費：${selection.actual_rate_usd:,.2f} → 原価 {display_yen(selection.cost_jpy, '-')} ／ "
+        f"顧客向け（×{display_number(markup, '-')}）：{display_yen(selection.customer_price_jpy, '-')}"
+    )
+    if selection.rate_adjusted:
+        st.caption(
+            f"手動調整：マスター値 ${selection.master_rate_usd:,.2f} → ${selection.actual_rate_usd:,.2f}"
+            f"（理由：{selection.rate_adjustment_reason}）"
         )
-        if manual_selected:
-            st.caption(f"手動入力の理由：{selection.rate_adjustment_reason}")
-        elif selection.rate_adjusted:
-            st.caption(
-                f"手動調整：マスター値 ${selection.master_rate_usd:,.2f} → ${selection.actual_rate_usd:,.2f}（理由：{selection.rate_adjustment_reason}）"
-            )
-        if selection.customer_price_overridden:
-            st.caption(
-                f"顧客向け輸送費を手動設定：自動計算 {display_yen(selection.auto_customer_price_jpy, '-')} → "
-                f"{display_yen(selection.customer_price_jpy, '-')}（理由：{selection.customer_price_reason}）"
-            )
-        if locked:
-            return
-        _render_shipping_adjustments(draft, selection)
+    if selection.customer_price_overridden:
+        st.caption(
+            f"顧客向け輸送費を手動設定：自動計算 {display_yen(selection.auto_customer_price_jpy, '-')} → "
+            f"{display_yen(selection.customer_price_jpy, '-')}（理由：{selection.customer_price_reason}）"
+        )
+    if locked:
+        return
+    _render_shipping_adjustments(draft, selection)
 
 
-def _render_manual_shipping_entry(draft) -> None:
+def _render_spectra_shipping(draft, locked: bool) -> None:
+    entry = draft.spectra_shipping
+    if entry is not None:
+        st.write(
+            f"SPECTRA実輸送費：${entry.actual_rate_usd:,.2f} → 原価 {display_yen(entry.cost_jpy, '-')} ／ "
+            f"顧客向け（×{display_number(entry.markup_multiplier, '-')}）：{display_yen(entry.customer_price_jpy, '-')}"
+        )
+        st.caption(f"根拠・理由：{entry.reason}")
+    else:
+        st.caption("GlobalShipping は SPECTRA に使いません。メーカー見積などの送料（USD）と根拠を入力してください。")
+    if locked:
+        return
     suffix = f"{draft.quote_draft_id}_{draft.quote_version}"
     left, right = st.columns([1, 2])
     amount = left.number_input(
-        "国際輸送費（USD）", min_value=0.0, value=0.0, step=0.01, format="%.2f", key=f"simple_manual_ship_usd_{suffix}"
+        "USD",
+        min_value=0.0,
+        value=float(entry.actual_rate_usd) if entry else 0.0,
+        step=0.01,
+        format="%.2f",
+        key=f"simple_spectra_ship_usd_{suffix}",
     )
-    reason = right.text_input("根拠・理由（必須）", placeholder="例：SPECTRA メーカー見積 2026-11", key=f"simple_manual_ship_reason_{suffix}")
-    if st.button("手動の国際輸送費を設定", key=f"simple_manual_ship_apply_{suffix}"):
+    reason = right.text_input(
+        "理由・根拠（必須）",
+        value=entry.reason if entry else "",
+        placeholder="例：SPECTRA メーカー見積 2026-11",
+        key=f"simple_spectra_ship_reason_{suffix}",
+    )
+    apply_column, clear_column = st.columns(2)
+    if apply_column.button("SPECTRA送料を反映", key=f"simple_spectra_ship_apply_{suffix}"):
         try:
-            select_manual_shipping(draft, actual_rate_usd=float(amount), reason=reason, selected_by=acting_person())
+            set_spectra_shipping(draft, actual_rate_usd=float(amount), reason=reason, entered_by=acting_person())
         except SimpleQuoteError as error:
             st.error(ERRORS.get(error.code, error.code))
             return
+        st.rerun()
+    if entry is not None and clear_column.button("SPECTRA送料をクリア", key=f"simple_spectra_ship_clear_{suffix}"):
+        clear_spectra_shipping(draft)
         st.rerun()
 
 
@@ -500,7 +530,7 @@ def _render_shipping_adjustments(draft, selection) -> None:
     if st.toggle("国際輸送費を手動調整", key=f"simple_ship_adjust_{suffix}", value=selection.rate_adjusted):
         left, right = st.columns([1, 2])
         actual = left.number_input(
-            "国際輸送費（USD）" if is_manual_shipping(selection) else "DT実輸送費（USD）",
+            "DT実輸送費（USD）",
             min_value=0.0,
             value=float(selection.actual_rate_usd),
             step=0.01,
@@ -511,7 +541,7 @@ def _render_shipping_adjustments(draft, selection) -> None:
         apply_column, reset_column = st.columns(2)
         if apply_column.button("国際輸送費を反映", key=f"simple_ship_apply_{suffix}"):
             _adjust(draft, actual_rate_usd=float(actual), rate_reason=reason, customer=override)
-        if selection.rate_adjusted and selection.master_rate_usd is not None and reset_column.button("マスター値に戻す", key=f"simple_ship_reset_{suffix}"):
+        if selection.rate_adjusted and reset_column.button("マスター値に戻す", key=f"simple_ship_reset_{suffix}"):
             _adjust(draft, actual_rate_usd=None, rate_reason=None, customer=override)
     keep_rate = (selection.actual_rate_usd if selection.rate_adjusted else None, selection.rate_adjustment_reason)
     if st.toggle("顧客向け輸送費も手動調整", key=f"simple_ship_customer_{suffix}", value=selection.customer_price_overridden):
@@ -596,6 +626,14 @@ def _render_revenue_summary(page: dict, draft) -> None:
                     {"項目": "輸送保険料", "金額": display_yen(revenue["insurance"], "-")},
                     {"項目": "輸入税", "金額": display_yen(revenue["import_tax"], "-")},
                     {"項目": "国際輸送費", "金額": display_yen(revenue["shipping"], "未選択")},
+                    *(
+                        [
+                            {"項目": "　うち DT / PT 国際輸送費", "金額": display_yen(revenue["shipping_dt_pt"], "未選択")},
+                            {"項目": "　うち SPECTRA GOLD 国際輸送費", "金額": display_yen(revenue["shipping_spectra"], "未入力")},
+                        ]
+                        if draft.spectra_shipping is not None or SPECTRA_PRICE_BOOK in price_books_in(draft)
+                        else []
+                    ),
                     {"項目": "原価合計", "金額": display_yen(revenue["total_cost"], "-")},
                 ]
             )

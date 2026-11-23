@@ -352,6 +352,7 @@ def create_revision_draft(
         official_quote_number=snapshot.official_quote_number,
         builder=snapshot.builder,
         global_shipping=snapshot.global_shipping.model_copy(deep=True) if snapshot.global_shipping else None,
+        spectra_shipping=snapshot.spectra_shipping.model_copy(deep=True) if snapshot.spectra_shipping else None,
         case_id=snapshot.case_id,
         customer=snapshot.customer,
         title=snapshot.title,
@@ -706,6 +707,7 @@ def _build_approved_snapshot(
         relation_type=draft.relation_type,
         builder=draft.builder,
         global_shipping=draft.global_shipping.model_copy(deep=True) if draft.global_shipping else None,
+        spectra_shipping=draft.spectra_shipping.model_copy(deep=True) if draft.spectra_shipping else None,
     )
 
 

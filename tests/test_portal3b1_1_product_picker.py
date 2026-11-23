@@ -5,13 +5,6 @@ import pytest
 from agents import simple_quote_builder as sb
 from agents.price_master import import_price_master
 from agents.pricing_policy import is_customer_price_unit, round_customer_price_jpy
-from agents.quote_approval import all_confirmations, approve_quote
-from agents.quote_export import (
-    export_internal_calc_excel,
-    export_moneyforward_tsv,
-    export_spaceone_quote_excel,
-    export_spaceone_quote_pdf,
-)
 from models import FinalPriceStatus, PriceMasterType, ShippingType
 from repositories.actor import set_current_actor
 from repositories.shipping_rule_repository import ShippingRuleRepository
@@ -233,33 +226,6 @@ def test_spectra_line_uses_gold_cost_and_price_list_price_and_mixes_with_dt_pt()
     assert len(draft.configuration_lines) == 3
 
 
-def test_spectra_only_quote_uses_manual_shipping_not_global_shipping():
-    draft = _draft(_pick(("SPECTRA_GOLD", "SPECTRA0001")))
-    with pytest.raises(sb.SimpleQuoteError):
-        sb.select_manual_shipping(draft, actual_rate_usd=2500.0, reason=" ")
-    with pytest.raises(sb.SimpleQuoteError):
-        sb.select_manual_shipping(draft, actual_rate_usd=0, reason="SPECTRA メーカー見積")
-    sb.select_manual_shipping(draft, actual_rate_usd=2500.0, reason="SPECTRA メーカー見積", selected_by="sales@example.com")
-    selection = draft.global_shipping
-    assert sb.is_manual_shipping(selection)
-    assert selection.master_rate_usd is None
-    assert draft.shipping_lines[0].source_type == "HUMAN_INPUT"
-    assert draft.shipping_lines[0].cost_jpy == pytest.approx(2500 * RATE)
-    # Customer shipping: the existing SPECTRA entry rule (cost x QUOTE_CALC markup, 1000-yen rounding).
-    assert selection.customer_price_jpy == round_customer_price_jpy(2500 * RATE * 1.2)
-    sales = sb.customer_summary(draft)["subtotal_ex_tax"]
-    revenue = sb.revenue_summary(draft)
-    line = draft.configuration_lines[0]
-    cost = line.dealer_cost_jpy + line.insurance_jpy + line.import_tax_jpy + 2500 * RATE
-    assert revenue["total_cost"] == pytest.approx(cost)
-    assert revenue["gross_margin_rate"] == pytest.approx((sales - cost) / sales, abs=1e-6)
-
-    sb.adjust_global_shipping(draft, actual_rate_usd=2600.0, rate_reason="再見積")
-    assert draft.shipping_lines[0].cost_jpy == pytest.approx(2600 * RATE)
-    with pytest.raises(sb.SimpleQuoteError):
-        sb.adjust_global_shipping(draft, actual_rate_usd=None)
-
-
 def _state(draft):
     return (
         sorted(
@@ -287,35 +253,6 @@ def test_saved_spectra_quote_keeps_amounts_after_reload_and_master_update():
     loaded = SqliteQuoteRepository().get_draft(draft.quote_draft_id).draft
     assert _state(loaded) == before
     assert _line(loaded, "SPECTRA_GOLD", "SPECTRA0001").manufacturer_price_snapshot.manufacturer_dealer_price_usd == 141750
-
-
-def test_spectra_quote_approves_and_exports(tmp_path):
-    draft = _draft(_pick(("SPECTRA_GOLD", "SPECTRA0001"), ("DT40", "9757-2")))
-    from agents.quote_builder import apply_final_price
-    from models import PriceAdjustmentReason
-
-    apply_final_price(
-        draft,
-        _line(draft, "DT40", "9757-2").line_id,
-        FinalPriceStatus.MANUAL_OVERRIDE,
-        amount_jpy=650000,
-        reason_code=list(PriceAdjustmentReason)[0],
-        reason_note="個別",
-    )
-    sb.select_manual_shipping(draft, actual_rate_usd=3000.0, reason="DT + SPECTRA メーカー見積合算")
-    repo = SqliteQuoteRepository()
-    repo.save_draft(draft)
-    candidate = draft.model_copy(deep=True)
-    _, snapshot = approve_quote(
-        candidate, approved_by="sales@example.com", confirmations=all_confirmations(), official_quote_number="SP-001"
-    )
-    repo.record_approval(candidate, snapshot)
-    assert {sb.line_source(line)[0] for line in snapshot.configuration_snapshot} == {"DT40", "SPECTRA_GOLD"}
-    assert snapshot.global_shipping.shipping_rule_id == sb.MANUAL_SHIPPING_ID
-    for exporter in (export_spaceone_quote_pdf, export_spaceone_quote_excel, export_internal_calc_excel, export_moneyforward_tsv):
-        bundle, path = exporter(snapshot, output_dir=tmp_path)
-        assert bundle.official_quote_number == "SP-001"
-        assert path.is_file()
 
 
 # ---- UI -------------------------------------------------------------------------------------------
@@ -351,27 +288,4 @@ def test_ui_product_kind_and_price_book_controls():
     at.radio(key="simple_product_kind").set_value("すべて").run()
     at.button_group(key="simple_price_books").set_value(["DT40", "SPECTRA_GOLD"]).run()
     assert _count_caption(at).startswith("8 / 10 件 ・ すべて ・ DT40 + SPECTRA GOLD")
-    assert not at.exception
-
-
-def _shipping_options(at, draft):
-    return list(at.selectbox(key=f"simple_shipping_{draft.quote_draft_id}_{draft.quote_version}").options)
-
-
-def test_ui_shipping_choices_follow_the_price_books_in_the_quote():
-    spectra_only = _draft(_pick(("SPECTRA_GOLD", "SPECTRA0001")))
-    at = _open_builder(spectra_only)
-    assert _shipping_options(at, spectra_only) == ["選択してください", sb.MANUAL_SHIPPING_LABEL]
-    assert any("SPECTRA 商品には GlobalShipping を使いません" in item.value for item in at.info)
-
-    dt_only = _draft(_pick(("DT40", "9680-BASE")))
-    at = _open_builder(dt_only)
-    options = _shipping_options(at, dt_only)
-    assert sb.MANUAL_SHIPPING_LABEL not in options and len(options) == 4
-
-    mixed = _draft(_pick(("DT40", "9680-BASE"), ("SPECTRA_GOLD", "SPECTRA0001")))
-    at = _open_builder(mixed)
-    options = _shipping_options(at, mixed)
-    assert len(options) == 5 and options[-1] == sb.MANUAL_SHIPPING_LABEL
-    assert any("SPECTRA 商品分の送料は含まれません" in item.value for item in at.info)
     assert not at.exception

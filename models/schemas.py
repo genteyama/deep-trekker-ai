@@ -1222,8 +1222,7 @@ class GlobalShippingSelection(BaseModel):
     shipping_type: Optional[str] = None
     label: Optional[str] = None
     charge_basis: Optional[str] = None
-    # None for a manual entry (shipping_rule_id "MANUAL"): no reference master value exists.
-    master_rate_usd: Optional[float] = None
+    master_rate_usd: float
     master_effective_from: Optional[str] = None
     master_source_reference: Optional[str] = None
     actual_rate_usd: float
@@ -1238,6 +1237,23 @@ class GlobalShippingSelection(BaseModel):
     customer_price_reason: Optional[str] = None
     selected_by: Optional[str] = None
     selected_at: Optional[datetime] = None
+
+
+class SpectraShippingEntry(BaseModel):
+    """SPECTRA GOLD international shipping a person entered (no GlobalShipping master, which is DT / PT only).
+
+    Same rule as the SPECTRA quote entry's human shipping input: cost = USD x rate, customer price = cost x
+    the QUOTE_CALC shipping markup with the customer price rounding.
+    """
+
+    actual_rate_usd: float
+    reason: str
+    exchange_rate: Optional[float] = None
+    markup_multiplier: Optional[float] = None
+    cost_jpy: Optional[float] = None
+    customer_price_jpy: Optional[float] = None
+    entered_by: Optional[str] = None
+    entered_at: Optional[datetime] = None
 
 
 class QuoteDraft(BaseModel):
@@ -1284,6 +1300,7 @@ class QuoteDraft(BaseModel):
     # PORTAL-3B.1: drafts made by the one-screen builder, and their frozen GlobalShipping choice.
     builder: Optional[str] = None
     global_shipping: Optional[GlobalShippingSelection] = None
+    spectra_shipping: Optional[SpectraShippingEntry] = None
 
 
 class CostScenario(BaseModel):
@@ -1416,6 +1433,7 @@ class ApprovedQuoteSnapshot(BaseModel):
     relation_type: Optional[str] = None
     builder: Optional[str] = None
     global_shipping: Optional[GlobalShippingSelection] = None
+    spectra_shipping: Optional[SpectraShippingEntry] = None
 
 
 class InternalQuoteTransferRow(BaseModel):
