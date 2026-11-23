@@ -52,6 +52,8 @@ ERRORS = {
     "CUSTOMER_SHIPPING_REASON_REQUIRED": "顧客向け輸送費を手動調整する場合は理由を入力してください。",
     "SHIPPING_NOT_SELECTED": "先に国際輸送費（GlobalShipping）を選択してください。",
     "POLICY_MISSING": "見積計算ポリシー（QUOTE_CALC）がありません。価格マスター管理を確認してください。",
+    "SOURCE_CHANGED": "価格マスターが更新されたため追加できませんでした。商品一覧から選び直してください。",
+    "PRICE_BOOK_INVALID": "DT40 / PT30 の商品を選択してください。",
 }
 
 
@@ -233,9 +235,27 @@ def _render_product_picker(page: dict, helpers: dict, draft) -> None:
                 "標準売価 JPY": st.column_config.NumberColumn("標準売価 JPY", format="yen"),
             },
         )
-        chosen = [{"sku": row["SKU"], "quantity": 1} for row in _editor_rows(edited) if row.get("選択")]
+        chosen = picked_items(filtered, _editor_rows(edited))
         if st.button(f"見積に追加（{len(chosen)}件）", key="simple_add_products", type="primary", disabled=not chosen):
             _add_products(page, helpers, draft, chosen)
+
+
+def picked_items(rows: list[dict], edited_rows: list[dict]) -> list[dict]:
+    """The checked catalog rows as add items. The row itself (price book, master import, prices, sheet)
+    is what gets added, not just its SKU. The editor rows are in the same order as `rows`."""
+    return [
+        {
+            "sku": row["SKU"],
+            "quantity": 1,
+            "price_book": row["Price Book"],
+            "import_id": row.get("Import ID"),
+            "msrp_usd": row.get("MSRP USD"),
+            "dealer_price_usd": row.get("Dealer USD"),
+            "source_sheet": row.get("Source Sheet"),
+        }
+        for row, edited in zip(rows, edited_rows)
+        if edited.get("選択")
+    ]
 
 
 def _editor_rows(edited) -> list[dict]:
@@ -305,7 +325,8 @@ def _render_lines(page: dict, draft, locked: bool) -> None:
         for line in list(draft.configuration_lines):
             name, sku, unit, quantity, subtotal, remove = st.columns([3.2, 1.6, 1.4, 1.1, 1.5, 0.8])
             name.write(line.customer_display_name or line.manufacturer_description or "-")
-            sku.write(line.manufacturer_sku or "-")
+            book = line.manufacturer_price_snapshot.price_book if line.manufacturer_price_snapshot else None
+            sku.write(f"{line.manufacturer_sku or '-'}（{book}）" if book else (line.manufacturer_sku or "-"))
             unit.write(display_yen(line.final_sales_price_jpy, "未設定"))
             value = quantity.number_input(
                 "数量",
@@ -331,7 +352,7 @@ def _render_lines(page: dict, draft, locked: bool) -> None:
                     f"{line.manufacturer_sku}: 売価調整済み（標準売価 {display_yen(line.standard_sales_price_candidate_jpy, '-')}）"
                 )
             if not locked:
-                with st.expander(f"売価を調整：{line.manufacturer_sku}", expanded=False):
+                with st.expander(f"売価を調整：{line.manufacturer_sku}" + (f"（{book}）" if book else ""), expanded=False):
                     from ui.quote_workspace import _render_final_price_editor
 
                     _render_final_price_editor(page, draft, line)

@@ -30,6 +30,7 @@ from agents.quote_builder import (
 from models import (
     FinalPriceStatus,
     GlobalShippingSelection,
+    PriceMasterType,
     QuoteDraft,
     ShippingType,
 )
@@ -94,11 +95,17 @@ def create_simple_quote_draft(
     sales_candidates=None,
     repository=None,
 ) -> QuoteDraft:
-    """New builder draft from {sku, quantity} items, priced from the Active DT40 / PT30 masters."""
+    """New builder draft from picked price book rows, priced from the Active DT40 / PT30 masters.
+
+    An item is {sku, quantity} plus, when it comes from the product list, the picked row's
+    price_book / import_id / msrp_usd / dealer_price_usd / source_sheet (see `add_products`).
+    """
+    groups = _groups_by_price_book(_merged_items(items))
+    (first_book, first_items), rest = groups[0], groups[1:]
     draft = create_general_quote_draft(
         customer=customer,
         title=title,
-        lines=_merged_items(items),
+        lines=_entry_lines(first_items),
         exchange_rate=exchange_rate,
         international_shipping_usd=None,
         domestic_shipping_jpy=0.0,
@@ -106,42 +113,54 @@ def create_simple_quote_draft(
         exchange_rate_source=exchange_rate_source,
         tax_rate=tax_rate,
         repository=repository,
+        price_books=_price_book_filter(first_book),
     )
+    _apply_picked_sources(draft, first_items)
     draft.quote_draft_id = f"simple-{uuid4().hex}"
     draft.builder = SIMPLE_BUILDER
     # International shipping comes only from a GlobalShipping choice; drop the general-entry placeholder.
     draft.shipping_lines = []
     draft.source_references = list(draft.source_references) + ["Simple quote builder"]
     _use_standard_prices(draft, [line.line_id for line in draft.configuration_lines])
+    if rest:
+        return add_products(
+            draft, [item for _book, group in rest for item in group], sales_candidates=sales_candidates, repository=repository
+        )
     return refresh_quote_draft(draft)
 
 
 def add_products(draft: QuoteDraft, items: Sequence[dict], *, sales_candidates=None, repository=None) -> QuoteDraft:
-    """Add {sku, quantity} items. An SKU already in the quote gets its quantity increased (no new row)."""
+    """Add picked items. The same picked source (price book + SKU + master import) adds to the line's quantity.
+
+    A picked price book row is used as it is: the SKU is looked up only in that row's price book, so an
+    SKU listed in DT40 and PT30 at different prices is not a conflict. The same SKU from another price
+    book (or another master import) becomes its own line and is never merged.
+    """
     ensure_draft_editable(draft)
     incoming = _merged_items(items)
-    by_sku = {line.manufacturer_sku: line for line in draft.configuration_lines}
     new_items = []
     for item in incoming:
-        existing = by_sku.get(item["sku"])
+        existing = _matching_line(draft, item)
         if existing is not None:
             set_quantity(draft, existing.line_id, existing.quantity + item["quantity"], refresh=False)
         else:
             new_items.append(item)
-    if new_items:
+    added_ids = []
+    for book, group in _groups_by_price_book(new_items) if new_items else []:
         source = create_general_quote_draft(
             customer=draft.customer or "-",
             title=draft.title,
-            lines=new_items,
+            lines=_entry_lines(group),
             exchange_rate=draft.exchange_rate,
             international_shipping_usd=None,
             domestic_shipping_jpy=0.0,
             sales_candidates=price_list_sales_candidates(sales_candidates),
             tax_rate=draft.tax_rate,
             repository=repository,
+            price_books=_price_book_filter(book),
         )
+        _apply_picked_sources(source, group)
         taken = {line.line_id for line in draft.configuration_lines}
-        added_ids = []
         for line in source.configuration_lines:
             line_id = line.line_id
             if line_id in taken:
@@ -160,8 +179,18 @@ def add_products(draft: QuoteDraft, items: Sequence[dict], *, sales_candidates=N
         draft.pricing_context.source_references = _unique(
             list(draft.pricing_context.source_references) + list(source.pricing_context.source_references)
         )
-        _use_standard_prices(draft, added_ids)
+    _use_standard_prices(draft, added_ids)
     return refresh_quote_draft(draft)
+
+
+def line_source(line) -> tuple:
+    """(price book, SKU, master import id) of a line: what "the same product" means for re-adding."""
+    snapshot = line.manufacturer_price_snapshot
+    return (
+        (snapshot.price_book if snapshot else None) or "",
+        line.manufacturer_sku or "",
+        (snapshot.price_master_import_id if snapshot else None) or "",
+    )
 
 
 def set_quantity(draft: QuoteDraft, line_id: str, quantity: int, *, refresh: bool = True) -> QuoteDraft:
@@ -428,8 +457,12 @@ def revenue_summary(draft: QuoteDraft) -> dict:
 # ---- helpers -------------------------------------------------------------------------------------
 
 
+SOURCE_FIELDS = ("price_book", "import_id", "msrp_usd", "dealer_price_usd", "source_sheet")
+
+
 def _merged_items(items: Sequence[dict]) -> list[dict]:
-    merged: dict[str, int] = {}
+    """Validate items and add up quantities of the same picked source (price book + SKU + import)."""
+    merged: dict[tuple, dict] = {}
     for item in items or []:
         sku = str(item.get("sku") or "").strip()
         quantity = item.get("quantity", 1)
@@ -437,10 +470,82 @@ def _merged_items(items: Sequence[dict]) -> list[dict]:
             raise SimpleQuoteError("SKU_REQUIRED")
         if isinstance(quantity, bool) or not isinstance(quantity, int) or quantity < 1:
             raise SimpleQuoteError("QUANTITY_INVALID")
-        merged[sku] = merged.get(sku, 0) + quantity
+        book = str(item.get("price_book") or "").strip() or None
+        if book is not None and book not in SIMPLE_PRICE_BOOKS:
+            raise SimpleQuoteError("PRICE_BOOK_INVALID")
+        key = (book, sku, item.get("import_id"))
+        if key in merged:
+            merged[key]["quantity"] += quantity
+            continue
+        merged[key] = {"sku": sku, "quantity": quantity, **{name: item.get(name) for name in SOURCE_FIELDS}}
+        merged[key]["price_book"] = book
     if not merged:
         raise SimpleQuoteError("NO_ITEMS")
-    return [{"sku": sku, "quantity": quantity} for sku, quantity in merged.items()]
+    return list(merged.values())
+
+
+def _groups_by_price_book(items: Sequence[dict]) -> list[tuple[Optional[str], list[dict]]]:
+    # One general-entry call per picked price book, so an SKU is only looked up in the book it was picked
+    # from and its manufacturer snapshot cannot come from the other book.
+    groups: dict[Optional[str], list[dict]] = {}
+    for item in items:
+        groups.setdefault(item.get("price_book"), []).append(item)
+    return list(groups.items())
+
+
+def _price_book_filter(book: Optional[str]):
+    return None if book is None else [PriceMasterType(book)]
+
+
+def _entry_lines(items: Sequence[dict]) -> list[dict]:
+    return [{"sku": item["sku"], "quantity": item["quantity"]} for item in items]
+
+
+def _matching_line(draft: QuoteDraft, item: dict):
+    for line in draft.configuration_lines:
+        book, sku, import_id = line_source(line)
+        if sku != item["sku"]:
+            continue
+        if item.get("price_book") is None:
+            # Caller without a picked row (SKU only): the existing line for that SKU.
+            return line
+        if item["price_book"] not in {name.strip() for name in book.split("/")}:
+            continue
+        if item.get("import_id") and import_id and item["import_id"] != import_id:
+            continue
+        return line
+    return None
+
+
+def _apply_picked_sources(draft: QuoteDraft, items: Sequence[dict]) -> None:
+    """Check the new lines against the picked rows and keep the row's sheet on the price snapshot.
+
+    The picked row is what the person saw; if the Active master changed since (other import, other
+    price), nothing is added and the list has to be picked again.
+    """
+    by_sku = {item["sku"]: item for item in items}
+    for line in draft.configuration_lines:
+        item = by_sku.get(line.manufacturer_sku or "")
+        snapshot = line.manufacturer_price_snapshot
+        if item is None or item.get("price_book") is None:
+            continue
+        if snapshot is None:
+            raise SimpleQuoteError("SOURCE_CHANGED")
+        if item.get("import_id") and snapshot.price_master_import_id != item["import_id"]:
+            raise SimpleQuoteError("SOURCE_CHANGED")
+        for field, value in (
+            ("manufacturer_msrp_usd", item.get("msrp_usd")),
+            ("manufacturer_dealer_price_usd", item.get("dealer_price_usd")),
+        ):
+            current = getattr(snapshot, field)
+            if value is not None and (current is None or round(float(current), 2) != round(float(value), 2)):
+                raise SimpleQuoteError("SOURCE_CHANGED")
+        sheet = (item.get("source_sheet") or "").strip() or None
+        if sheet:
+            snapshot.source_sheet = sheet
+            for kept in draft.pricing_context.manufacturer_price_snapshots:
+                if kept.snapshot_id == snapshot.snapshot_id:
+                    kept.source_sheet = sheet
 
 
 def _use_standard_prices(draft: QuoteDraft, line_ids: Iterable[str]) -> None:
@@ -524,6 +629,7 @@ __all__ = [
     "create_simple_quote_draft",
     "customer_summary",
     "is_simple_draft",
+    "line_source",
     "remove_line",
     "revenue_summary",
     "select_global_shipping",

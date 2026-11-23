@@ -813,4 +813,6 @@ Next:
 - 標準売価は「価格一覧」と同じ規則（`build_reference_sales_map`）：同じSKUがSO_MASTERの複数シート（例 A-150 / A-200）にあっても売価が1つに決まるなら採用し、異なる売価が並ぶSKUは未設定のまま（`price_list_sales_candidates`。追加・為替変更の両方に適用）。従来の見積エンジンはシート名一致が無い複数行を一律「曖昧」としており、価格一覧で売価が出るのに見積で出ないSKUがあった（実データで6件）。
 - 実データ（2026-11-23時点のローカルマスター）：選択可能1,385行のうち標準売価ありは101行。残り1,284行は、SO_MASTER（119品目）にSKUが無い1,281行と、SO_MASTER内で同じSKUに異なる売価がある3行（5608 / 2535 / 9757-2）。これらは価格一覧でも「要確認」で、見積では「売価を調整」で入力する。
 - 見出し：`pages.quote_control.title` と `location.pages.quote_control` を「見積作成」/「Create quote」に統一。
+- 選択した価格表の行が明細の根拠：商品一覧でチェックした行の Price Book・Import ID・MSRP・Dealer・Sheet / Category を追加項目として渡し、SKU はその Price Book だけで解決する（`create_general_quote_draft(price_books=...)`）。DT40 / PT30 の両方に異なる価格で載る SKU（実データ28 SKU・56行）も価格重複エラーにならず、それぞれの価格表の原価になる。Import ID・MSRP・Dealer が現在の Active Master と違えば追加しない（`SOURCE_CHANGED`、一覧から選び直し）。
+- 「同じ商品」の判定は（Price Book, SKU, Import ID）＝ `line_source`。同じ選択元の再追加は数量加算、別の Price Book・別 import の同 SKU は別の明細。Sheet / Category は `QuotePriceSnapshot.source_sheet`（payload の任意項目、schema 変更なし）に保持。SKU だけを渡す従来の呼び出しは従来どおり（両方の価格表を検索し、価格が異なれば PRICE_CONFLICT）。
 - 次候補（PORTAL-3B.2）：価格一覧ページでチェックした商品を見積作成へ直接送る機能。

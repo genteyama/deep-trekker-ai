@@ -54,8 +54,12 @@ def create_general_quote_draft(
     tax_rate: Optional[float] = None,
     case_id: Optional[str] = None,
     repository: Optional[SqlitePriceMasterRepository] = None,
+    price_books: Optional[Sequence[PriceMasterType]] = None,
 ):
-    """Build one Deep Trekker / PipeTrekker draft from active DT40 and PT30 masters."""
+    """Build one Deep Trekker / PipeTrekker draft from active DT40 and PT30 masters.
+
+    `price_books` limits the lookup to the given masters (the caller already chose the price book row).
+    """
     customer = (customer or "").strip()
     title = (title or "").strip() or None
     if not customer:
@@ -67,6 +71,10 @@ def create_general_quote_draft(
 
     repo = repository or SqlitePriceMasterRepository()
     books = _active_manufacturer_books(repo)
+    if price_books is not None:
+        books = [item for item in books if item[0] in set(price_books)]
+        if not books:
+            raise GeneralQuoteEntryError("MANUFACTURER_MASTER_MISSING")
     resolved = [_resolve_sku(line, books) for line in normalized]
     policy = load_active_landed_policy(repo)
     if policy is None:

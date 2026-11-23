@@ -898,6 +898,8 @@ class QuotePriceSnapshot(BaseModel):
     price_master_import_id: Optional[str] = None
     price_master_sha256: Optional[str] = None
     price_master_filename: Optional[str] = None
+    # Sheet / category of the price book row a person picked (simple quote builder). Optional.
+    source_sheet: Optional[str] = None
 
 
 class PriceMasterImport(BaseModel):
