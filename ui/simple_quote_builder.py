@@ -13,17 +13,24 @@ import streamlit as st
 
 from agents.general_quote_entry import GeneralQuoteEntryError
 from agents.simple_quote_builder import (
+    GLOBAL_SHIPPING_PRICE_BOOKS,
+    MANUAL_SHIPPING_ID,
+    MANUAL_SHIPPING_LABEL,
     SIMPLE_PRICE_BOOKS,
+    SPECTRA_PRICE_BOOK,
     SimpleQuoteError,
     add_products,
     adjust_global_shipping,
     clear_global_shipping,
     create_simple_quote_draft,
     customer_summary,
+    is_manual_shipping,
+    price_books_in,
     price_list_sales_candidates,
     remove_line,
     revenue_summary,
     select_global_shipping,
+    select_manual_shipping,
     set_customer_info,
     set_quantity,
     sync_after_rate_change,
@@ -178,16 +185,23 @@ def _master_key() -> tuple:
     from models import PriceMasterType
 
     keys = []
-    for master_type in (PriceMasterType.DT40, PriceMasterType.PT30, PriceMasterType.SO_MASTER):
+    for master_type in (PriceMasterType.DT40, PriceMasterType.PT30, PriceMasterType.SPECTRA_GOLD, PriceMasterType.SO_MASTER):
         active = get_active_master(master_type)
         keys.append(active.record.import_id if active else None)
     return tuple(keys)
 
 
-def filter_product_rows(rows: list[dict], *, keyword: str = "", price_books=None) -> list[dict]:
-    from ui.price_catalog import filter_price_catalog_rows
+def filter_product_rows(rows: list[dict], *, keyword: str = "", price_books=None, kind: Optional[str] = None) -> list[dict]:
+    """商品種別 → Price Book → 検索語 (製品名 / SKU / Sheet). No Price Book selected means every Price Book."""
+    from ui.price_catalog import filter_by_product_kind, filter_price_catalog_rows
 
-    return filter_price_catalog_rows(rows, keyword=keyword, price_books=price_books or [])
+    return filter_price_catalog_rows(filter_by_product_kind(rows, kind), keyword=keyword, price_books=price_books or [])
+
+
+def price_book_label(page: dict, book: Optional[str]) -> str:
+    """Price Book display name, the same as 価格マスター管理 (short labels)."""
+    labels = (page.get("price_masters") or {}).get("short_labels") or {}
+    return labels.get(book or "", book or "-")
 
 
 def _render_product_picker(page: dict, helpers: dict, draft) -> None:
@@ -206,11 +220,27 @@ def _render_product_picker(page: dict, helpers: dict, draft) -> None:
         if not rows:
             st.warning("選択できる商品がありません。Active DT40 / PT30 価格マスターを確認してください。")
             return
+        from ui.price_catalog import PRODUCT_KIND_ALL, PRODUCT_KINDS
+
+        kind = st.radio("商品種別", list(PRODUCT_KINDS), horizontal=True, key="simple_product_kind") or PRODUCT_KIND_ALL
         search_column, book_column = st.columns([3, 2])
-        keyword = search_column.text_input("製品名・SKUで検索", placeholder="例：PHOTON / REVOLUTION / GRABBER / 70250", key="simple_search")
-        books = book_column.multiselect("Price Book", list(SIMPLE_PRICE_BOOKS), key="simple_price_books")
-        filtered = filter_product_rows(rows, keyword=keyword, price_books=books)
-        st.caption(f"{len(filtered)} / {len(rows)} 件 ・ チェックして「見積に追加」")
+        keyword = search_column.text_input(
+            "製品名・SKUで検索", placeholder="例：PHOTON / REVOLUTION / GRABBER / 70250", key="simple_search"
+        )
+        available = [book for book in SIMPLE_PRICE_BOOKS if any(row["Price Book"] == book for row in rows)]
+        books = book_column.segmented_control(
+            "Price Book",
+            available,
+            selection_mode="multi",
+            format_func=lambda book: price_book_label(page, book),
+            key="simple_price_books",
+        )
+        books = list(books or [])
+        filtered = filter_product_rows(rows, keyword=keyword, price_books=books, kind=kind)
+        scope = "全Price Book" if not books else " + ".join(price_book_label(page, book) for book in books)
+        st.caption(f"{len(filtered)} / {len(rows)} 件 ・ {kind} ・ {scope} ・ チェックして「見積に追加」")
+        if kind != PRODUCT_KIND_ALL:
+            st.caption("商品種別で絞り込むと、種別を判定できない商品（補修部品など）は表示されません。「すべて」で全商品を表示します。")
         version = st.session_state.get(SESSION_PICKER_VERSION, 0)
         edited = st.data_editor(
             [
@@ -219,12 +249,12 @@ def _render_product_picker(page: dict, helpers: dict, draft) -> None:
                     "製品名": row["製品名"],
                     "SKU": row["SKU"],
                     "標準売価 JPY": row["SpaceOne参考売価 JPY"],
-                    "Price Book": row["Price Book"],
+                    "Price Book": price_book_label(page, row["Price Book"]),
                     "Sheet / Category": row["Source Sheet"],
                 }
                 for row in filtered
             ],
-            key=f"simple_picker_{version}_{hash((keyword, tuple(books)))}",
+            key=f"simple_picker_{version}_{hash((kind, keyword, tuple(books)))}",
             hide_index=True,
             use_container_width=True,
             height=320,
@@ -326,6 +356,7 @@ def _render_lines(page: dict, draft, locked: bool) -> None:
             name, sku, unit, quantity, subtotal, remove = st.columns([3.2, 1.6, 1.4, 1.1, 1.5, 0.8])
             name.write(line.customer_display_name or line.manufacturer_description or "-")
             book = line.manufacturer_price_snapshot.price_book if line.manufacturer_price_snapshot else None
+            book = price_book_label(page, book) if book else None
             sku.write(f"{line.manufacturer_sku or '-'}（{book}）" if book else (line.manufacturer_sku or "-"))
             unit.write(display_yen(line.final_sales_price_jpy, "未設定"))
             value = quantity.number_input(
@@ -367,31 +398,51 @@ def _render_shipping(draft, locked: bool) -> None:
     with st.container(border=True):
         st.subheader("国際輸送費（GlobalShipping）")
         selection = draft.global_shipping
-        try:
-            rates = ShippingRuleRepository().list_active_standard_global()
-        except Exception:
-            logger.exception("simple_quote_shipping_load_failed")
-            rates = []
-            st.warning("GlobalShippingを読み込めませんでした。価格マスター管理の国際輸送費を確認してください。")
+        books = price_books_in(draft)
+        has_dt_pt = bool(books & set(GLOBAL_SHIPPING_PRICE_BOOKS))
+        has_spectra = SPECTRA_PRICE_BOOK in books
+        manual_selected = is_manual_shipping(selection)
+        if has_spectra and has_dt_pt:
+            st.info(
+                "GlobalShipping は Deep Trekker / PipeTrekker の国際輸送費です。SPECTRA 商品分の送料は含まれません。"
+                "SPECTRA 分は「国際輸送費を手動調整」で理由とともに合算するか、「手動入力」で入力してください。"
+            )
+        elif has_spectra:
+            st.info(
+                "SPECTRA 商品には GlobalShipping を使いません。既存の SPECTRA 見積と同じく、"
+                "メーカー見積などの国際輸送費（USD）を「手動入力」で入力してください（顧客向けは見積試算ポリシーの倍率で計算）。"
+            )
+        rates = []
+        if has_dt_pt:
+            try:
+                rates = ShippingRuleRepository().list_active_standard_global()
+            except Exception:
+                logger.exception("simple_quote_shipping_load_failed")
+                st.warning("GlobalShippingを読み込めませんでした。価格マスター管理の国際輸送費を確認してください。")
         by_id = {item.rule.shipping_rule_id: item for item in rates}
         options = ["__none__"] + list(by_id)
-        labels = {"__none__": "選択してください"}
+        labels = {"__none__": "選択してください", MANUAL_SHIPPING_ID: MANUAL_SHIPPING_LABEL}
         for item in rates:
             basis = CHARGE_BASIS_LABELS.get(item.rule.charge_basis, "-")
             labels[item.rule.shipping_rule_id] = f"{_rule_label(item.rule)} / ${item.rule.rate_usd:,.2f}（{basis}）"
-        if selection is not None and selection.shipping_rule_id not in by_id:
+        if selection is not None and not manual_selected and selection.shipping_rule_id not in by_id:
             # The frozen choice stays selectable even after the reference master changed.
             options.append(selection.shipping_rule_id)
             labels[selection.shipping_rule_id] = f"{selection.label} / ${selection.master_rate_usd:,.2f}（保存時の値）"
+        if has_spectra or manual_selected:
+            options.append(MANUAL_SHIPPING_ID)
         current = selection.shipping_rule_id if selection is not None else "__none__"
         chosen = st.selectbox(
-            "GlobalShippingを選択",
+            "国際輸送費を選択",
             options,
             index=options.index(current),
             format_func=lambda key: labels.get(key, key),
             key=f"simple_shipping_{draft.quote_draft_id}_{draft.quote_version}",
             disabled=locked,
         )
+        if not locked and chosen == MANUAL_SHIPPING_ID and current != MANUAL_SHIPPING_ID:
+            _render_manual_shipping_entry(draft)
+            return
         if not locked and chosen != current:
             try:
                 if chosen == "__none__":
@@ -406,11 +457,14 @@ def _render_shipping(draft, locked: bool) -> None:
             st.caption("国際輸送費を選択すると、原価と顧客向け輸送費が自動計算されます。")
             return
         markup = selection.markup_multiplier
+        cost_label = "国際輸送費（手動）" if manual_selected else "DT実輸送費"
         st.write(
-            f"DT実輸送費：${selection.actual_rate_usd:,.2f} → 原価 {display_yen(selection.cost_jpy, '-')} ／ "
+            f"{cost_label}：${selection.actual_rate_usd:,.2f} → 原価 {display_yen(selection.cost_jpy, '-')} ／ "
             f"顧客向け（×{display_number(markup, '-')}）：{display_yen(selection.customer_price_jpy, '-')}"
         )
-        if selection.rate_adjusted:
+        if manual_selected:
+            st.caption(f"手動入力の理由：{selection.rate_adjustment_reason}")
+        elif selection.rate_adjusted:
             st.caption(
                 f"手動調整：マスター値 ${selection.master_rate_usd:,.2f} → ${selection.actual_rate_usd:,.2f}（理由：{selection.rate_adjustment_reason}）"
             )
@@ -424,13 +478,29 @@ def _render_shipping(draft, locked: bool) -> None:
         _render_shipping_adjustments(draft, selection)
 
 
+def _render_manual_shipping_entry(draft) -> None:
+    suffix = f"{draft.quote_draft_id}_{draft.quote_version}"
+    left, right = st.columns([1, 2])
+    amount = left.number_input(
+        "国際輸送費（USD）", min_value=0.0, value=0.0, step=0.01, format="%.2f", key=f"simple_manual_ship_usd_{suffix}"
+    )
+    reason = right.text_input("根拠・理由（必須）", placeholder="例：SPECTRA メーカー見積 2026-11", key=f"simple_manual_ship_reason_{suffix}")
+    if st.button("手動の国際輸送費を設定", key=f"simple_manual_ship_apply_{suffix}"):
+        try:
+            select_manual_shipping(draft, actual_rate_usd=float(amount), reason=reason, selected_by=acting_person())
+        except SimpleQuoteError as error:
+            st.error(ERRORS.get(error.code, error.code))
+            return
+        st.rerun()
+
+
 def _render_shipping_adjustments(draft, selection) -> None:
     suffix = f"{draft.quote_draft_id}_{draft.quote_version}"
     override = (selection.customer_price_jpy, selection.customer_price_reason) if selection.customer_price_overridden else (None, None)
     if st.toggle("国際輸送費を手動調整", key=f"simple_ship_adjust_{suffix}", value=selection.rate_adjusted):
         left, right = st.columns([1, 2])
         actual = left.number_input(
-            "DT実輸送費（USD）",
+            "国際輸送費（USD）" if is_manual_shipping(selection) else "DT実輸送費（USD）",
             min_value=0.0,
             value=float(selection.actual_rate_usd),
             step=0.01,
@@ -441,7 +511,7 @@ def _render_shipping_adjustments(draft, selection) -> None:
         apply_column, reset_column = st.columns(2)
         if apply_column.button("国際輸送費を反映", key=f"simple_ship_apply_{suffix}"):
             _adjust(draft, actual_rate_usd=float(actual), rate_reason=reason, customer=override)
-        if selection.rate_adjusted and reset_column.button("マスター値に戻す", key=f"simple_ship_reset_{suffix}"):
+        if selection.rate_adjusted and selection.master_rate_usd is not None and reset_column.button("マスター値に戻す", key=f"simple_ship_reset_{suffix}"):
             _adjust(draft, actual_rate_usd=None, rate_reason=None, customer=override)
     keep_rate = (selection.actual_rate_usd if selection.rate_adjusted else None, selection.rate_adjustment_reason)
     if st.toggle("顧客向け輸送費も手動調整", key=f"simple_ship_customer_{suffix}", value=selection.customer_price_overridden):

@@ -92,6 +92,10 @@ def build_price_catalog_rows(active_books: Iterable, *, reference_sales: dict[st
                     "参考売価状態": reference_status,
                     "Master更新": imported_at,
                     "Import ID": import_id,
+                    # Section kind of every occurrence of the SKU in the sheets (None when not under a known heading).
+                    "_section_kinds": tuple(
+                        getattr(item, "section_kind", None) for item in getattr(candidate, "occurrences", []) or []
+                    ),
                     "_search": " ".join((str(price_book), source_sheet, sku, description, status, reference_status)).casefold(),
                 }
             )
@@ -150,6 +154,7 @@ PRIMARY_PACKAGE_GROUPS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
 PRIMARY_PACKAGE_SKUS: tuple[tuple[str, str, str], ...] = tuple(
     (group, price_book, sku) for group, price_book, skus in PRIMARY_PACKAGE_GROUPS for sku in skus
 )
+_PRIMARY_KEYS = frozenset((price_book, sku) for _group, price_book, sku in PRIMARY_PACKAGE_SKUS)
 PRIMARY_GROUP_ORDER: tuple[str, ...] = tuple(group for group, _book, _skus in PRIMARY_PACKAGE_GROUPS)
 PRIMARY_COLUMN_ORDER = [
     "製品",
@@ -218,6 +223,36 @@ def filter_primary_package_rows(
             continue
         filtered.append(row)
     return filtered
+
+
+PRODUCT_KIND_ALL = "すべて"
+PRODUCT_KIND_PACKAGE = "機体・パッケージ"
+PRODUCT_KIND_OPTION = "オプション"
+PRODUCT_KINDS = (PRODUCT_KIND_ALL, PRODUCT_KIND_PACKAGE, PRODUCT_KIND_OPTION)
+
+
+def product_kind(row: dict) -> Optional[str]:
+    """機体・パッケージ / オプション of a catalog row, or None when it cannot be told.
+
+    機体・パッケージ is exactly the 主要機体・パッケージ allowlist above (Price Book + SKU).
+    オプション is a row whose every occurrence in the manufacturer sheets sits under an options section
+    heading (OPTIONS / ADD ON / UPGRADE, parsers.price_book_parser.SECTION_HEADING_PREFIXES).
+    Everything else (spare parts, rows under several kinds of heading, SPECTRA, ...) stays unclassified.
+    """
+    from parsers.price_book_parser import SECTION_OPTIONS
+
+    if (row.get("Price Book"), row.get("SKU")) in _PRIMARY_KEYS:
+        return PRODUCT_KIND_PACKAGE
+    kinds = row.get("_section_kinds") or ()
+    if kinds and all(kind == SECTION_OPTIONS for kind in kinds):
+        return PRODUCT_KIND_OPTION
+    return None
+
+
+def filter_by_product_kind(rows: Iterable[dict], kind: Optional[str]) -> list[dict]:
+    if not kind or kind == PRODUCT_KIND_ALL:
+        return list(rows)
+    return [row for row in rows if product_kind(row) == kind]
 
 
 def display_primary_package_rows(rows: Iterable[dict]) -> list[dict]:

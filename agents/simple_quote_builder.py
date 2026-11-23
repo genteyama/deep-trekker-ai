@@ -36,7 +36,14 @@ from models import (
 )
 
 SIMPLE_BUILDER = "SIMPLE_V1"
-SIMPLE_PRICE_BOOKS = ("DT40", "PT30")
+SIMPLE_PRICE_BOOKS = ("DT40", "PT30", "SPECTRA_GOLD")
+# GlobalShipping is the Deep Trekker / PipeTrekker international shipping reference.
+GLOBAL_SHIPPING_PRICE_BOOKS = ("DT40", "PT30")
+SPECTRA_PRICE_BOOK = "SPECTRA_GOLD"
+# A shipping cost a person enters (e.g. from the SPECTRA manufacturer quote), as in the existing SPECTRA
+# quote entry: cost = USD x rate, customer = cost x the QUOTE_CALC shipping markup. No master behind it.
+MANUAL_SHIPPING_ID = "MANUAL"
+MANUAL_SHIPPING_LABEL = "手動入力（GlobalShipping以外）"
 GLOBAL_SHIPPING_SOURCE = "GLOBAL_SHIPPING_MASTER"
 SHIPPING_PRICING_SOURCE = "GLOBAL_SHIPPING_POLICY"
 SHIPPING_MANUAL_PRICING_SOURCE = "GLOBAL_SHIPPING_MANUAL"
@@ -287,6 +294,44 @@ def select_global_shipping(
     return apply_global_shipping(draft)
 
 
+def select_manual_shipping(
+    draft: QuoteDraft,
+    *,
+    actual_rate_usd,
+    reason: Optional[str],
+    selected_by: Optional[str] = None,
+) -> QuoteDraft:
+    """International shipping entered by a person (no GlobalShipping master). Amount and reason required."""
+    ensure_draft_editable(draft)
+    actual, _adjusted = _actual_rate(None, actual_rate_usd, reason)
+    draft.global_shipping = GlobalShippingSelection(
+        shipping_rule_id=MANUAL_SHIPPING_ID,
+        shipping_type=ShippingType.CUSTOM.value,
+        label=MANUAL_SHIPPING_LABEL,
+        master_rate_usd=None,
+        actual_rate_usd=actual,
+        rate_adjusted=True,
+        rate_adjustment_reason=reason.strip(),
+        selected_by=selected_by,
+        selected_at=datetime.now(timezone.utc),
+    )
+    return apply_global_shipping(draft)
+
+
+def is_manual_shipping(selection: Optional[GlobalShippingSelection]) -> bool:
+    return selection is not None and selection.shipping_rule_id == MANUAL_SHIPPING_ID
+
+
+def price_books_in(draft: Optional[QuoteDraft]) -> set[str]:
+    """Price books of the quote lines (DT40 / PT30 / SPECTRA_GOLD)."""
+    if draft is None:
+        return set()
+    books = set()
+    for line in draft.configuration_lines:
+        books.update(name.strip() for name in line_source(line)[0].split("/") if name.strip())
+    return books
+
+
 def adjust_global_shipping(
     draft: QuoteDraft,
     *,
@@ -325,15 +370,17 @@ def apply_global_shipping(draft: QuoteDraft) -> QuoteDraft:
     if policy is None:
         raise SimpleQuoteError("POLICY_MISSING")
     shipping_type = ShippingType(selection.shipping_type) if selection.shipping_type else ShippingType.CUSTOM
+    manual = is_manual_shipping(selection)
     line = build_shipping_line(
         shipping_type,
         1,
         selection.actual_rate_usd,
         draft.exchange_rate,
         policy,
-        source_type=GLOBAL_SHIPPING_SOURCE,
-        source_reference=selection.shipping_rule_id,
-        rule_status="HUMAN_ADJUSTED" if selection.rate_adjusted else "APPROVED",
+        # A manual entry is recorded like the SPECTRA quote entry's human shipping input.
+        source_type="HUMAN_INPUT" if manual else GLOBAL_SHIPPING_SOURCE,
+        source_reference="Simple quote builder manual shipping" if manual else selection.shipping_rule_id,
+        rule_status="HUMAN_CONFIRMED" if manual else ("HUMAN_ADJUSTED" if selection.rate_adjusted else "APPROVED"),
         notes=selection.rate_adjustment_reason,
     )
     selection.exchange_rate = draft.exchange_rate
@@ -555,15 +602,18 @@ def _use_standard_prices(draft: QuoteDraft, line_ids: Iterable[str]) -> None:
             apply_final_price(draft, line_id, FinalPriceStatus.USE_STANDARD_CANDIDATE)
 
 
-def _actual_rate(master: float, actual_rate_usd, reason: Optional[str]) -> tuple[float, bool]:
+def _actual_rate(master: Optional[float], actual_rate_usd, reason: Optional[str]) -> tuple[float, bool]:
     if actual_rate_usd is None:
+        if master is None:
+            # A manual entry has no master value to fall back to.
+            raise SimpleQuoteError("SHIPPING_RATE_INVALID")
         return master, False
     if isinstance(actual_rate_usd, bool) or not isinstance(actual_rate_usd, (int, float)):
         raise SimpleQuoteError("SHIPPING_RATE_INVALID")
     value = round(float(actual_rate_usd), 2)
     if not math.isfinite(value) or value <= 0:
         raise SimpleQuoteError("SHIPPING_RATE_INVALID")
-    if value == round(master, 2):
+    if master is not None and value == round(master, 2):
         return master, False
     if not (reason or "").strip():
         raise SimpleQuoteError("SHIPPING_REASON_REQUIRED")
@@ -628,11 +678,14 @@ __all__ = [
     "clear_global_shipping",
     "create_simple_quote_draft",
     "customer_summary",
+    "is_manual_shipping",
     "is_simple_draft",
     "line_source",
     "remove_line",
     "revenue_summary",
+    "price_books_in",
     "select_global_shipping",
+    "select_manual_shipping",
     "set_customer_info",
     "set_quantity",
     "sync_after_rate_change",

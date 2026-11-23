@@ -9,6 +9,7 @@ from agents.landed_cost import build_shipping_line, calculate_landed_cost_scenar
 from agents.master_reconciliation import get_manufacturer_price_by_sku
 from agents.price_master import (
     GENERIC_MANUFACTURER_MASTERS,
+    MANUFACTURER_MASTERS,
     attach_price_master_provenance,
     get_active_master,
     load_active_landed_policy,
@@ -70,11 +71,9 @@ def create_general_quote_draft(
     _require_non_negative_optional(domestic_shipping_jpy, "DOMESTIC_SHIPPING_INVALID")
 
     repo = repository or SqlitePriceMasterRepository()
-    books = _active_manufacturer_books(repo)
-    if price_books is not None:
-        books = [item for item in books if item[0] in set(price_books)]
-        if not books:
-            raise GeneralQuoteEntryError("MANUFACTURER_MASTER_MISSING")
+    # Without `price_books` the SKU is looked up in DT40 and PT30 as before. A caller that picked a price
+    # book row names that book; SPECTRA GOLD is only used when it is named.
+    books = _active_manufacturer_books(repo, tuple(price_books) if price_books is not None else GENERIC_MANUFACTURER_MASTERS)
     resolved = [_resolve_sku(line, books) for line in normalized]
     policy = load_active_landed_policy(repo)
     if policy is None:
@@ -216,9 +215,11 @@ def _line_parts(item):
     return getattr(item, "sku", None), getattr(item, "quantity", None)
 
 
-def _active_manufacturer_books(repo: SqlitePriceMasterRepository):
+def _active_manufacturer_books(repo: SqlitePriceMasterRepository, master_types=GENERIC_MANUFACTURER_MASTERS):
     books = []
-    for master_type in GENERIC_MANUFACTURER_MASTERS:
+    for master_type in master_types:
+        if master_type not in MANUFACTURER_MASTERS:
+            continue
         active = get_active_master(master_type, repo)
         if active is None:
             continue

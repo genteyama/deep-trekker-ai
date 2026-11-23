@@ -299,6 +299,10 @@ class SKUSourceOccurrence(BaseModel):
     source_status: Optional[SkuSourceStatus] = SkuSourceStatus.ACTIVE
     dealer_equals_msrp: bool = False
     no_dealer_discount_note: bool = False
+    # Section heading the row sits under in the manufacturer sheet, and its kind
+    # (parsers.price_book_parser.SECTION_HEADING_PREFIXES). None when not a known section.
+    section_heading: Optional[str] = None
+    section_kind: Optional[str] = None
 
 
 class SKUMasterCandidate(BaseModel):
@@ -1218,7 +1222,8 @@ class GlobalShippingSelection(BaseModel):
     shipping_type: Optional[str] = None
     label: Optional[str] = None
     charge_basis: Optional[str] = None
-    master_rate_usd: float
+    # None for a manual entry (shipping_rule_id "MANUAL"): no reference master value exists.
+    master_rate_usd: Optional[float] = None
     master_effective_from: Optional[str] = None
     master_source_reference: Optional[str] = None
     actual_rate_usd: float

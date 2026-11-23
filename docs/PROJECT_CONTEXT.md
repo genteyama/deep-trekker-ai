@@ -815,4 +815,11 @@ Next:
 - 見出し：`pages.quote_control.title` と `location.pages.quote_control` を「見積作成」/「Create quote」に統一。
 - 選択した価格表の行が明細の根拠：商品一覧でチェックした行の Price Book・Import ID・MSRP・Dealer・Sheet / Category を追加項目として渡し、SKU はその Price Book だけで解決する（`create_general_quote_draft(price_books=...)`）。DT40 / PT30 の両方に異なる価格で載る SKU（実データ28 SKU・56行）も価格重複エラーにならず、それぞれの価格表の原価になる。Import ID・MSRP・Dealer が現在の Active Master と違えば追加しない（`SOURCE_CHANGED`、一覧から選び直し）。
 - 「同じ商品」の判定は（Price Book, SKU, Import ID）＝ `line_source`。同じ選択元の再追加は数量加算、別の Price Book・別 import の同 SKU は別の明細。Sheet / Category は `QuotePriceSnapshot.source_sheet`（payload の任意項目、schema 変更なし）に保持。SKU だけを渡す従来の呼び出しは従来どおり（両方の価格表を検索し、価格が異なれば PRICE_CONFLICT）。
+
+### PORTAL-3B.1.1 — 商品選択（商品種別・SPECTRA GOLD）
+
+- 「商品を選ぶ」：商品種別（すべて / 機体・パッケージ / オプション、横並びラジオ）→ 検索（製品名・SKU・Sheet）＋ Price Book（DT40 / PT30 / SPECTRA GOLD の複数選択、未選択＝全 Price Book）。件数表示は「N / 全件 ・ 種別 ・ 対象Price Book」。Price Book 表示名は価格マスター管理の short label。
+- 商品種別（`ui/price_catalog.product_kind`）：機体・パッケージ＝価格一覧「主要機体・パッケージ」の allowlist（Price Book + SKU、21件）そのもの。オプション＝メーカー価格表シート内の見出しが OPTIONS / ADD ON / UPGRADE の下にしか出てこない行。見出し→種別の対応表は `parsers/price_book_parser.SECTION_HEADING_PREFIXES` の1か所（パーサーが行ごとの見出しを `SKUSourceOccurrence.section_heading / section_kind` に記録。未知の見出しの下は種別なし）。補修部品・複数種別にまたがる行・SPECTRA などは分類不能（「すべて」でのみ表示）。実データ（DT40/PT30 正式価格1,385行）：機体・パッケージ21、オプション302、分類不能1,062。
+- SPECTRA GOLD：Active SPECTRA GOLD マスターの正式価格行（MSRP と Gold 価格あり）を選択可。原価・売価は既存 SPECTRA 見積と同じ（Gold 価格×為替＋QUOTE_CALC の保険・輸入税、標準売価は価格一覧と同じ SO_MASTER ルール）。`create_general_quote_draft(price_books=[SPECTRA_GOLD])` で選んだ Price Book だけを検索（Price Book 指定なしの従来呼び出しは DT40/PT30 のまま）。DT40 / PT30 / SPECTRA は同じ見積に混在可。選択元識別（Price Book, SKU, Import ID）は維持。
+- 送料：GlobalShipping は DT / PT 用。見積に SPECTRA が含まれる場合は「手動入力（GlobalShipping以外）」を選べる（USD と根拠・理由が必須。原価＝USD×為替、顧客向け＝原価×QUOTE_CALC の Shipping 倍率、既存 SPECTRA 見積の人手入力送料と同じ扱い）。SPECTRA のみの見積では GlobalShipping の区分は表示しない。混在時は GlobalShipping に SPECTRA 分が含まれない旨を表示（手動調整で理由付き合算、または手動入力）。`GlobalShippingSelection.master_rate_usd` は手動入力時 None（payload の任意項目、schema 変更なし）。
 - 次候補（PORTAL-3B.2）：価格一覧ページでチェックした商品を見積作成へ直接送る機能。

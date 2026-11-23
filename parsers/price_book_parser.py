@@ -58,6 +58,28 @@ KNOWN_SHEET_HINTS = {
     "pt-van": ("PipeTrekker", "PT-VAN"),
     "ptvan": ("PipeTrekker", "PT-VAN"),
 }
+# Section headings inside a manufacturer sheet (a row holding only one text cell and no prices), e.g.
+# "PACKAGES", "OPTIONS - CUTTER", "SPARE PARTS - VIEWERS", "ADD ON - WHEEL KITS". The single place that maps
+# a heading to a section kind: the heading must start with the prefix (then end, a space or "-").
+# Any other heading (e.g. "BRIDGE BOX", "KITS", "-") ends the previous section: the rows under it get no
+# section kind, so nothing is guessed.
+SECTION_PACKAGES = "PACKAGES"
+SECTION_OPTIONS = "OPTIONS"
+SECTION_SPARE_PARTS = "SPARE_PARTS"
+SECTION_CHOOSE = "CHOOSE"
+SECTION_HEADING_PREFIXES: tuple[tuple[str, str], ...] = (
+    ("VEHICLE PACKAGES", SECTION_PACKAGES),
+    ("PACKAGES", SECTION_PACKAGES),
+    ("OPTIONS", SECTION_OPTIONS),
+    ("RETROFIT ADD ON", SECTION_OPTIONS),
+    ("ADD ONS", SECTION_OPTIONS),
+    ("ADD ON", SECTION_OPTIONS),
+    ("UPGRADES", SECTION_OPTIONS),
+    ("UPGRADE", SECTION_OPTIONS),
+    ("SPARE PARTS", SECTION_SPARE_PARTS),
+    ("CHOOSE", SECTION_CHOOSE),
+)
+
 CODE_MISSING_COLUMNS = "MISSING_REQUIRED_COLUMNS"
 CODE_EMPTY_SKU = "EMPTY_SKU"
 CODE_DUPLICATE_SKU = "DUPLICATE_SKU"
@@ -209,7 +231,11 @@ def _parse_sheet(sheet, aliases, book_name, version, timestamp, result) -> None:
         result.sheets.append(summary)
         return
 
+    section_heading = section_kind = None
     for row_number, values in header["rows"]:
+        heading = _section_heading(values, header["columns"])
+        if heading is not None:
+            section_heading, section_kind = heading, section_kind_of(heading)
         item, occurrence, issues = _row_to_sku(
             values,
             header["columns"],
@@ -225,10 +251,32 @@ def _parse_sheet(sheet, aliases, book_name, version, timestamp, result) -> None:
         for issue in issues:
             _add_issue_model(result, issue)
         if item is not None and occurrence is not None:
+            if section_kind is not None:
+                occurrence.section_heading = section_heading
+                occurrence.section_kind = section_kind
             result.items.append(item)
             result.occurrences.append(occurrence)
             summary.item_count += 1
     result.sheets.append(summary)
+
+
+def section_kind_of(heading: Optional[str]) -> Optional[str]:
+    text = " ".join(str(heading or "").upper().split())
+    for prefix, kind in SECTION_HEADING_PREFIXES:
+        if text == prefix or text.startswith(prefix + " ") or text.startswith(prefix + "-"):
+            return kind
+    return None
+
+
+def _section_heading(values, columns) -> Optional[str]:
+    """The text of a section heading row: one text cell and nothing else (no SKU price, no notes)."""
+    for field in ("msrp", "dealer_price"):
+        if _cell(values, columns.get(field)) not in (None, ""):
+            return None
+    filled = [value for value in values if value is not None and str(value).strip() != ""]
+    if len(filled) != 1 or not isinstance(filled[0], str):
+        return None
+    return " ".join(filled[0].split())
 
 
 def _find_header(sheet, aliases) -> Optional[dict]:
