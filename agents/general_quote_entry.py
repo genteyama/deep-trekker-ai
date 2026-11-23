@@ -14,7 +14,7 @@ from agents.price_master import (
     get_active_master,
     load_active_landed_policy,
     mark_sales_master_missing,
-    parse_manufacturer_price_master,
+    parse_active_manufacturer_master,
 )
 from agents.quote_builder import build_quote_draft
 from models import (
@@ -223,11 +223,7 @@ def _active_manufacturer_books(repo: SqlitePriceMasterRepository, master_types=G
         active = get_active_master(master_type, repo)
         if active is None:
             continue
-        book = parse_manufacturer_price_master(
-            master_type,
-            active.path,
-            version=active.record.import_id,
-        )
+        book = parse_active_manufacturer_master(master_type, active)
         books.append((master_type, active, book))
     if not books:
         raise GeneralQuoteEntryError("MANUFACTURER_MASTER_MISSING")

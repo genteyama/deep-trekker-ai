@@ -18,8 +18,8 @@ from agents.simple_quote_builder import (
     SPECTRA_PRICE_BOOK,
     SimpleQuoteError,
     add_products,
+    add_global_shipping,
     adjust_global_shipping,
-    clear_global_shipping,
     create_simple_quote_draft,
     clear_spectra_shipping,
     customer_summary,
@@ -30,8 +30,9 @@ from agents.simple_quote_builder import (
     purchase_price,
     remove_line,
     revenue_summary,
-    select_global_shipping,
+    remove_global_shipping,
     set_customer_info,
+    set_global_shipping_quantity,
     set_quantity,
     set_spectra_shipping,
     shipping_breakdown,
@@ -41,7 +42,6 @@ from agents.quote_builder import apply_tax_rate
 from models import FinalPriceStatus, QuoteDraftStatus
 from repositories.actor import acting_person
 from ui.quote_format import display_number, display_percent, display_yen
-from ui.quote_ui_mode import QUOTE_UI_LEGACY, QUOTE_UI_MODE_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +59,8 @@ ERRORS = {
     "CUSTOMER_SHIPPING_INVALID": "顧客向け輸送費は0以上の金額で入力してください。",
     "CUSTOMER_SHIPPING_UNIT": "顧客向け輸送費は千円単位で入力してください。",
     "CUSTOMER_SHIPPING_REASON_REQUIRED": "顧客向け輸送費を手動調整する場合は理由を入力してください。",
-    "SHIPPING_NOT_SELECTED": "先に国際輸送費（GlobalShipping）を選択してください。",
+    "SHIPPING_NOT_SELECTED": "先に国際輸送費（GlobalShipping）を追加してください。",
+    "SHIPPING_QUANTITY_INVALID": "個口数は1以上の整数で入力してください。",
     "POLICY_MISSING": "見積計算ポリシー（QUOTE_CALC）がありません。価格マスター管理を確認してください。",
     "SOURCE_CHANGED": "価格マスターが更新されたため追加できませんでした。商品一覧から選び直してください。",
     "PRICE_BOOK_INVALID": "DT40 / PT30 / SPECTRA GOLD の商品を選択してください。",
@@ -92,7 +93,6 @@ def render_simple_quote_builder(page: dict, helpers: dict) -> None:
         _render_customer_summary(draft, locked)
         _render_revenue_summary(page, draft)
         _render_save_and_approval(page, helpers, draft, snapshot)
-    _render_other_quotes()
     draft = st.session_state.get("quote_draft")
     if draft is not None:
         _save_draft(page, draft, manual=False)
@@ -170,7 +170,7 @@ def _catalog_rows(master_key: tuple, rate: float) -> list[dict]:
     """Selectable DT40 / PT30 rows with the standard price at `rate`. Keyed by the Active import IDs."""
     from agents.price_master import active_price_books, load_active_spaceone_master
     from agents.pricing_policy import is_customer_price_unit, round_customer_price_jpy
-    from ui.price_catalog import STATUS_OFFICIAL, _reference_sales_candidates, build_price_catalog_rows, build_reference_sales_map
+    from ui.price_catalog import _reference_sales_candidates, build_price_catalog_rows, build_reference_sales_map
 
     books = [item for item in active_price_books() if item.record.master_type.value in SIMPLE_PRICE_BOOKS]
     reference = {}
@@ -181,8 +181,28 @@ def _catalog_rows(master_key: tuple, rate: float) -> list[dict]:
             is_customer_price_unit=is_customer_price_unit,
         )
     rows = build_price_catalog_rows(books, reference_sales=reference)
-    # Only rows the quote engine can price from the Active master are offered for normal selection.
-    return [row for row in rows if row["メーカー価格状態"] == STATUS_OFFICIAL]
+    return [row for row in rows if is_quotable_row(row)]
+
+
+def is_quotable_row(row: dict) -> bool:
+    """A price list row the quote engine can put on a quote: the same conditions as the engine's SKU
+    lookup (agents.general_quote_entry._resolve_sku): not obsolete, no price conflict (a conflicting SKU has
+    no Dealer / Gold price on its row) and a Dealer / Gold price. A missing SpaceOne standard price, the
+    product kind or a spare-parts heading never hides a row; such a row is priced with 「売価を調整」."""
+    from ui.price_catalog import STATUS_OBSOLETE
+
+    return row.get("メーカー価格状態") != STATUS_OBSOLETE and row.get("Dealer USD") is not None and bool(row.get("SKU"))
+
+
+def _warm_quote_masters() -> None:
+    """Parse the Active QUOTE_CALC once while the product list is shown, so that 「見積に追加」 only reuses
+    parsed masters (agents.price_master keeps them per stored import) instead of reading workbooks."""
+    from agents.price_master import load_active_landed_policy
+
+    try:
+        load_active_landed_policy()
+    except Exception:
+        logger.exception("simple_quote_policy_warm_failed")
 
 
 def _master_key() -> tuple:
@@ -225,6 +245,7 @@ def _render_product_picker(page: dict, helpers: dict, draft) -> None:
         if not rows:
             st.warning("選択できる商品がありません。Active DT40 / PT30 価格マスターを確認してください。")
             return
+        _warm_quote_masters()
         from ui.price_catalog import PRODUCT_KIND_ALL, PRODUCT_KINDS
 
         kind = st.radio("商品種別", list(PRODUCT_KINDS), horizontal=True, key="simple_product_kind") or PRODUCT_KIND_ALL
@@ -438,7 +459,7 @@ def _render_shipping(draft, locked: bool) -> None:
     has_spectra = SPECTRA_PRICE_BOOK in books
     with st.container(border=True):
         st.subheader("国際輸送費")
-        if has_dt_pt or draft.global_shipping is not None:
+        if has_dt_pt or draft.global_shipping_lines:
             if has_spectra:
                 st.markdown("##### Deep Trekker / PipeTrekker 国際輸送費")
             _render_global_shipping(draft, locked)
@@ -459,10 +480,68 @@ def _render_shipping(draft, locked: bool) -> None:
             )
 
 
+SHIPPING_COLUMNS = [2.6, 1.3, 1.1, 1.4, 1.5, 1.5, 0.8]
+
+
 def _render_global_shipping(draft, locked: bool) -> None:
+    rows = list(draft.global_shipping_lines)
+    suffix = f"{draft.quote_draft_id}_{draft.quote_version}"
+    if rows:
+        header = st.columns(SHIPPING_COLUMNS)
+        for column, text in zip(header, ("種類", "単価 USD", "個口数", "実送料 USD", "原価", "顧客向け", "")):
+            column.markdown(f"**{text}**")
+        for row in rows:
+            _render_shipping_row(draft, row, locked, suffix)
+        parts = shipping_breakdown(draft)
+        st.caption(
+            f"DT / PT 国際輸送費 合計：原価 {display_yen(parts['dt_pt_cost'], '-')} ／ "
+            f"顧客向け {display_yen(parts['dt_pt_customer'], '-')}"
+            f"（各行 実送料 × 使用為替 × {display_number(rows[0].markup_multiplier, '-')} を千円単位に丸めて合計）"
+        )
+    else:
+        st.caption("国際輸送費の種類と個口数を選んで「国際輸送費を追加」を押すと、原価と顧客向け輸送費が自動計算されます。")
+    if not locked:
+        _render_add_global_shipping(draft, suffix)
+
+
+def _render_shipping_row(draft, row, locked: bool, suffix: str) -> None:
+    key = f"{row.shipping_rule_id}_{suffix}"
+    kind, unit, quantity, total, cost, customer, remove = st.columns(SHIPPING_COLUMNS)
+    kind.write(row.label or row.shipping_rule_id)
+    unit.write(_usd(row.actual_rate_usd))
+    value = quantity.number_input(
+        "個口数",
+        min_value=1,
+        step=1,
+        value=int(row.quantity),
+        key=f"simple_ship_qty_{key}_{row.quantity}",
+        label_visibility="collapsed",
+        disabled=locked,
+    )
+    total.write(_usd(row.actual_rate_usd * row.quantity))
+    cost.write(display_yen(row.cost_jpy, "-"))
+    customer.write(display_yen(row.customer_price_jpy, "-"))
+    if not locked and remove.button("削除", key=f"simple_ship_remove_{key}"):
+        _shipping_action(remove_global_shipping, draft, row.shipping_rule_id)
+    if not locked and int(value) != row.quantity:
+        _shipping_action(set_global_shipping_quantity, draft, row.shipping_rule_id, int(value))
+    notes = [f"マスター値 ${row.master_rate_usd:,.2f}（基準日 {row.master_effective_from or '-'}）"]
+    if row.rate_adjusted:
+        notes.append(f"実送料を手動調整：${row.master_rate_usd:,.2f} → ${row.actual_rate_usd:,.2f}（理由：{row.rate_adjustment_reason}）")
+    if row.customer_price_overridden:
+        notes.append(
+            f"顧客向けを手動設定：自動計算 {display_yen(row.auto_customer_price_jpy, '-')} → "
+            f"{display_yen(row.customer_price_jpy, '-')}（理由：{row.customer_price_reason}）"
+        )
+    st.caption(" ／ ".join(notes))
+    if not locked:
+        with st.expander(f"調整：{row.label or row.shipping_rule_id}", expanded=False):
+            _render_shipping_adjustments(draft, row, key)
+
+
+def _render_add_global_shipping(draft, suffix: str) -> None:
     from repositories.shipping_rule_repository import CHARGE_BASIS_LABELS, ShippingRuleRepository
 
-    selection = draft.global_shipping
     try:
         rates = ShippingRuleRepository().list_active_standard_global()
     except Exception:
@@ -471,54 +550,29 @@ def _render_global_shipping(draft, locked: bool) -> None:
         st.warning("GlobalShippingを読み込めませんでした。価格マスター管理の国際輸送費を確認してください。")
     by_id = {item.rule.shipping_rule_id: item for item in rates}
     options = ["__none__"] + list(by_id)
-    labels = {"__none__": "選択してください"}
+    labels = {"__none__": "種類を選択してください"}
     for item in rates:
         basis = CHARGE_BASIS_LABELS.get(item.rule.charge_basis, "-")
         labels[item.rule.shipping_rule_id] = f"{_rule_label(item.rule)} / ${item.rule.rate_usd:,.2f}（{basis}）"
-    if selection is not None and selection.shipping_rule_id not in by_id:
-        # The frozen choice stays selectable even after the reference master changed.
-        options.append(selection.shipping_rule_id)
-        labels[selection.shipping_rule_id] = f"{selection.label} / ${selection.master_rate_usd:,.2f}（保存時の値）"
-    current = selection.shipping_rule_id if selection is not None else "__none__"
-    chosen = st.selectbox(
-        "GlobalShippingを選択",
+    kind_column, quantity_column, button_column = st.columns([3, 1, 1.4], vertical_alignment="bottom")
+    chosen = kind_column.selectbox(
+        "国際輸送費の種類",
         options,
-        index=options.index(current),
         format_func=lambda key: labels.get(key, key),
-        key=f"simple_shipping_{draft.quote_draft_id}_{draft.quote_version}",
-        disabled=locked,
+        key=f"simple_shipping_{suffix}",
     )
-    if not locked and chosen != current:
-        try:
-            if chosen == "__none__":
-                clear_global_shipping(draft)
-            else:
-                select_global_shipping(draft, by_id[chosen], selected_by=acting_person())
-        except SimpleQuoteError as error:
-            st.error(ERRORS.get(error.code, error.code))
-        else:
-            st.rerun()
-    if selection is None:
-        st.caption("国際輸送費を選択すると、原価と顧客向け輸送費が自動計算されます。")
+    count = quantity_column.number_input("個口数", min_value=1, step=1, value=1, key=f"simple_ship_add_qty_{suffix}")
+    if button_column.button("国際輸送費を追加", key=f"simple_ship_add_{suffix}", disabled=chosen == "__none__"):
+        _shipping_action(add_global_shipping, draft, by_id[chosen], quantity=int(count), selected_by=acting_person())
+
+
+def _shipping_action(action, draft, *args, **kwargs) -> None:
+    try:
+        action(draft, *args, **kwargs)
+    except SimpleQuoteError as error:
+        st.error(ERRORS.get(error.code, error.code))
         return
-    markup = selection.markup_multiplier
-    st.write(
-        f"DT実輸送費：${selection.actual_rate_usd:,.2f} → 原価 {display_yen(selection.cost_jpy, '-')} ／ "
-        f"顧客向け（×{display_number(markup, '-')}）：{display_yen(selection.customer_price_jpy, '-')}"
-    )
-    if selection.rate_adjusted:
-        st.caption(
-            f"手動調整：マスター値 ${selection.master_rate_usd:,.2f} → ${selection.actual_rate_usd:,.2f}"
-            f"（理由：{selection.rate_adjustment_reason}）"
-        )
-    if selection.customer_price_overridden:
-        st.caption(
-            f"顧客向け輸送費を手動設定：自動計算 {display_yen(selection.auto_customer_price_jpy, '-')} → "
-            f"{display_yen(selection.customer_price_jpy, '-')}（理由：{selection.customer_price_reason}）"
-        )
-    if locked:
-        return
-    _render_shipping_adjustments(draft, selection)
+    st.rerun()
 
 
 def _render_spectra_shipping(draft, locked: bool) -> None:
@@ -562,57 +616,58 @@ def _render_spectra_shipping(draft, locked: bool) -> None:
         st.rerun()
 
 
-def _render_shipping_adjustments(draft, selection) -> None:
-    suffix = f"{draft.quote_draft_id}_{draft.quote_version}"
-    override = (selection.customer_price_jpy, selection.customer_price_reason) if selection.customer_price_overridden else (None, None)
-    if st.toggle("国際輸送費を手動調整", key=f"simple_ship_adjust_{suffix}", value=selection.rate_adjusted):
+def _render_shipping_adjustments(draft, row, key: str) -> None:
+    """Per shipping row: the DT shipping cost per package and / or the customer price, each with a reason."""
+    rule_id = row.shipping_rule_id
+    override = (row.customer_price_jpy, row.customer_price_reason) if row.customer_price_overridden else (None, None)
+    if st.toggle("実送料を手動調整", key=f"simple_ship_adjust_{key}", value=row.rate_adjusted):
         left, right = st.columns([1, 2])
         actual = left.number_input(
-            "DT実輸送費（USD）",
+            "DT実輸送費（USD・1個口あたり）",
             min_value=0.0,
-            value=float(selection.actual_rate_usd),
+            value=float(row.actual_rate_usd),
             step=0.01,
             format="%.2f",
-            key=f"simple_ship_usd_{suffix}",
+            key=f"simple_ship_usd_{key}",
         )
-        reason = right.text_input("調整理由（必須）", value=selection.rate_adjustment_reason or "", key=f"simple_ship_reason_{suffix}")
+        reason = right.text_input("調整理由（必須）", value=row.rate_adjustment_reason or "", key=f"simple_ship_reason_{key}")
         apply_column, reset_column = st.columns(2)
-        if apply_column.button("国際輸送費を反映", key=f"simple_ship_apply_{suffix}"):
-            _adjust(draft, actual_rate_usd=float(actual), rate_reason=reason, customer=override)
-        if selection.rate_adjusted and reset_column.button("マスター値に戻す", key=f"simple_ship_reset_{suffix}"):
-            _adjust(draft, actual_rate_usd=None, rate_reason=None, customer=override)
-    keep_rate = (selection.actual_rate_usd if selection.rate_adjusted else None, selection.rate_adjustment_reason)
-    if st.toggle("顧客向け輸送費も手動調整", key=f"simple_ship_customer_{suffix}", value=selection.customer_price_overridden):
-        st.caption(f"通常は DT実輸送費 × {display_number(selection.markup_multiplier, '-')} の自動計算値（{display_yen(selection.auto_customer_price_jpy, '-')}）を使います。")
+        if apply_column.button("実送料を反映", key=f"simple_ship_apply_{key}"):
+            _adjust(draft, rule_id, actual_rate_usd=float(actual), rate_reason=reason, customer=override)
+        if row.rate_adjusted and reset_column.button("マスター値に戻す", key=f"simple_ship_reset_{key}"):
+            _adjust(draft, rule_id, actual_rate_usd=None, rate_reason=None, customer=override)
+    keep_rate = (row.actual_rate_usd if row.rate_adjusted else None, row.rate_adjustment_reason)
+    if st.toggle("顧客向け輸送費も手動調整", key=f"simple_ship_customer_{key}", value=row.customer_price_overridden):
+        st.caption(
+            f"通常は 実送料 × 個口数 × 使用為替 × {display_number(row.markup_multiplier, '-')} の自動計算値"
+            f"（{display_yen(row.auto_customer_price_jpy, '-')}）を使います。"
+        )
         left, right = st.columns([1, 2])
         amount = left.number_input(
             "顧客向け輸送費（円・千円単位）",
             min_value=0,
             step=1000,
-            value=int(selection.customer_price_jpy or 0),
-            key=f"simple_ship_customer_jpy_{suffix}",
+            value=int(row.customer_price_jpy or 0),
+            key=f"simple_ship_customer_jpy_{key}",
         )
-        reason = right.text_input("理由（必須）", value=selection.customer_price_reason or "", key=f"simple_ship_customer_reason_{suffix}")
+        reason = right.text_input("理由（必須）", value=row.customer_price_reason or "", key=f"simple_ship_customer_reason_{key}")
         apply_column, reset_column = st.columns(2)
-        if apply_column.button("顧客向け輸送費を反映", key=f"simple_ship_customer_apply_{suffix}"):
-            _adjust(draft, actual_rate_usd=keep_rate[0], rate_reason=keep_rate[1], customer=(float(amount), reason))
-        if selection.customer_price_overridden and reset_column.button("自動計算に戻す", key=f"simple_ship_customer_reset_{suffix}"):
-            _adjust(draft, actual_rate_usd=keep_rate[0], rate_reason=keep_rate[1], customer=(None, None))
+        if apply_column.button("顧客向け輸送費を反映", key=f"simple_ship_customer_apply_{key}"):
+            _adjust(draft, rule_id, actual_rate_usd=keep_rate[0], rate_reason=keep_rate[1], customer=(float(amount), reason))
+        if row.customer_price_overridden and reset_column.button("自動計算に戻す", key=f"simple_ship_customer_reset_{key}"):
+            _adjust(draft, rule_id, actual_rate_usd=keep_rate[0], rate_reason=keep_rate[1], customer=(None, None))
 
 
-def _adjust(draft, *, actual_rate_usd, rate_reason, customer) -> None:
-    try:
-        adjust_global_shipping(
-            draft,
-            actual_rate_usd=actual_rate_usd,
-            rate_reason=rate_reason,
-            customer_price_jpy=customer[0],
-            customer_reason=customer[1],
-        )
-    except SimpleQuoteError as error:
-        st.error(ERRORS.get(error.code, error.code))
-        return
-    st.rerun()
+def _adjust(draft, rule_id, *, actual_rate_usd, rate_reason, customer) -> None:
+    _shipping_action(
+        adjust_global_shipping,
+        draft,
+        rule_id,
+        actual_rate_usd=actual_rate_usd,
+        rate_reason=rate_reason,
+        customer_price_jpy=customer[0],
+        customer_reason=customer[1],
+    )
 
 
 # ---- E/F. summaries -------------------------------------------------------------------------------
@@ -702,16 +757,6 @@ def _render_save_and_approval(page: dict, helpers: dict, draft, snapshot) -> Non
     if snapshot is not None:
         with st.container(border=True):
             _render_step_export(page, helpers, draft, snapshot)
-
-
-def _render_other_quotes() -> None:
-    with st.expander("SPECTRA見積・従来の詳細画面", expanded=False):
-        st.caption("SPECTRA GOLD の見積や、従来の5ステップ画面で作成した見積はこちらから操作します。")
-        if st.button("従来の詳細画面を開く", key="simple_open_legacy"):
-            st.session_state[QUOTE_UI_MODE_KEY] = QUOTE_UI_LEGACY
-            for key in ("quote_draft", "approved_quote_snapshot", "quote_approval_validation"):
-                st.session_state[key] = None
-            st.rerun()
 
 
 # ---- helpers --------------------------------------------------------------------------------------

@@ -356,9 +356,11 @@ class SqliteQuoteRepository:
         The parent (relation_type REVISION, parent_quote_id) becomes SUPERSEDED only here, when the
         revision is approved. Nothing is inferred from case IDs or configuration names.
         """
+        # PORTAL-3B.1.3: the official number is optional (issued later via MoneyForward), but the draft and
+        # its snapshot always carry the same value.
         number = _clean_number(snapshot.official_quote_number)
-        if number is None or _clean_number(draft.official_quote_number) != number:
-            raise QuoteRepositoryError("An approved quote requires its official quote number.")
+        if _clean_number(draft.official_quote_number) != number:
+            raise QuoteRepositoryError("The approved draft and its snapshot must have the same official quote number.")
         if draft.status.value != "APPROVED" or snapshot.quote_draft_id != draft.quote_draft_id:
             raise QuoteRepositoryError("Only the approved draft of this snapshot can be recorded.")
         state = ui_state or {}

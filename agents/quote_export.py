@@ -265,9 +265,8 @@ def export_spaceone_quote_excel(
         official_quote_number=official_quote_number,
         generated_by=generated_by,
     )
+    # PORTAL-3B.1.3: the official number is issued later (MoneyForward); without it the number field is blank.
     if purpose == ExportPurpose.FORMAL:
-        if not bundle.official_quote_number:
-            raise QuoteExportError("Formal SpaceOne quote Excel requires an official_quote_number.")
         if not snapshot.issue_date:
             raise QuoteExportError("Formal SpaceOne quote Excel requires issue_date.")
         if not snapshot.valid_until:
@@ -321,8 +320,6 @@ def export_spaceone_quote_pdf(
         generated_by=generated_by,
     )
     if purpose == ExportPurpose.FORMAL:
-        if not bundle.official_quote_number:
-            raise QuoteExportError("Formal SpaceOne quote PDF requires an official_quote_number.")
         if not snapshot.issue_date:
             raise QuoteExportError("Formal SpaceOne quote PDF requires issue_date.")
         if not snapshot.valid_until:
@@ -453,11 +450,11 @@ def assert_spaceone_excel_pdf_match(excel_path: Path, pdf_path: Path, document) 
     excel_values = [cell.value for row in sheet.iter_rows() for cell in row]
     pdf_text = extract_pdf_text(pdf_path)
     comparable = formal_quote_comparable(document)
-    if comparable["quote_number"] not in excel_values and comparable["quote_number"] not in " ".join(
+    if comparable["quote_number"] and comparable["quote_number"] not in excel_values and comparable["quote_number"] not in " ".join(
         str(item) for item in excel_values if item is not None
     ):
         raise QuoteExportError("Excel quote number does not match FormalQuoteDocument.")
-    if comparable["quote_number"] not in pdf_text:
+    if comparable["quote_number"] and comparable["quote_number"] not in pdf_text:
         raise QuoteExportError("PDF quote number does not match FormalQuoteDocument.")
     if comparable["customer_name"] and f"{comparable['customer_name']} 御中" not in excel_values:
         raise QuoteExportError("Excel customer does not match FormalQuoteDocument.")
@@ -777,7 +774,8 @@ def _write_spaceone_quote_sheet(
     purpose: ExportPurpose,
     document,
 ) -> None:
-    quote_number = document.quote_number or bundle.official_quote_number or bundle.quote_number_candidate or ""
+    # Only an official number is shown; an internal ID is never printed in its place.
+    quote_number = document.quote_number or bundle.official_quote_number or ""
     if purpose == ExportPurpose.DEVELOPMENT:
         quote_number = f"{quote_number}（開発用）"
     title_font = Font(bold=True, size=18)
@@ -915,7 +913,7 @@ def _validate_spaceone_excel(
         raise QuoteExportError("SpaceOne quote Excel is missing the required structure.")
     if snapshot.total_jpy not in flat or snapshot.subtotal_ex_tax_jpy not in flat or snapshot.tax_jpy not in flat:
         raise QuoteExportError("SpaceOne quote Excel totals do not match Approved Snapshot.")
-    if purpose == ExportPurpose.FORMAL and bundle.official_quote_number not in flat:
+    if purpose == ExportPurpose.FORMAL and bundle.official_quote_number and bundle.official_quote_number not in flat:
         raise QuoteExportError("Formal SpaceOne quote Excel must contain the official quote number.")
     if purpose == ExportPurpose.FORMAL:
         if not _excel_date_cell_matches(sheet["B9"], snapshot.issue_date):

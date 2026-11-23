@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from models.enums import (
     CaseCloseReason,
@@ -1211,11 +1211,13 @@ class IssuerSnapshot(BaseModel):
 
 
 class GlobalShippingSelection(BaseModel):
-    """International shipping chosen from the Manual Shipping Reference Master, frozen into the quote.
+    """One international shipping row chosen from the GlobalShipping reference master, frozen into the quote.
 
-    master_* keep the reference value as selected; actual_rate_usd is the DT shipping cost used for the
-    quote (master value unless a person adjusted it). The customer price defaults to cost x the QUOTE_CALC
-    shipping markup and is overridden only explicitly, with a reason.
+    master_* keep the reference value (per package) as selected; actual_rate_usd is the DT shipping cost per
+    package used for the quote (master value unless a person adjusted it). quantity is the number of
+    packages (個口数). cost_jpy and the customer price are for the whole row: cost = actual_rate_usd x
+    quantity x rate, customer = cost x the QUOTE_CALC shipping markup, rounded with the customer price rule,
+    and overridden only explicitly, with a reason.
     """
 
     shipping_rule_id: str
@@ -1226,6 +1228,7 @@ class GlobalShippingSelection(BaseModel):
     master_effective_from: Optional[str] = None
     master_source_reference: Optional[str] = None
     actual_rate_usd: float
+    quantity: int = 1
     rate_adjusted: bool = False
     rate_adjustment_reason: Optional[str] = None
     exchange_rate: Optional[float] = None
@@ -1237,6 +1240,16 @@ class GlobalShippingSelection(BaseModel):
     customer_price_reason: Optional[str] = None
     selected_by: Optional[str] = None
     selected_at: Optional[datetime] = None
+
+
+def _single_global_shipping_as_row(data):
+    """Saved data with the pre-3B.1.3 single `global_shipping` is read as one row of 1 package (values kept)."""
+    if isinstance(data, dict) and data.get("global_shipping") is not None:
+        data = dict(data)
+        single = data.pop("global_shipping")
+        if not data.get("global_shipping_lines"):
+            data["global_shipping_lines"] = [single]
+    return data
 
 
 class SpectraShippingEntry(BaseModel):
@@ -1297,10 +1310,19 @@ class QuoteDraft(BaseModel):
     official_quote_number: Optional[str] = None
     approved_by: Optional[str] = None
     approved_at: Optional[datetime] = None
-    # PORTAL-3B.1: drafts made by the one-screen builder, and their frozen GlobalShipping choice.
+    # PORTAL-3B.1: drafts made by the one-screen builder, and their frozen shipping choices.
     builder: Optional[str] = None
+    # PORTAL-3B.1.3: DT / PT international shipping rows (several kinds, each with its 個口数).
+    # global_shipping is the single choice of quotes saved before 3B.1.3; it is read into
+    # global_shipping_lines as one row of 1 package and is never written again.
+    global_shipping_lines: list[GlobalShippingSelection] = Field(default_factory=list)
     global_shipping: Optional[GlobalShippingSelection] = None
     spectra_shipping: Optional[SpectraShippingEntry] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_single_global_shipping(cls, data):
+        return _single_global_shipping_as_row(data)
 
 
 class CostScenario(BaseModel):
@@ -1432,8 +1454,17 @@ class ApprovedQuoteSnapshot(BaseModel):
     parent_quote_id: Optional[str] = None
     relation_type: Optional[str] = None
     builder: Optional[str] = None
+    # PORTAL-3B.1.3: DT / PT international shipping rows (several kinds, each with its 個口数).
+    # global_shipping is the single choice of quotes saved before 3B.1.3; it is read into
+    # global_shipping_lines as one row of 1 package and is never written again.
+    global_shipping_lines: list[GlobalShippingSelection] = Field(default_factory=list)
     global_shipping: Optional[GlobalShippingSelection] = None
     spectra_shipping: Optional[SpectraShippingEntry] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_single_global_shipping(cls, data):
+        return _single_global_shipping_as_row(data)
 
 
 class InternalQuoteTransferRow(BaseModel):

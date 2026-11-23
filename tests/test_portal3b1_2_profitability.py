@@ -77,7 +77,7 @@ def test_move_line_up_and_down():
     assert draft.customer_lines[-1].line_kind == "SHIPPING"
     assert [line.display_order for line in draft.customer_lines] == [1, 2, 3, 4]
     assert sb.customer_summary(draft)["shipping"] == (
-        draft.global_shipping.customer_price_jpy + draft.spectra_shipping.customer_price_jpy
+        draft.global_shipping_lines[0].customer_price_jpy + draft.spectra_shipping.customer_price_jpy
     )
 
 

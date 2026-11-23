@@ -150,7 +150,7 @@ def test_manual_price_keeps_standard_price_and_reason():
 def test_global_shipping_cost_is_actual_and_customer_is_times_markup():
     draft = _draft()
     sb.select_global_shipping(draft, _large_box(), selected_by="sales@example.com")
-    selection = draft.global_shipping
+    selection = draft.global_shipping_lines[0]
     cost = 2922.15 * RATE
     assert selection.master_rate_usd == pytest.approx(2922.15)
     assert selection.actual_rate_usd == pytest.approx(2922.15)
@@ -168,7 +168,7 @@ def test_manual_shipping_adjustment_keeps_master_value_and_reason():
         sb.adjust_global_shipping(draft, actual_rate_usd=3000.0, rate_reason="")
 
     sb.adjust_global_shipping(draft, actual_rate_usd=3000.0, rate_reason="DT見積 2026-11 による")
-    selection = draft.global_shipping
+    selection = draft.global_shipping_lines[0]
     assert selection.master_rate_usd == pytest.approx(2922.15)
     assert (selection.actual_rate_usd, selection.rate_adjusted) == (3000.0, True)
     assert selection.rate_adjustment_reason == "DT見積 2026-11 による"
@@ -215,7 +215,7 @@ def test_exchange_rate_change_reprices_standard_lines_and_shipping():
     assert draft.exchange_rate == 170.0
     assert line.final_sales_price_jpy == line.standard_sales_price_candidate_jpy
     assert draft.shipping_lines[0].cost_jpy == pytest.approx(2922.15 * 170)
-    assert draft.global_shipping.customer_price_jpy == round_customer_price_jpy(2922.15 * 170 * 1.2)
+    assert draft.global_shipping_lines[0].customer_price_jpy == round_customer_price_jpy(2922.15 * 170 * 1.2)
 
 
 # ---- snapshot -------------------------------------------------------------------------------------
@@ -226,7 +226,7 @@ def test_saved_quote_does_not_follow_master_or_shipping_updates():
     sb.select_global_shipping(draft, _large_box())
     repo = SqliteQuoteRepository()
     repo.save_draft(draft)
-    before = (draft.subtotal_ex_tax_jpy, draft.economics_result.total_landed_cost_jpy, draft.global_shipping.cost_jpy)
+    before = (draft.subtotal_ex_tax_jpy, draft.economics_result.total_landed_cost_jpy, draft.global_shipping_lines[0].cost_jpy)
 
     changed = official_dt40_style_book()
     workbook = load_workbook(changed)
@@ -237,14 +237,14 @@ def test_saved_quote_does_not_follow_master_or_shipping_updates():
     ShippingRuleRepository().save_standard_global_rate(ShippingType.LARGE_BOX, rate_usd=9999, effective_from="2027-01-01")
 
     loaded = SqliteQuoteRepository().get_draft(draft.quote_draft_id).draft
-    after = (loaded.subtotal_ex_tax_jpy, loaded.economics_result.total_landed_cost_jpy, loaded.global_shipping.cost_jpy)
+    after = (loaded.subtotal_ex_tax_jpy, loaded.economics_result.total_landed_cost_jpy, loaded.global_shipping_lines[0].cost_jpy)
     assert after == before
-    assert loaded.global_shipping.master_rate_usd == pytest.approx(2922.15)
+    assert loaded.global_shipping_lines[0].master_rate_usd == pytest.approx(2922.15)
     # Editing a kept line still uses its own frozen price, not the new master.
     sb.set_quantity(loaded, loaded.configuration_lines[0].line_id, 1)
     assert loaded.configuration_lines[0].dealer_price_usd == pytest.approx(10434.6)
     sb.sync_after_rate_change(loaded)
-    assert loaded.global_shipping.cost_jpy == pytest.approx(2922.15 * RATE)
+    assert loaded.global_shipping_lines[0].cost_jpy == pytest.approx(2922.15 * RATE)
 
 
 # ---- approval / revision / exports -------------------------------------------------------------
@@ -267,7 +267,7 @@ def test_builder_quote_approves_exports_and_revises_with_frozen_shipping(tmp_pat
     approved, snapshot = _approved(draft)
 
     assert snapshot.builder == sb.SIMPLE_BUILDER
-    assert snapshot.global_shipping.actual_rate_usd == pytest.approx(2922.15)
+    assert snapshot.global_shipping_lines[0].actual_rate_usd == pytest.approx(2922.15)
     with pytest.raises(ValueError):
         sb.set_quantity(approved, approved.configuration_lines[0].line_id, 2)
     for exporter in (export_spaceone_quote_pdf, export_spaceone_quote_excel, export_internal_calc_excel, export_moneyforward_tsv):
@@ -278,9 +278,9 @@ def test_builder_quote_approves_exports_and_revises_with_frozen_shipping(tmp_pat
 
     revision = create_revision_draft(snapshot)
     assert revision.builder == sb.SIMPLE_BUILDER
-    assert revision.global_shipping.shipping_rule_id == snapshot.global_shipping.shipping_rule_id
+    assert revision.global_shipping_lines[0].shipping_rule_id == snapshot.global_shipping_lines[0].shipping_rule_id
     sb.set_quantity(revision, revision.configuration_lines[0].line_id, 2)
-    assert revision.global_shipping.customer_price_jpy == snapshot.global_shipping.customer_price_jpy
+    assert revision.global_shipping_lines[0].customer_price_jpy == snapshot.global_shipping_lines[0].customer_price_jpy
     _approved(revision, number="SB-001")
     repo = SqliteQuoteRepository()
     assert repo.get_draft(approved.quote_draft_id, 1).draft.status == QuoteDraftStatus.SUPERSEDED
@@ -305,7 +305,9 @@ def test_ui_builder_is_the_default_one_screen_page_without_steps():
     assert any(item.key == "simple_customer" for item in at.text_input)
     assert any(item.key == "simple_search" for item in at.text_input)
     assert not any((item.key or "").startswith("sidebar_quote_step_") for item in at.sidebar.button)
-    assert any(item.key == "simple_open_legacy" for item in at.button)
+    # PORTAL-3B.1.3: no entry to the legacy screen on the new quote screen.
+    assert not any(item.key == "simple_open_legacy" for item in at.button)
+    assert not any("従来の詳細画面" in (item.label or "") for item in at.expander)
 
 
 def test_ui_quantity_delete_shipping_and_summary():
@@ -325,29 +327,29 @@ def test_ui_quantity_delete_shipping_and_summary():
     key = f"simple_shipping_{current.quote_draft_id}_{current.quote_version}"
     rule_id = _large_box().rule.shipping_rule_id
     at.selectbox(key=key).set_value(rule_id).run()
+    at.button(key=f"simple_ship_add_{current.quote_draft_id}_{current.quote_version}").click().run()
     _drop_stale_widgets(at)
     assert not at.exception
     updated = at.session_state["quote_draft"]
-    assert updated.global_shipping.shipping_rule_id == rule_id
+    assert updated.global_shipping_lines[0].shipping_rule_id == rule_id
     labels = [item.label for item in at.metric]
     assert {"見積額（税抜）", "税抜見積額", "原価合計", "粗利"} <= set(labels)
     # PORTAL-3B.1.2: 原価率 / 粗利率 sit under 原価合計 / 粗利.
     texts = [item.value for item in at.markdown]
     assert any(text.startswith("**原価率 ") for text in texts) and any(text.startswith("**粗利率 ") for text in texts)
     stored = SqliteQuoteRepository().get_draft(updated.quote_draft_id).draft
-    assert stored.global_shipping.shipping_rule_id == rule_id
+    assert stored.global_shipping_lines[0].shipping_rule_id == rule_id
 
 
 def test_ui_approve_and_export_on_the_same_page():
-    from ui.quote_workspace import official_number_widget_key
-
     draft = _draft()
     sb.select_global_shipping(draft, _large_box())
     at = _open_builder(draft)
     for key in ("confirm_configuration", "confirm_presentation", "confirm_sales_price", "confirm_remarks"):
         at.checkbox(key=key).set_value(True).run()
     at.button(key="check_quote_approval").click().run()
-    at.text_input(key=official_number_widget_key(draft)).set_value("UI-SB-1").run()
+    # PORTAL-3B.1.3: approved without an official quote number (issued later via MoneyForward).
+    assert not [item.key for item in at.text_input if "official_quote_number" in (item.key or "")]
     at.button(key="approve_quote_snapshot").click().run()
     _drop_stale_widgets(at)
 
@@ -355,11 +357,12 @@ def test_ui_approve_and_export_on_the_same_page():
     approved = at.session_state["quote_draft"]
     assert approved.status == QuoteDraftStatus.APPROVED
     assert approved.builder == sb.SIMPLE_BUILDER
+    assert approved.official_quote_number is None
     assert any(item.key == "export_spaceone_pdf" for item in at.button)
     assert not any((item.key or "").startswith("sidebar_quote_step_") for item in at.sidebar.button)
 
 
-def test_ui_legacy_drafts_and_spectra_stay_on_the_legacy_screen():
+def test_ui_legacy_drafts_still_open_on_the_legacy_screen():
     from tests.test_quote_builder import _photon_draft
 
     at = _start_app()
@@ -368,11 +371,10 @@ def test_ui_legacy_drafts_and_spectra_stay_on_the_legacy_screen():
     assert any((item.key or "").startswith("sidebar_quote_step_") for item in at.sidebar.button)
     assert any(item.key == "quote_back_to_simple" for item in at.button)
 
-    at = _open_builder()
-    at.button(key="simple_open_legacy").click().run()
-    _drop_stale_widgets(at)
-    assert any((item.key or "").startswith("spectra_quote") for item in list(at.button) + list(at.text_input))
-    assert any(item.key == "generic_quote_create" for item in at.button)
+    # A legacy draft opened (e.g. from the quote list) still shows the legacy screen and its controls.
+    assert any(item.key == "check_quote_approval" for item in at.button) or any(
+        (item.key or "").startswith("sidebar_quote_step_") for item in at.sidebar.button
+    )
     at.button(key="quote_back_to_simple").click().run()
     _drop_stale_widgets(at)
     assert any(item.key == "simple_customer" for item in at.text_input)

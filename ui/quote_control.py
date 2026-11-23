@@ -1094,10 +1094,8 @@ def _parse_landed_inputs(page, rate_text, tax_text, insurance_rate_text, domesti
     }
 
 
-LEGACY_SNAPSHOT_NO_NUMBER = (
-    "この承認版には正式見積番号が保存されていません（番号の固定化以前に承認された版です）。"
-    "正式帳票が必要な場合は、改訂版を作成し正式見積番号を入力して承認してください。"
-)
+# PORTAL-3B.1.3: an approved quote may have no official number yet (issued later via MoneyForward).
+OFFICIAL_NUMBER_NOT_ISSUED = "正式見積番号は未発番です。PDF・Excelの見積番号欄は空欄で出力されます。"
 
 
 def _render_file_export(page: dict, snapshot) -> None:
@@ -1110,9 +1108,9 @@ def _render_file_export(page: dict, snapshot) -> None:
     # The official number is fixed on the approved snapshot; it cannot be entered or changed here.
     official = None
     number = (snapshot.official_quote_number or "").strip()
-    st.write(f"{page['official_quote_number_label']}：{number or page['no_value']}")
+    st.write(f"{page['official_quote_number_label']}：{number or '未発番'}")
     if not number:
-        st.warning(LEGACY_SNAPSHOT_NO_NUMBER)
+        st.caption(OFFICIAL_NUMBER_NOT_ISSUED)
     generated_by = acting_person()
     st.caption(f"{page['generated_by_label']}：{generated_by}")
     columns = st.columns(2)

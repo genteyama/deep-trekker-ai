@@ -229,22 +229,29 @@ PRODUCT_KIND_ALL = "すべて"
 PRODUCT_KIND_PACKAGE = "機体・パッケージ"
 PRODUCT_KIND_OPTION = "オプション"
 PRODUCT_KINDS = (PRODUCT_KIND_ALL, PRODUCT_KIND_PACKAGE, PRODUCT_KIND_OPTION)
+# SPECTRA GOLD business rule: these two SKUs are the vehicle packages, every other SPECTRA GOLD SKU is an option.
+SPECTRA_PRICE_BOOK = "SPECTRA_GOLD"
+SPECTRA_PACKAGE_SKUS = frozenset({"SPECTRA0001", "SPECTRA0002"})
 
 
 def product_kind(row: dict) -> Optional[str]:
     """機体・パッケージ / オプション of a catalog row, or None when it cannot be told.
 
-    機体・パッケージ is exactly the 主要機体・パッケージ allowlist above (Price Book + SKU).
-    オプション is a row whose every occurrence in the manufacturer sheets sits under an options section
-    heading (OPTIONS / ADD ON / UPGRADE, parsers.price_book_parser.SECTION_HEADING_PREFIXES).
-    Everything else (spare parts, rows under several kinds of heading, SPECTRA, ...) stays unclassified.
+    DT40 / PT30: 機体・パッケージ is exactly the 主要機体・パッケージ allowlist above (Price Book + SKU).
+    オプション is a row listed under an options section heading (OPTIONS / ADD ON / UPGRADE,
+    parsers.price_book_parser.SECTION_HEADING_PREFIXES) in at least one of its places in the sheets: a part
+    the manufacturer offers as an option is an option even when it is also listed as a spare part.
+    SPECTRA GOLD: SPECTRA_PACKAGE_SKUS are 機体・パッケージ, all its other SKUs are オプション.
+    Everything else (spare parts only, CHOOSE only, no heading) stays unclassified and is listed under すべて.
     """
     from parsers.price_book_parser import SECTION_OPTIONS
 
-    if (row.get("Price Book"), row.get("SKU")) in _PRIMARY_KEYS:
+    book, sku = row.get("Price Book"), row.get("SKU")
+    if book == SPECTRA_PRICE_BOOK:
+        return PRODUCT_KIND_PACKAGE if sku in SPECTRA_PACKAGE_SKUS else PRODUCT_KIND_OPTION
+    if (book, sku) in _PRIMARY_KEYS:
         return PRODUCT_KIND_PACKAGE
-    kinds = row.get("_section_kinds") or ()
-    if kinds and all(kind == SECTION_OPTIONS for kind in kinds):
+    if SECTION_OPTIONS in (row.get("_section_kinds") or ()):
         return PRODUCT_KIND_OPTION
     return None
 

@@ -58,11 +58,18 @@ KNOWN_SHEET_HINTS = {
     "pt-van": ("PipeTrekker", "PT-VAN"),
     "ptvan": ("PipeTrekker", "PT-VAN"),
 }
-# Section headings inside a manufacturer sheet (a row holding only one text cell and no prices), e.g.
-# "PACKAGES", "OPTIONS - CUTTER", "SPARE PARTS - VIEWERS", "ADD ON - WHEEL KITS". The single place that maps
-# a heading to a section kind: the heading must start with the prefix (then end, a space or "-").
-# Any other heading (e.g. "BRIDGE BOX", "KITS", "-") ends the previous section: the rows under it get no
-# section kind, so nothing is guessed.
+# Section headings inside a manufacturer sheet, e.g. "PACKAGES", "OPTIONS - CUTTER", "SPARE PARTS - VIEWERS",
+# "ADD ON - WHEEL KITS". The manufacturer books write them in the column left of Part Number (column A),
+# alone on a row or next to the first product of the section. This table is the single place that maps a
+# heading to a section kind: the heading must start with the prefix (then end, a space or "-").
+# - A heading of punctuation only ("-", "--") is a separator: it ends the section (no kind after it).
+# - Any other heading is a sub-heading or note inside the current section ("BRIDGE BOX", "FLOATATION KIT",
+#   "vacuum heads", "16\" Reels need 8552 (Accessory carry case)", "CONTROLLER" under SPARE PARTS - ROV):
+#   the rows under it keep the current section kind. Before the first known heading there is no kind.
+# Words such as KIT / BATTERY / TETHER / REEL / SONAR / ACCESSORY are not kinds by themselves: in the books
+# they are the subject after "OPTIONS - " or "SPARE PARTS - " (e.g. "SPARE PARTS - BATTERIES AND CHARGERS").
+# A single text cell in Part Number is a product row (a SKU without prices), never a heading, unless the
+# text is a known heading.
 SECTION_PACKAGES = "PACKAGES"
 SECTION_OPTIONS = "OPTIONS"
 SECTION_SPARE_PARTS = "SPARE_PARTS"
@@ -235,7 +242,12 @@ def _parse_sheet(sheet, aliases, book_name, version, timestamp, result) -> None:
     for row_number, values in header["rows"]:
         heading = _section_heading(values, header["columns"])
         if heading is not None:
-            section_heading, section_kind = heading, section_kind_of(heading)
+            kind = section_kind_of(heading)
+            if kind is not None:
+                section_heading, section_kind = heading, kind
+            elif _is_separator(heading):
+                section_heading = section_kind = None
+            # Otherwise a sub-heading / note: the current section continues.
         item, occurrence, issues = _row_to_sku(
             values,
             header["columns"],
@@ -269,14 +281,33 @@ def section_kind_of(heading: Optional[str]) -> Optional[str]:
 
 
 def _section_heading(values, columns) -> Optional[str]:
-    """The text of a section heading row: one text cell and nothing else (no SKU price, no notes)."""
+    """The section heading text on a row, if any.
+
+    The heading column is any column left of Part Number that is not a mapped column; its text is the
+    heading even when the same row also holds a product. Otherwise a row holding one known heading
+    (SECTION_HEADING_PREFIXES) and nothing else is a heading too.
+    """
+    sku_index = columns.get("sku")
+    mapped = set(columns.values())
+    left = [
+        " ".join(str(value).split())
+        for index, value in enumerate(values)
+        if sku_index is not None and index < sku_index and index not in mapped and isinstance(value, str) and value.strip()
+    ]
+    if left:
+        return " ".join(left)
     for field in ("msrp", "dealer_price"):
         if _cell(values, columns.get(field)) not in (None, ""):
             return None
     filled = [value for value in values if value is not None and str(value).strip() != ""]
     if len(filled) != 1 or not isinstance(filled[0], str):
         return None
-    return " ".join(filled[0].split())
+    text = " ".join(filled[0].split())
+    return text if section_kind_of(text) is not None else None
+
+
+def _is_separator(heading: str) -> bool:
+    return not any(character.isalnum() for character in heading)
 
 
 def _find_header(sheet, aliases) -> Optional[dict]:

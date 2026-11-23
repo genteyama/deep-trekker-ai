@@ -30,7 +30,9 @@ def build_formal_quote_document(
     from agents.quote_export import resolve_official_quote_number
 
     # The number fixed on the approved snapshot always wins; a different explicit number is refused.
-    quote_number = resolve_official_quote_number(snapshot, official_quote_number) or snapshot.quote_number_candidate
+    # Without an official number (issued later via MoneyForward) the number stays empty: an internal ID
+    # (quote_number_candidate) is never used as the quote number.
+    quote_number = resolve_official_quote_number(snapshot, official_quote_number)
     issuer = None
     if snapshot.issuer_snapshot is not None:
         issuer = FormalQuoteIssuer(

@@ -102,8 +102,9 @@ def test_internal_excel_keeps_bundled_parts_and_metadata(tmp_path):
 
 def test_spaceone_quote_excel_hides_internal_cost_and_uses_snapshot_text(tmp_path):
     snapshot = _photon_snapshot()
-    with pytest.raises(QuoteExportError, match="official_quote_number"):
-        export_spaceone_quote_excel(snapshot, output_dir=tmp_path, purpose=ExportPurpose.FORMAL)
+    # PORTAL-3B.1.3: without an official number (issued later via MoneyForward) the number field is blank.
+    _bundle, unnumbered = export_spaceone_quote_excel(snapshot, output_dir=tmp_path / "unnumbered", purpose=ExportPurpose.FORMAL)
+    assert load_workbook(unnumbered)["見積書"]["B8"].value in (None, "")
     bundle, path = export_spaceone_quote_excel(
         snapshot,
         output_dir=tmp_path,

@@ -24,3 +24,13 @@ def reset_provider_runtime():
     reset_runtime_status()
     yield
     reset_runtime_status()
+
+
+@pytest.fixture(autouse=True)
+def clear_price_master_parse_cache():
+    # Parsed Active masters are kept per process (agents.price_master); every test starts empty.
+    from agents.price_master import clear_parse_cache
+
+    clear_parse_cache()
+    yield
+    clear_parse_cache()

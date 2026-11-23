@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Optional
 import logging
 from uuid import uuid4
 
@@ -19,7 +20,6 @@ from agents.quote_builder import (
     apply_final_price,
     apply_issue_date,
     apply_lead_time_text,
-    apply_official_quote_number,
     apply_presentation_mode,
     apply_selected_remarks,
     apply_shipping_final_price,
@@ -108,10 +108,12 @@ from ui.quote_steps import (
 
 logger = logging.getLogger(__name__)
 
-OFFICIAL_NUMBER_LABEL = "正式見積番号（必須）"
-OFFICIAL_NUMBER_CAPTION = "顧客へ提出する見積番号です。承認時に固定され、PDF・Excel・MoneyForward出力すべてで使用されます。承認後は変更できません。"
-OFFICIAL_NUMBER_REVISION_CAPTION = "前の版の正式見積番号を引き継いでいます。必要に応じて承認前に変更できます（例：xxxx-02）。"
-OFFICIAL_NUMBER_REQUIRED = "承認するには正式見積番号を入力してください。"
+# PORTAL-3B.1.3: the official quote number is issued later by MoneyForward (API, future) and stored in
+# official_quote_number. It is not entered on this screen and is not needed to approve.
+OFFICIAL_NUMBER_LABEL = "正式見積番号"
+OFFICIAL_NUMBER_PENDING = "正式見積番号：未発番（MoneyForward連携で発番予定。番号なしで承認・出力できます）"
+OFFICIAL_NUMBER_INHERITED = "正式見積番号：{number}（前の版から引き継ぎ）"
+OFFICIAL_NUMBER_FIXED = "正式見積番号：{number}"
 
 
 def render_quote_workspace(page: dict, helpers: dict) -> None:
@@ -937,9 +939,7 @@ def _render_step_review(page: dict, helpers, draft, snapshot) -> None:
         and confirm_sales_price
         and confirm_remarks
     )
-    if ready_to_approve and not official_number:
-        st.info(OFFICIAL_NUMBER_REQUIRED)
-    if ready_to_approve and official_number and st.button(
+    if ready_to_approve and st.button(
         page["approve_snapshot_button"], key="approve_quote_snapshot", type="primary"
     ):
         _approve_and_persist(
@@ -980,35 +980,20 @@ def _render_step_review(page: dict, helpers, draft, snapshot) -> None:
         st.rerun()
 
 
-def _render_official_quote_number(draft) -> str:
-    """Official quote number: entered before approval, fixed afterwards."""
-    if draft.status in {QuoteDraftStatus.APPROVED, QuoteDraftStatus.SUPERSEDED}:
-        st.text_input(
-            OFFICIAL_NUMBER_LABEL,
-            value=draft.official_quote_number or "",
-            disabled=True,
-            key=f"official_quote_number_fixed_{draft.quote_draft_id}_{draft.quote_version}",
-        )
-        return (draft.official_quote_number or "").strip()
-    # One input per draft version, initialised from the draft (a revision starts with its parent's number).
-    value = st.text_input(
-        OFFICIAL_NUMBER_LABEL,
-        value=draft.official_quote_number or "",
-        key=official_number_widget_key(draft),
-    )
-    cleaned = (value or "").strip()
-    if cleaned != (draft.official_quote_number or ""):
-        apply_official_quote_number(draft, cleaned)
-        st.session_state["quote_draft"] = draft
-    caption = OFFICIAL_NUMBER_CAPTION
-    if draft.relation_type == QuoteLineageType.REVISION.value:
-        caption += " " + OFFICIAL_NUMBER_REVISION_CAPTION
-    st.caption(caption)
-    return cleaned
+def _render_official_quote_number(draft) -> Optional[str]:
+    """Shows the official quote number, if the quote has one; it is never entered here.
 
-
-def official_number_widget_key(draft) -> str:
-    return f"official_quote_number_{draft.quote_draft_id}_{draft.quote_version}"
+    A quote approved with a number keeps it, and a revision keeps its parent's number (as before). A new
+    quote has none until MoneyForward issues one. An internal ID is never shown as the number.
+    """
+    number = (draft.official_quote_number or "").strip() or None
+    if number is None:
+        st.caption(OFFICIAL_NUMBER_PENDING)
+    elif draft.status in {QuoteDraftStatus.APPROVED, QuoteDraftStatus.SUPERSEDED}:
+        st.caption(OFFICIAL_NUMBER_FIXED.format(number=number))
+    else:
+        st.caption(OFFICIAL_NUMBER_INHERITED.format(number=number))
+    return number
 
 
 def _approve_and_persist(
@@ -1017,7 +1002,7 @@ def _approve_and_persist(
     draft,
     validation,
     *,
-    official_number: str,
+    official_number: Optional[str],
     confirmations: dict,
     remarks,
     lead_time,

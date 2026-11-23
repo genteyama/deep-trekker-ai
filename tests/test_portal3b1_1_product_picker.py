@@ -22,18 +22,25 @@ def _dt40_book():
     return build_workbook(
         {
             "CONFIG": [["Dealer Retail:", "D_MSRP"], ["Discount Code:", "E_DT-40"]],
+            # Same layout as the manufacturer books: section headings in column A (left of Part Number),
+            # alone on a row or next to the section's first product.
             "PHOTON": [
                 HEADER,
-                [None, "PACKAGES"],
+                ["PACKAGES"],
                 [None, "9680-BASE", "PHOTON BASE PACKAGE", 17391, 10434.6, None],
                 [None, "9680-OLD", "PHOTON OLD PACKAGE", 15000, 9000, None],
-                [None, "OPTIONS - MISC"],
+                ["OPTIONS - MISC"],
                 [None, "9757-2", "BRIDGE BOX, ROV", 3280, 1968, None],
+                [None, "9511"],  # a Part Number without prices: a product row, not a heading
                 [None, "2535", "GAME PAD", 105, 105, None],
-                [None, "SPARE PARTS - MAJOR ASSEMBLIES"],
+                ["OPTIONS - BOTTOM SIDE", "8459", "POWER PACK ASY, PHOTON", 787, 472.2, "ONE (1) BATTERY PACK"],
+                ["SPARE PARTS - MAJOR ASSEMBLIES"],
                 [None, "8998", "CONTROLLER CABLE SUPPORT", 381, 228.6, None],
-                [None, "BRIDGE BOX"],
+                [None, "8459", "POWER PACK ASY, PHOTON", 787, 472.2, "ONE (1) BATTERY PACK"],
+                ["BRIDGE BOX"],  # sub-heading: the spare parts section continues
                 [None, "7000", "UNKNOWN SECTION ITEM", 50, 30, None],
+                ["--"],  # separator: no section after it
+                [None, "7100", "AFTER SEPARATOR", 20, 12, None],
             ],
         }
     )
@@ -45,9 +52,9 @@ def _pt30_book():
             "CONFIG": [["Dealer Retail:", "D_MSRP"], ["Discount Code:", "E_PT-30"]],
             "A-200": [
                 PT_HEADER,
-                [None, "PACKAGES"],
+                ["PACKAGES"],
                 [None, "10800S", "A-200S", 52500, 36750, None],
-                [None, "ADD ON - WHEEL KITS"],
+                ["ADD ON - WHEEL KITS"],
                 [None, "11490", "ALL TERRAIN WHEELS", 1945, 1361.5, None],
             ],
         }
@@ -140,8 +147,10 @@ ALL = {
     ("DT40", "9680-OLD"),
     ("DT40", "9757-2"),
     ("DT40", "2535"),
+    ("DT40", "8459"),
     ("DT40", "8998"),
     ("DT40", "7000"),
+    ("DT40", "7100"),
     ("PT30", "10800S"),
     ("PT30", "11490"),
     ("SPECTRA_GOLD", "SPECTRA0001"),
@@ -155,26 +164,33 @@ ALL = {
 def test_product_kind_all_packages_and_options():
     assert _filter(kind="すべて") == ALL
     assert _filter() == ALL
-    # 機体・パッケージ is the price list's 主要機体・パッケージ allowlist (9680-OLD sits under PACKAGES but
-    # is not on it, so it is not guessed into a kind).
-    assert _filter(kind="機体・パッケージ") == {("DT40", "9680-BASE"), ("PT30", "10800S")}
-    # オプション: rows under OPTIONS / ADD ON headings only. Spare parts, unknown headings and SPECTRA
-    # are unclassified and only listed under すべて.
-    assert _filter(kind="オプション") == {("DT40", "9757-2"), ("DT40", "2535"), ("PT30", "11490")}
+    # 機体・パッケージ: the price list's 主要機体・パッケージ allowlist (9680-OLD sits under PACKAGES but
+    # is not on it, so it is not guessed into a kind) and SPECTRA0001 / SPECTRA0002.
+    assert _filter(kind="機体・パッケージ") == {("DT40", "9680-BASE"), ("PT30", "10800S"), ("SPECTRA_GOLD", "SPECTRA0001")}
+    # オプション: listed under an OPTIONS / ADD ON heading at least once (8459 is also a spare part), and
+    # every other SPECTRA GOLD SKU. Spare parts only (8998, 7000 under the BRIDGE BOX sub-heading) and rows
+    # after a separator (7100) are only listed under すべて.
+    assert _filter(kind="オプション") == {
+        ("DT40", "9757-2"),
+        ("DT40", "2535"),
+        ("DT40", "8459"),
+        ("PT30", "11490"),
+        ("SPECTRA_GOLD", "SPECTRA001"),
+    }
 
 
 def test_product_kind_matches_the_price_list_package_allowlist():
     from ui.price_catalog import build_primary_package_rows, product_kind
 
-    rows = _rows()
+    rows = [row for row in _rows() if row["Price Book"] != "SPECTRA_GOLD"]
     primary = _skus(build_primary_package_rows(rows))
     assert {key for key, row in ((( row["Price Book"], row["SKU"]), row) for row in rows) if product_kind(row) == "機体・パッケージ"} == primary
 
 
 def test_product_kind_with_keyword_and_price_book():
     assert _filter(kind="オプション", keyword="wheel") == {("PT30", "11490")}
-    assert _filter(kind="オプション", keyword="PHOTON") == {("DT40", "9757-2"), ("DT40", "2535")}  # Sheet name
-    assert _filter(kind="オプション", price_books=["DT40"]) == {("DT40", "9757-2"), ("DT40", "2535")}
+    assert _filter(kind="オプション", keyword="PHOTON") == {("DT40", "9757-2"), ("DT40", "2535"), ("DT40", "8459")}  # Sheet name
+    assert _filter(kind="オプション", price_books=["DT40"]) == {("DT40", "9757-2"), ("DT40", "2535"), ("DT40", "8459")}
     assert _filter(kind="機体・パッケージ", price_books=["PT30"], keyword="a-200") == {("PT30", "10800S")}
 
 
@@ -277,15 +293,15 @@ def _count_caption(at):
 def test_ui_product_kind_and_price_book_controls():
     at = _open_builder()
     assert list(at.radio(key="simple_product_kind").options) == ["すべて", "機体・パッケージ", "オプション"]
-    assert _count_caption(at).startswith("10 / 10 件 ・ すべて ・ 全Price Book")
+    assert _count_caption(at).startswith("12 / 12 件 ・ すべて ・ 全Price Book")
     group = at.button_group(key="simple_price_books")
     assert [option.content for option in group.options] == ["DT40", "PT30", "SPECTRA GOLD"]
 
     at.radio(key="simple_product_kind").set_value("オプション").run()
-    assert _count_caption(at).startswith("3 / 10 件 ・ オプション")
+    assert _count_caption(at).startswith("5 / 12 件 ・ オプション")
     at.button_group(key="simple_price_books").set_value(["PT30"]).run()
-    assert _count_caption(at).startswith("1 / 10 件 ・ オプション ・ PT30")
+    assert _count_caption(at).startswith("1 / 12 件 ・ オプション ・ PT30")
     at.radio(key="simple_product_kind").set_value("すべて").run()
     at.button_group(key="simple_price_books").set_value(["DT40", "SPECTRA_GOLD"]).run()
-    assert _count_caption(at).startswith("8 / 10 件 ・ すべて ・ DT40 + SPECTRA GOLD")
+    assert _count_caption(at).startswith("10 / 12 件 ・ すべて ・ DT40 + SPECTRA GOLD")
     assert not at.exception

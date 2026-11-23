@@ -241,12 +241,12 @@ def remove_line(draft: QuoteDraft, line_id: str) -> QuoteDraft:
         ]
     draft.adjustments = [item for item in draft.adjustments if item.line_id != line_id]
     books = price_books_in(draft)
-    if books and draft.global_shipping is not None and not books & set(GLOBAL_SHIPPING_PRICE_BOOKS):
+    if books and draft.global_shipping_lines and not books & set(GLOBAL_SHIPPING_PRICE_BOOKS):
         # The last DT / PT product is gone: its GlobalShipping no longer belongs to the quote.
-        draft.global_shipping = None
+        draft.global_shipping_lines = []
     if books and draft.spectra_shipping is not None and SPECTRA_PRICE_BOOK not in books:
         draft.spectra_shipping = None
-    if draft.global_shipping is None and draft.spectra_shipping is None and draft.shipping_lines:
+    if not draft.global_shipping_lines and draft.spectra_shipping is None and draft.shipping_lines:
         draft.shipping_lines = []
     return refresh_quote_draft(draft) if not draft.shipping_lines else apply_shipping(draft)
 
@@ -323,6 +323,30 @@ def set_customer_info(draft: QuoteDraft, customer: str, title: Optional[str]) ->
 # ---- GlobalShipping ------------------------------------------------------------------------------
 
 
+def add_global_shipping(
+    draft: QuoteDraft,
+    rate,
+    *,
+    quantity: int = 1,
+    selected_by: Optional[str] = None,
+) -> QuoteDraft:
+    """Add packages of one GlobalShipping kind (ActiveStandardShippingRate) to the DT / PT shipping rows.
+
+    The same kind (shipping master ID) already on the quote gets its 個口数 increased; it keeps the values it
+    was frozen with. Another kind becomes a new row frozen with the current reference value.
+    """
+    ensure_draft_editable(draft)
+    _require_dt_pt(draft)
+    count = _quantity(quantity)
+    rule = rate.rule
+    existing = _shipping_row(draft, rule.shipping_rule_id, required=False)
+    if existing is not None:
+        existing.quantity += count
+        return apply_shipping(draft)
+    draft.global_shipping_lines = list(draft.global_shipping_lines) + [_frozen_row(rule, count, selected_by)]
+    return apply_shipping(draft)
+
+
 def select_global_shipping(
     draft: QuoteDraft,
     rate,
@@ -332,35 +356,33 @@ def select_global_shipping(
     customer_price_jpy: Optional[float] = None,
     customer_reason: Optional[str] = None,
     selected_by: Optional[str] = None,
+    quantity: int = 1,
 ) -> QuoteDraft:
-    """Freeze a GlobalShipping reference (ActiveStandardShippingRate) into the draft as its shipping cost.
-
-    actual_rate_usd / customer_price_jpy are explicit human adjustments and each needs a reason.
-    """
+    """Use exactly one GlobalShipping row (replacing any rows), optionally adjusted with reasons."""
     ensure_draft_editable(draft)
-    if not price_books_in(draft) & set(GLOBAL_SHIPPING_PRICE_BOOKS):
-        # GlobalShipping is the DT / PT reference; a SPECTRA-only quote never uses it.
-        raise SimpleQuoteError("GLOBAL_SHIPPING_NEEDS_DT_PT")
-    rule = rate.rule
-    master = float(rule.rate_usd)
-    actual, adjusted = _actual_rate(master, actual_rate_usd, rate_reason)
-    selection = GlobalShippingSelection(
-        shipping_rule_id=rule.shipping_rule_id,
-        shipping_type=rule.shipping_type.value if rule.shipping_type else None,
-        label=_shipping_label(rule),
-        charge_basis=rule.charge_basis.value if rule.charge_basis else None,
-        master_rate_usd=master,
-        master_effective_from=rule.effective_from.date().isoformat() if rule.effective_from else None,
-        master_source_reference=rule.source_reference,
-        actual_rate_usd=actual,
-        rate_adjusted=adjusted,
-        rate_adjustment_reason=(rate_reason or "").strip() or None if adjusted else None,
-        selected_by=selected_by,
-        selected_at=datetime.now(timezone.utc),
-    )
-    draft.global_shipping = selection
-    _set_customer_override(draft, customer_price_jpy, customer_reason)
-    return apply_global_shipping(draft)
+    _require_dt_pt(draft)
+    row = _frozen_row(rate.rule, _quantity(quantity), selected_by)
+    actual, adjusted = _actual_rate(row.master_rate_usd, actual_rate_usd, rate_reason)
+    row.actual_rate_usd = actual
+    row.rate_adjusted = adjusted
+    row.rate_adjustment_reason = (rate_reason or "").strip() or None if adjusted else None
+    _set_customer_override(row, customer_price_jpy, customer_reason)
+    draft.global_shipping_lines = [row]
+    return apply_shipping(draft)
+
+
+def set_global_shipping_quantity(draft: QuoteDraft, shipping_rule_id: str, quantity: int) -> QuoteDraft:
+    """Change the 個口数 of one shipping row (1 or more). A customer price set by hand is kept as it is."""
+    ensure_draft_editable(draft)
+    _shipping_row(draft, shipping_rule_id).quantity = _quantity(quantity)
+    return apply_shipping(draft)
+
+
+def remove_global_shipping(draft: QuoteDraft, shipping_rule_id: str) -> QuoteDraft:
+    ensure_draft_editable(draft)
+    _shipping_row(draft, shipping_rule_id)
+    draft.global_shipping_lines = [item for item in draft.global_shipping_lines if item.shipping_rule_id != shipping_rule_id]
+    return apply_shipping(draft)
 
 
 def price_books_in(draft: Optional[QuoteDraft]) -> set[str]:
@@ -375,28 +397,35 @@ def price_books_in(draft: Optional[QuoteDraft]) -> set[str]:
 
 def adjust_global_shipping(
     draft: QuoteDraft,
+    shipping_rule_id: Optional[str] = None,
     *,
     actual_rate_usd: Optional[float] = None,
     rate_reason: Optional[str] = None,
     customer_price_jpy: Optional[float] = None,
     customer_reason: Optional[str] = None,
 ) -> QuoteDraft:
-    """Change the DT shipping cost and/or the customer shipping price of the current selection."""
+    """Change the DT shipping cost per package and/or the customer price of one shipping row.
+
+    The master value stays on the row. Without shipping_rule_id the quote must have exactly one row.
+    """
     ensure_draft_editable(draft)
-    selection = draft.global_shipping
-    if selection is None:
-        raise SimpleQuoteError("SHIPPING_NOT_SELECTED")
-    actual, adjusted = _actual_rate(selection.master_rate_usd, actual_rate_usd, rate_reason)
-    selection.actual_rate_usd = actual
-    selection.rate_adjusted = adjusted
-    selection.rate_adjustment_reason = (rate_reason or "").strip() or None if adjusted else None
-    _set_customer_override(draft, customer_price_jpy, customer_reason)
-    return apply_global_shipping(draft)
+    if shipping_rule_id is None:
+        if len(draft.global_shipping_lines) != 1:
+            raise SimpleQuoteError("SHIPPING_NOT_SELECTED")
+        row = draft.global_shipping_lines[0]
+    else:
+        row = _shipping_row(draft, shipping_rule_id)
+    actual, adjusted = _actual_rate(row.master_rate_usd, actual_rate_usd, rate_reason)
+    _set_customer_override(row, customer_price_jpy, customer_reason)
+    row.actual_rate_usd = actual
+    row.rate_adjusted = adjusted
+    row.rate_adjustment_reason = (rate_reason or "").strip() or None if adjusted else None
+    return apply_shipping(draft)
 
 
 def clear_global_shipping(draft: QuoteDraft) -> QuoteDraft:
     ensure_draft_editable(draft)
-    draft.global_shipping = None
+    draft.global_shipping_lines = []
     return apply_shipping(draft)
 
 
@@ -409,7 +438,7 @@ def set_spectra_shipping(
 ) -> QuoteDraft:
     """SPECTRA GOLD international shipping (USD) entered by a person, with a required reason.
 
-    Kept apart from the DT / PT GlobalShipping choice; both are separate shipping lines of the quote.
+    Kept apart from the DT / PT GlobalShipping rows; each is its own shipping line of the quote.
     """
     ensure_draft_editable(draft)
     if SPECTRA_PRICE_BOOK not in price_books_in(draft):
@@ -441,41 +470,42 @@ def apply_global_shipping(draft: QuoteDraft) -> QuoteDraft:
 
 
 def apply_shipping(draft: QuoteDraft) -> QuoteDraft:
-    """Rebuild the shipping lines from the frozen DT / PT GlobalShipping choice and the SPECTRA entry.
+    """Rebuild the shipping lines from the frozen DT / PT GlobalShipping rows and the SPECTRA entry.
 
-    Each part is its own shipping line (cost = USD x rate, customer = the existing shipping line rule:
-    cost x QUOTE_CALC markup, customer-price rounding). The customer quote shows one 国際輸送費 line whose
-    amount is the sum of the parts, the same way the landed cost engine adds shipping line prices.
+    Each part is its own shipping line built by the existing shipping line rule: cost = USD per package x
+    個口数 x rate, customer = cost x QUOTE_CALC markup with the customer-price rounding (so Large x 2 is
+    rounded once, on its total). The customer quote shows one 国際輸送費 line whose amount is the sum of
+    the parts, the same way the landed cost engine adds shipping line prices.
     """
     ensure_draft_editable(draft)
-    selection = draft.global_shipping
+    rows = list(draft.global_shipping_lines)
     spectra = draft.spectra_shipping
-    if selection is None and spectra is None:
+    if not rows and spectra is None:
         draft.shipping_lines = []
         return refresh_quote_draft(draft)
     policy = draft.pricing_context.landed_cost_policy_snapshot
     if policy is None:
         raise SimpleQuoteError("POLICY_MISSING")
     lines = []
-    if selection is not None:
-        shipping_type = ShippingType(selection.shipping_type) if selection.shipping_type else ShippingType.CUSTOM
+    for row in rows:
+        shipping_type = ShippingType(row.shipping_type) if row.shipping_type else ShippingType.CUSTOM
         line = build_shipping_line(
             shipping_type,
-            1,
-            selection.actual_rate_usd,
+            row.quantity,
+            row.actual_rate_usd,
             draft.exchange_rate,
             policy,
             source_type=GLOBAL_SHIPPING_SOURCE,
-            source_reference=selection.shipping_rule_id,
-            rule_status="HUMAN_ADJUSTED" if selection.rate_adjusted else "APPROVED",
-            notes=selection.rate_adjustment_reason,
+            source_reference=row.shipping_rule_id,
+            rule_status="HUMAN_ADJUSTED" if row.rate_adjusted else "APPROVED",
+            notes=row.rate_adjustment_reason,
         )
-        selection.exchange_rate = draft.exchange_rate
-        selection.markup_multiplier = line.sales_markup_multiplier
-        selection.cost_jpy = line.cost_jpy
-        selection.auto_customer_price_jpy = line.sales_price_candidate_jpy
-        if not selection.customer_price_overridden:
-            selection.customer_price_jpy = line.sales_price_candidate_jpy
+        row.exchange_rate = draft.exchange_rate
+        row.markup_multiplier = line.sales_markup_multiplier
+        row.cost_jpy = line.cost_jpy
+        row.auto_customer_price_jpy = line.sales_price_candidate_jpy
+        if not row.customer_price_overridden:
+            row.customer_price_jpy = line.sales_price_candidate_jpy
         lines.append(line)
     if spectra is not None:
         line = build_shipping_line(
@@ -498,14 +528,14 @@ def apply_shipping(draft: QuoteDraft) -> QuoteDraft:
     refresh_quote_draft(draft)
     shipping = next((item for item in draft.customer_lines if item.line_kind == "SHIPPING"), None)
     if shipping is not None:
-        parts = [item.customer_price_jpy for item in (selection, spectra) if item is not None]
+        parts = [row.customer_price_jpy for row in rows] + ([spectra.customer_price_jpy] if spectra is not None else [])
         total = _sum(parts)
-        overridden = selection is not None and selection.customer_price_overridden
+        overridden = [row for row in rows if row.customer_price_overridden]
         shipping.unit_price_jpy = total
         shipping.amount_jpy = None if total is None else total * shipping.quantity
         shipping.pricing_source = SHIPPING_MANUAL_PRICING_SOURCE if overridden else SHIPPING_PRICING_SOURCE
-        shipping.human_adjusted = overridden
-        shipping.notes = selection.customer_price_reason if overridden else None
+        shipping.human_adjusted = bool(overridden)
+        shipping.notes = " / ".join(row.customer_price_reason for row in overridden if row.customer_price_reason) or None
     # Totals, tax and readiness follow the customer lines just set.
     from agents.quote_builder import _recalculate
 
@@ -514,12 +544,12 @@ def apply_shipping(draft: QuoteDraft) -> QuoteDraft:
 
 
 def shipping_breakdown(draft: QuoteDraft) -> dict:
-    """International shipping by origin: DT / PT (GlobalShipping) and SPECTRA GOLD (human input)."""
-    selection = draft.global_shipping
+    """International shipping by origin: DT / PT (GlobalShipping rows) and SPECTRA GOLD (human input)."""
+    rows = draft.global_shipping_lines
     spectra = draft.spectra_shipping
     return {
-        "dt_pt_cost": selection.cost_jpy if selection else None,
-        "dt_pt_customer": selection.customer_price_jpy if selection else None,
+        "dt_pt_cost": _sum(row.cost_jpy for row in rows) if rows else None,
+        "dt_pt_customer": _sum(row.customer_price_jpy for row in rows) if rows else None,
         "spectra_cost": spectra.cost_jpy if spectra else None,
         "spectra_customer": spectra.customer_price_jpy if spectra else None,
     }
@@ -570,7 +600,8 @@ def sync_after_rate_change(draft: QuoteDraft, standard_line_ids: Optional[Iterab
         ):
             ids.add(line.line_id)
     _use_standard_prices(draft, [line.line_id for line in draft.configuration_lines if line.line_id in ids])
-    stale = [item for item in (draft.global_shipping, draft.spectra_shipping) if item is not None and item.exchange_rate != draft.exchange_rate]
+    parts = [*draft.global_shipping_lines, *([draft.spectra_shipping] if draft.spectra_shipping is not None else [])]
+    stale = [item for item in parts if item.exchange_rate != draft.exchange_rate]
     if stale:
         return apply_shipping(draft)
     return draft
@@ -590,7 +621,7 @@ def customer_summary(draft: QuoteDraft) -> dict:
     return {
         "product_subtotal": products,
         "shipping": shipping,
-        "shipping_dt_pt": draft.global_shipping.customer_price_jpy if draft.global_shipping else None,
+        "shipping_dt_pt": shipping_breakdown(draft)["dt_pt_customer"],
         "shipping_spectra": draft.spectra_shipping.customer_price_jpy if draft.spectra_shipping else None,
         "subtotal_ex_tax": draft.subtotal_ex_tax_jpy,
         "tax_rate": draft.tax_rate,
@@ -616,7 +647,7 @@ def revenue_summary(draft: QuoteDraft) -> dict:
         "insurance": insurance,
         "import_tax": import_tax,
         "shipping": shipping,
-        "shipping_dt_pt": draft.global_shipping.cost_jpy if draft.global_shipping else None,
+        "shipping_dt_pt": shipping_breakdown(draft)["dt_pt_cost"],
         "shipping_spectra": draft.spectra_shipping.cost_jpy if draft.spectra_shipping else None,
         "total_cost": total_cost,
         "sales_ex_tax": sales,
@@ -742,8 +773,7 @@ def _actual_rate(master: float, actual_rate_usd, reason: Optional[str]) -> tuple
     return value, True
 
 
-def _set_customer_override(draft: QuoteDraft, amount, reason: Optional[str]) -> None:
-    selection = draft.global_shipping
+def _set_customer_override(selection: GlobalShippingSelection, amount, reason: Optional[str]) -> None:
     if amount is None:
         selection.customer_price_overridden = False
         selection.customer_price_reason = None
@@ -757,6 +787,42 @@ def _set_customer_override(draft: QuoteDraft, amount, reason: Optional[str]) -> 
     selection.customer_price_overridden = True
     selection.customer_price_jpy = float(amount)
     selection.customer_price_reason = reason.strip()
+
+
+def _require_dt_pt(draft: QuoteDraft) -> None:
+    if not price_books_in(draft) & set(GLOBAL_SHIPPING_PRICE_BOOKS):
+        # GlobalShipping is the DT / PT reference; a SPECTRA-only quote never uses it.
+        raise SimpleQuoteError("GLOBAL_SHIPPING_NEEDS_DT_PT")
+
+
+def _quantity(value) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise SimpleQuoteError("SHIPPING_QUANTITY_INVALID")
+    return value
+
+
+def _frozen_row(rule, quantity: int, selected_by: Optional[str]) -> GlobalShippingSelection:
+    master = float(rule.rate_usd)
+    return GlobalShippingSelection(
+        shipping_rule_id=rule.shipping_rule_id,
+        shipping_type=rule.shipping_type.value if rule.shipping_type else None,
+        label=_shipping_label(rule),
+        charge_basis=rule.charge_basis.value if rule.charge_basis else None,
+        master_rate_usd=master,
+        master_effective_from=rule.effective_from.date().isoformat() if rule.effective_from else None,
+        master_source_reference=rule.source_reference,
+        actual_rate_usd=master,
+        quantity=quantity,
+        selected_by=selected_by,
+        selected_at=datetime.now(timezone.utc),
+    )
+
+
+def _shipping_row(draft: QuoteDraft, shipping_rule_id: str, *, required: bool = True):
+    row = next((item for item in draft.global_shipping_lines if item.shipping_rule_id == shipping_rule_id), None)
+    if row is None and required:
+        raise SimpleQuoteError("SHIPPING_NOT_SELECTED")
+    return row
 
 
 def _shipping_label(rule) -> str:
@@ -794,7 +860,10 @@ __all__ = [
     "SIMPLE_PRICE_BOOKS",
     "SimpleQuoteError",
     "add_products",
+    "add_global_shipping",
     "adjust_global_shipping",
+    "remove_global_shipping",
+    "set_global_shipping_quantity",
     "apply_global_shipping",
     "change_exchange_rate",
     "clear_global_shipping",

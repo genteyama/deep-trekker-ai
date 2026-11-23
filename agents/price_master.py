@@ -13,6 +13,7 @@ import hashlib
 import logging
 import math
 import os
+import threading
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Optional, Sequence
 from uuid import uuid4
@@ -278,6 +279,43 @@ def get_active_master(
     return ActivePriceMaster(record=record, path=path)
 
 
+# Parsed Active masters, keyed by (master type, import id, sha256). A stored master file never changes
+# after import, so its parse result is reused instead of re-reading the workbook on every quote action.
+# Which master is Active is still looked up every time (get_active_master); activating another import
+# changes the key, so a superseded parse is never returned. Callers get their own deep copy.
+_PARSE_CACHE: dict[tuple, object] = {}
+_PARSE_CACHE_LIMIT = 16
+_PARSE_CACHE_LOCK = threading.Lock()
+
+
+def _cached_parse(kind: str, active: ActivePriceMaster, parse):
+    record = active.record
+    key = (kind, record.master_type.value, record.import_id, record.sha256)
+    with _PARSE_CACHE_LOCK:
+        cached = _PARSE_CACHE.get(key)
+    if cached is None:
+        cached = parse()
+        with _PARSE_CACHE_LOCK:
+            if len(_PARSE_CACHE) >= _PARSE_CACHE_LIMIT:
+                _PARSE_CACHE.pop(next(iter(_PARSE_CACHE)))
+            _PARSE_CACHE[key] = cached
+    return None if cached is None else cached.model_copy(deep=True)
+
+
+def clear_parse_cache() -> None:
+    with _PARSE_CACHE_LOCK:
+        _PARSE_CACHE.clear()
+
+
+def parse_active_manufacturer_master(master_type: PriceMasterType, active: ActivePriceMaster) -> PriceBookImportResult:
+    """The Active manufacturer price book, parsed once per stored import."""
+    return _cached_parse(
+        "manufacturer",
+        active,
+        lambda: parse_manufacturer_price_master(master_type, active.path, version=active.record.import_id),
+    )
+
+
 def active_price_books(repository: Optional[SqlitePriceMasterRepository] = None) -> list[ActivePriceBook]:
     repo = repository or SqlitePriceMasterRepository()
     books = []
@@ -285,7 +323,7 @@ def active_price_books(repository: Optional[SqlitePriceMasterRepository] = None)
         active = get_active_master(master_type, repo)
         if active is None:
             continue
-        book = parse_manufacturer_price_master(master_type, active.path, version=active.record.import_id)
+        book = parse_active_manufacturer_master(master_type, active)
         books.append(ActivePriceBook(record=active.record, book=book))
     return books
 
@@ -296,7 +334,10 @@ def load_active_spaceone_master(
     active = get_active_master(PriceMasterType.SO_MASTER, repository)
     if active is None:
         return None
-    return parse_spaceone_master(active.path, source_name=PriceMasterType.SO_MASTER.value), active.record
+    parsed = _cached_parse(
+        "spaceone", active, lambda: parse_spaceone_master(active.path, source_name=PriceMasterType.SO_MASTER.value)
+    )
+    return parsed, active.record
 
 
 def load_active_landed_policy(
@@ -305,7 +346,7 @@ def load_active_landed_policy(
     active = get_active_master(PriceMasterType.QUOTE_CALC, repository)
     if active is None:
         return None
-    policy = extract_quote_calc_audit(active.path).policy_candidate
+    policy = _cached_parse("quote_calc_policy", active, lambda: extract_quote_calc_audit(active.path).policy_candidate)
     if policy is None:
         return None
     record = active.record

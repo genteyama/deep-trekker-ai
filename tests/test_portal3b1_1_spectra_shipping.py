@@ -67,7 +67,7 @@ def test_spectra_only_quote_uses_spectra_shipping_and_never_global_shipping():
         sb.set_spectra_shipping(draft, actual_rate_usd=0, reason="SPECTRA メーカー見積")
 
     sb.set_spectra_shipping(draft, actual_rate_usd=2500.0, reason="SPECTRA メーカー見積")
-    assert draft.global_shipping is None
+    assert not draft.global_shipping_lines
     entry = draft.spectra_shipping
     assert (entry.actual_rate_usd, entry.reason) == (2500.0, "SPECTRA メーカー見積")
     assert entry.cost_jpy == pytest.approx(2500 * RATE)
@@ -82,7 +82,7 @@ def test_spectra_only_quote_uses_spectra_shipping_and_never_global_shipping():
 
 def test_mixed_quote_has_two_shipping_parts_in_cost_and_customer_total():
     draft = _mixed()
-    selection, spectra = draft.global_shipping, draft.spectra_shipping
+    selection, spectra = draft.global_shipping_lines[0], draft.spectra_shipping
     # A. DT / PT: GlobalShipping with its master provenance.
     assert selection.shipping_rule_id and selection.master_rate_usd == pytest.approx(LARGE_BOX)
     assert selection.cost_jpy == pytest.approx(LARGE_BOX * RATE)
@@ -129,7 +129,7 @@ def test_exchange_rate_change_reprices_both_parts():
     from ui.quote_control import _sales_candidates_for_rate
 
     sb.change_exchange_rate(draft, 170.0, sales_candidates=_sales_candidates_for_rate(170.0), reason_note="円安", set_by="x")
-    assert draft.global_shipping.cost_jpy == pytest.approx(LARGE_BOX * 170)
+    assert draft.global_shipping_lines[0].cost_jpy == pytest.approx(LARGE_BOX * 170)
     assert draft.spectra_shipping.cost_jpy == pytest.approx(1800 * 170)
     assert draft.spectra_shipping.customer_price_jpy == round_customer_price_jpy(1800 * 170 * 1.2)
 
@@ -143,7 +143,7 @@ def test_removing_the_last_product_of_a_family_drops_its_shipping_part():
 
 def _shipping_state(draft):
     return (
-        draft.global_shipping.model_dump(),
+        draft.global_shipping_lines[0].model_dump(),
         draft.spectra_shipping.model_dump(),
         [line.model_dump() for line in draft.shipping_lines],
         draft.subtotal_ex_tax_jpy,
@@ -181,7 +181,7 @@ def test_mixed_quote_approves_exports_and_revises(tmp_path):
         candidate, approved_by="sales@example.com", confirmations=all_confirmations(), official_quote_number="MX-001"
     )
     repo.record_approval(candidate, snapshot)
-    assert snapshot.global_shipping.shipping_rule_id == draft.global_shipping.shipping_rule_id
+    assert snapshot.global_shipping_lines[0].shipping_rule_id == draft.global_shipping_lines[0].shipping_rule_id
     assert snapshot.spectra_shipping.reason == "SPECTRA メーカー見積 Q-123"
     assert snapshot.total_jpy == pytest.approx(draft.total_jpy)
     for exporter in (export_spaceone_quote_pdf, export_spaceone_quote_excel, export_internal_calc_excel, export_moneyforward_tsv):
@@ -190,7 +190,7 @@ def test_mixed_quote_approves_exports_and_revises(tmp_path):
         assert path.is_file()
     revision = create_revision_draft(snapshot)
     assert revision.spectra_shipping.actual_rate_usd == 1800.0
-    assert revision.global_shipping.master_rate_usd == pytest.approx(LARGE_BOX)
+    assert revision.global_shipping_lines[0].master_rate_usd == pytest.approx(LARGE_BOX)
 
 
 def test_mixed_quote_with_a_manual_price_product_approves_and_exports_pdf(tmp_path):

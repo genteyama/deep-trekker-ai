@@ -1,8 +1,9 @@
 """Which quote screen the 見積作成 page shows.
 
-The one-screen builder (PORTAL-3B.1) is the default. The legacy 5-step workspace stays available for
-SPECTRA quotes and for drafts that were not made by the builder; it is reached from inside the page,
-never as a second navigation entry.
+The one-screen builder (PORTAL-3B.1) is the 見積作成 screen for new quotes (DT40 / PT30 / SPECTRA GOLD).
+The legacy 5-step workspace is kept only for compatibility: drafts that were not made by the builder
+(opened from the quote list) and the Technical Case handoff open it by themselves. Since PORTAL-3B.1.3 the
+builder shows no entry to it.
 """
 
 from __future__ import annotations
