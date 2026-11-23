@@ -809,7 +809,9 @@ def test_generated_export_files_offer_browser_download(tmp_path):
     at.run()
 
     assert not at.exception
-    downloads = at.get("download_button")
+    # PORTAL-3C.1: the MoneyForward 見積CSV download is always offered next to the generated files.
+    downloads = [item for item in at.get("download_button") if "MoneyForward" not in item.proto.label]
+    assert any("MoneyForward用CSVをダウンロード" in item.proto.label for item in at.get("download_button"))
     assert len(downloads) == 1
     assert "8238_spaceone_quote.pdf" in downloads[0].proto.label
     assert any("gone_spaceone_quote.xlsx" in item.value for item in at.caption)

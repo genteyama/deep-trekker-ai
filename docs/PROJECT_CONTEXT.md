@@ -839,3 +839,14 @@ Next:
 - 国際輸送費（DT / PT）：`QuoteDraft.global_shipping_lines`（`GlobalShippingSelection` の配列、行ごとに `quantity`＝個口数）。画面は「種類 / 単価 USD / 個口数 / 実送料 USD / 原価 / 顧客向け / 削除」の表と「国際輸送費を追加」（種類＋個口数）。同じ shipping master ID の再追加は個口数を加算、マスター更新後の新しい ID は別行。各行：原価＝実送料 USD × 個口数 × 為替、顧客向け＝既存 `build_shipping_line`（QUOTE_CALC 倍率、千円丸め）を行の合計に1回。顧客向け国際輸送費＝各行＋SPECTRA 送料の合計（顧客明細は「国際輸送費」1行のまま）。手動調整（実送料・顧客向け、理由必須、マスター値保持）は行ごと。以前の単一 `global_shipping` を持つ保存済み見積は読み込み時に個口数1の1行として扱う（値は不変、schema 変更なし＝payload の任意項目）。承認スナップショット・改訂版も行を複写。SPECTRA 送料は従来どおり別管理。
 - 正式見積番号：見積作成・承認画面から入力欄と必須条件を撤去（将来 MoneyForward API で発番して `official_quote_number` に保存する前提。項目・DB列は維持）。番号なしで保存・承認・PDF / Excel / MoneyForward 出力でき、帳票の番号欄は空欄。内部ID（`quote_number_candidate`）を番号の代わりに印字しない。番号がある過去見積は従来どおりその番号を使い、改訂版は前の版の番号を引き継ぐ（画面で変更はしない）。`record_approval` は番号なしを許可（下書きとスナップショットの番号一致は引き続き必須）。
 - 見積作成画面から「SPECTRA見積・従来の詳細画面」の入口を撤去。旧5ステップ画面のコードは互換用に残し、ビルダー以外で作られた下書き（見積一覧から開く）と営業・技術案件からの引き継ぎは従来どおり自動で旧画面を開く。
+
+### PORTAL-3C.1 — MoneyForward 最新見積CSV（品目縦並び / 法人 / Shift-JIS）
+
+- 正本：MoneyForward 提供サンプル `csv_sample_with_vertical_item_hojin_shiftjis.csv` をそのまま `tests/fixtures/moneyforward/estimate_csv_v1_sample.csv` に保存（sha256 dbd6349e…）。CP932、BOMなし、LF、33列、csv_type `30301`、行形式 `見積書` 1行＋`品目` 縦並び。品目消費税率の値は 免税 / 非課税 / 不課税 / 5% / 8% / 軽8% / 10%。
+- 実装：`agents/moneyforward_estimate_csv.py`（`MF_ESTIMATE_CSV_V1` にヘッダー・定数・文字コードを集約。仕様変更時は新テンプレートを追加し、サンプルとの一致をテストで確認）。承認済みスナップショットのみが元データで、PDF / Excel と同じ `build_formal_quote_document` 経由（品名・詳細・単価・数量・並び順が帳票と一致）。マスターは再取得しない。
+- 見積書行：取引先名称（必須、空なら出力不可）・件名・発行日（保存済みの発行日のみ、yyyy/mm/dd）・備考（顧客向け備考のみ、改行区切り）。見積書番号・メモ・タグ・小計・消費税・合計金額・取引先の住所等・自社担当者氏名は空欄（番号は MoneyForward が採番、合計は品目から再計算。ポータルはログインメールしか持たず氏名が無いため自社担当者氏名は空欄）。internal ID・`official_quote_number` は書かない。
+- 品目行：品名（顧客向け表示名）・品目コード（SKU）・単価（確定売価）・数量・詳細（顧客向け説明のみ）・金額（単価×数量、検算のみ）・品目消費税率。国際輸送費は最後に1行（品名「国際輸送費」、単価＝金額＝DT/PT 全送料行＋SPECTRA 送料の顧客向け合計、数量1、詳細空欄）。品目金額の合計が承認済み税抜見積額と一致しなければ出力しない。
+- 税率：10%→`10%`、8%→`8%`、5%→`5%`。0%は画面で 免税 / 非課税 / 不課税 を選ぶまで出力しない。その他の税率は「MoneyForward CSVで使用できない税率です」で停止。
+- 文字コード：CP932 で `errors="strict"`。出力前に全セルを検査し、出力できない文字は「どの行・どの項目・どの文字（U+xxxx）」をエラー表示（置換しない）。CSV は標準 `csv.writer`（QUOTE_ALL、LF）。空欄は `""`（サンプルは無引用の空欄。CSV としては同じ意味）。
+- ファイル名：`moneyforward_estimate_<顧客名>_<出力日YYYYMMDD>.csv`（ファイル名に使えない文字・空白は `_`）。
+- UI：承認後の出力エリアに「MoneyForward CSV」＋「MoneyForward用CSVをダウンロード」（`export_mf_estimate_csv`）。出力できない場合はボタンを無効にして理由を表示。旧 MoneyForward TSV / CSV（UTF-8 独自形式）のボタンは画面から撤去（`export_moneyforward_tsv` / `export_moneyforward_csv` のコードは互換用に残置）。DB / schema 変更なし。

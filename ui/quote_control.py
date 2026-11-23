@@ -20,8 +20,6 @@ from agents.quote_approval import QuoteApprovalStore
 from agents.quote_export import (
     QuoteExportError,
     export_internal_calc_excel,
-    export_moneyforward_csv,
-    export_moneyforward_tsv,
     export_spaceone_quote_excel,
     export_spaceone_quote_pdf,
 )
@@ -1119,13 +1117,10 @@ def _render_file_export(page: dict, snapshot) -> None:
             _run_export(page, snapshot, export_spaceone_quote_excel, official, generated_by, ExportPurpose.FORMAL)
         if st.button(page["export_internal_button"], key="export_internal_xlsx", type="secondary"):
             _run_export(page, snapshot, export_internal_calc_excel, official, generated_by, ExportPurpose.DEVELOPMENT)
-        if st.button(page["export_mf_tsv_button"], key="export_mf_tsv", type="secondary"):
-            _run_export(page, snapshot, export_moneyforward_tsv, official, generated_by, ExportPurpose.DEVELOPMENT)
     with columns[1]:
         if st.button(page.get("export_spaceone_pdf_button", "SpaceOne見積 PDF"), key="export_spaceone_pdf", type="primary"):
             _run_pdf_export(page, snapshot, official, generated_by)
-        if st.button(page["export_mf_csv_button"], key="export_mf_csv", type="secondary"):
-            _run_export(page, snapshot, export_moneyforward_csv, official, generated_by, ExportPurpose.DEVELOPMENT)
+    _render_moneyforward_estimate_csv(snapshot)
     saved = st.session_state.get("quote_export_files") or []
     if not saved:
         st.text(page["no_export_yet"])
@@ -1157,6 +1152,46 @@ _EXPORT_MIME_TYPES = {
     ".csv": "text/csv",
     ".tsv": "text/tab-separated-values",
 }
+
+
+def _render_moneyforward_estimate_csv(snapshot) -> None:
+    """PORTAL-3C.1: the MoneyForward 見積書 CSV (品目縦並び / 法人 / Shift-JIS) from the approved snapshot.
+
+    Replaces the earlier in-house MoneyForward TSV / CSV buttons (their export code is kept for compatibility).
+    """
+    from agents.moneyforward_estimate_csv import (
+        MoneyForwardCsvError,
+        ZERO_TAX_CATEGORIES,
+        build_estimate_csv,
+        estimate_csv_filename,
+    )
+
+    st.markdown("**MoneyForward CSV**")
+    st.caption("MoneyForwardクラウド請求書 → 見積書一覧 → CSV一括追加 で取り込めます（見積書番号はMoneyForwardで採番）。")
+    category = None
+    if snapshot.tax_rate is not None and round(float(snapshot.tax_rate) * 100, 6) == 0:
+        category = st.selectbox(
+            "消費税率0%の税区分（MoneyForward用）",
+            ["__none__", *ZERO_TAX_CATEGORIES],
+            format_func=lambda value: "選択してください" if value == "__none__" else value,
+            key=f"mf_zero_tax_{snapshot.approved_quote_snapshot_id}",
+        )
+        category = None if category == "__none__" else category
+    try:
+        data = build_estimate_csv(snapshot, zero_tax_category=category)
+    except MoneyForwardCsvError as error:
+        st.button("MoneyForward用CSVをダウンロード", key="export_mf_estimate_csv", disabled=True)
+        st.error(error.message)
+        return
+    st.download_button(
+        "MoneyForward用CSVをダウンロード",
+        data=data,
+        file_name=estimate_csv_filename(snapshot),
+        mime="text/csv",
+        key="export_mf_estimate_csv",
+        type="primary",
+        on_click="ignore",
+    )
 
 
 def _record_formal_document(snapshot, document_type: str) -> None:
